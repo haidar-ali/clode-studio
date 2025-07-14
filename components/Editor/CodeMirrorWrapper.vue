@@ -15,19 +15,111 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { EditorView, basicSetup } from 'codemirror';
-import { javascript } from '@codemirror/lang-javascript';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { EditorState } from '@codemirror/state';
 import { keymap } from '@codemirror/view';
 import { search } from '@codemirror/search';
 import { useEditorStore } from '~/stores/editor';
+import { useCodeMirrorLanguages } from '~/composables/useCodeMirrorLanguages';
 
 const editorStore = useEditorStore();
+const { getLanguageSupport, getLanguageName } = useCodeMirrorLanguages();
 
 const activeTab = computed(() => editorStore.activeTab);
 const editorContainer = ref<HTMLElement>();
 let editorView: EditorView | null = null;
 let isSettingContent = false;
+
+// Create editor extensions based on file type
+const createEditorExtensions = (filename?: string): any[] => {
+  const extensions: any[] = [
+    basicSetup,
+    oneDark,
+    // Add Ctrl+S save keybinding
+    keymap.of([
+      {
+        key: 'Ctrl-s',
+        mac: 'Cmd-s',
+        run: () => {
+          if (activeTab.value) {
+            console.log('Saving file:', activeTab.value.name);
+            editorStore.saveTab(activeTab.value.id).then(() => {
+              console.log('File saved successfully');
+            }).catch((error) => {
+              console.error('Save failed:', error);
+            });
+          }
+          return true; // Prevent default browser save
+        }
+      }
+    ]),
+    EditorView.theme({
+      '&': {
+        fontSize: '14px',
+        fontFamily: 'Consolas, Monaco, "Courier New", monospace',
+        height: '100%'
+      },
+      '.cm-content': {
+        padding: '10px',
+        minHeight: '100%'
+      },
+      '.cm-focused': {
+        outline: 'none'
+      },
+      '.cm-editor': {
+        height: '100%'
+      },
+      '.cm-scroller': {
+        fontFamily: 'Consolas, Monaco, "Courier New", monospace !important',
+        overflow: 'auto',
+        paddingBottom: '50px' // Add padding for search panel
+      },
+      // Fix search panel positioning
+      '.cm-panels': {
+        position: 'fixed',
+        bottom: '0',
+        left: '0',
+        right: '0',
+        zIndex: 10,
+        backgroundColor: '#2d2d30',
+        borderTop: '1px solid #181818'
+      },
+      '.cm-panels.cm-panels-bottom': {
+        position: 'absolute',
+        bottom: '0'
+      },
+      '.cm-search': {
+        backgroundColor: '#2d2d30',
+        color: '#cccccc',
+        padding: '8px'
+      },
+      '.cm-searchField': {
+        backgroundColor: '#3c3c3c',
+        border: '1px solid #6c6c6c',
+        color: '#d4d4d4'
+      }
+    }),
+    EditorView.updateListener.of((update) => {
+      if (update.docChanged && activeTab.value && !isSettingContent) {
+        const content = update.state.doc.toString();
+        editorStore.updateTabContent(activeTab.value.id, content);
+      }
+    })
+  ];
+
+  // Add language support based on file type
+  if (filename) {
+    const languageSupport = getLanguageSupport(filename);
+    if (languageSupport) {
+      extensions.push(languageSupport);
+      console.log(`Loaded language support for ${filename}: ${getLanguageName(filename)}`);
+    } else {
+      console.log(`No specific language support for ${filename}, using plain text`);
+    }
+  }
+
+  return extensions;
+};
 
 // Initialize CodeMirror
 onMounted(async () => {
@@ -38,81 +130,7 @@ onMounted(async () => {
     
     const state = EditorState.create({
       doc: '',
-      extensions: [
-        basicSetup,
-        javascript(),
-        oneDark,
-        // Add Ctrl+S save keybinding
-        keymap.of([
-          {
-            key: 'Ctrl-s',
-            mac: 'Cmd-s',
-            run: () => {
-              if (activeTab.value) {
-                console.log('Saving file:', activeTab.value.name);
-                editorStore.saveTab(activeTab.value.id).then(() => {
-                  console.log('File saved successfully');
-                }).catch((error) => {
-                  console.error('Save failed:', error);
-                });
-              }
-              return true; // Prevent default browser save
-            }
-          }
-        ]),
-        EditorView.theme({
-          '&': {
-            fontSize: '14px',
-            fontFamily: 'Consolas, Monaco, "Courier New", monospace',
-            height: '100%'
-          },
-          '.cm-content': {
-            padding: '10px',
-            minHeight: '100%'
-          },
-          '.cm-focused': {
-            outline: 'none'
-          },
-          '.cm-editor': {
-            height: '100%'
-          },
-          '.cm-scroller': {
-            fontFamily: 'Consolas, Monaco, "Courier New", monospace !important',
-            overflow: 'auto',
-            paddingBottom: '50px' // Add padding for search panel
-          },
-          // Fix search panel positioning
-          '.cm-panels': {
-            position: 'fixed',
-            bottom: '0',
-            left: '0',
-            right: '0',
-            zIndex: 10,
-            backgroundColor: '#2d2d30',
-            borderTop: '1px solid #181818'
-          },
-          '.cm-panels.cm-panels-bottom': {
-            position: 'absolute',
-            bottom: '0'
-          },
-          '.cm-search': {
-            backgroundColor: '#2d2d30',
-            color: '#cccccc',
-            padding: '8px'
-          },
-          '.cm-searchField': {
-            backgroundColor: '#3c3c3c',
-            border: '1px solid #6c6c6c',
-            color: '#d4d4d4'
-          }
-        }),
-        EditorView.updateListener.of((update) => {
-          if (update.docChanged && activeTab.value && !isSettingContent) {
-            const content = update.state.doc.toString();
-            editorStore.updateTabContent(activeTab.value.id, content);
-          }
-        })
-      ]
+      extensions: createEditorExtensions(activeTab.value?.name)
     });
     
     editorView = new EditorView({
@@ -165,11 +183,43 @@ const setEditorContent = (tab: any) => {
 };
 
 // Watch for tab changes
-watch(activeTab, async (newTab) => {
+watch(activeTab, async (newTab, oldTab) => {
   if (newTab && editorView) {
     console.log('CodeMirror: Tab changed to:', newTab.name);
     await nextTick();
-    setEditorContent(newTab);
+    
+    // Check if we need to update the language support
+    const newExt = newTab.name.split('.').pop()?.toLowerCase();
+    const oldExt = oldTab?.name.split('.').pop()?.toLowerCase();
+    
+    if (newExt !== oldExt || !oldTab) {
+      // Recreate editor with new language support
+      console.log('Reconfiguring editor for new language...');
+      
+      // Save current scroll position
+      const scrollTop = editorView.scrollDOM.scrollTop;
+      
+      // Create new state with new extensions
+      const newState = EditorState.create({
+        doc: newTab.content || '',
+        extensions: createEditorExtensions(newTab.name)
+      });
+      
+      // Update the editor
+      editorView.setState(newState);
+      
+      // Restore scroll position
+      editorView.scrollDOM.scrollTop = scrollTop;
+      
+      // Mark content as set
+      isSettingContent = true;
+      setTimeout(() => {
+        isSettingContent = false;
+      }, 100);
+    } else {
+      // Same language, just update content
+      setEditorContent(newTab);
+    }
   }
 });
 

@@ -19,6 +19,7 @@
         :task="task"
         @edit="$emit('edit', task)"
         @delete="$emit('delete', task)"
+        @click="$emit('task-click', task)"
       />
       
       <div v-if="tasks.length === 0" class="empty-state">
@@ -43,6 +44,7 @@ const emit = defineEmits<{
   drop: [taskId: string, newStatus: EnhancedTask['status']];
   edit: [task: EnhancedTask];
   delete: [task: EnhancedTask];
+  'task-click': [task: EnhancedTask];
 }>();
 
 const isDragOver = ref(false);

@@ -43,6 +43,7 @@
           @drop="onTaskDrop"
           @edit="editTask"
           @delete="deleteTask"
+          @task-click="openTasksFile"
         />
         
         <KanbanColumn
@@ -52,6 +53,7 @@
           @drop="onTaskDrop"
           @edit="editTask"
           @delete="deleteTask"
+          @task-click="openTasksFile"
         />
         
         <KanbanColumn
@@ -61,6 +63,7 @@
           @drop="onTaskDrop"
           @edit="editTask"
           @delete="deleteTask"
+          @task-click="openTasksFile"
         />
         
         <KanbanColumn
@@ -70,6 +73,7 @@
           @drop="onTaskDrop"
           @edit="editTask"
           @delete="deleteTask"
+          @task-click="openTasksFile"
         />
       </div>
     </div>
@@ -157,7 +161,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useTasksStore } from '~/stores/tasks';
-import { useChatStore } from '~/stores/chat';
 import { useEditorStore } from '~/stores/editor';
 // Using simplified task structure
 interface SimpleTask {
@@ -189,26 +192,8 @@ const completedTasks = computed(() => tasksStore.completedTasks);
 const taskCount = computed(() => tasksStore.taskCount);
 
 const onTaskDrop = async (taskId: string, newStatus: SimpleTask['status']) => {
-  // Update in local store immediately for UI responsiveness
+  // Update in local store which will automatically update TASKS.md
   tasksStore.moveTask(taskId, newStatus);
-  
-  // Also notify Claude about the status change if Claude is connected
-  const chatStore = useChatStore();
-  const task = tasksStore.tasks.find(t => t.id === taskId);
-  
-  if (task && chatStore.claudeStatus === 'connected') {
-    // Create a friendly status message
-    const statusText = newStatus === 'completed' ? 'completed' : 
-                      newStatus === 'in_progress' ? 'in progress' : 'pending';
-    
-    const command = `Task status update: "${task.content}" is now ${statusText}. Please update the TASKS.md file accordingly.\n`;
-    
-    try {
-      await window.electronAPI.claude.send(command);
-    } catch (error) {
-      console.error('Failed to notify Claude of task update:', error);
-    }
-  }
 };
 
 // Removed sync functions since file watching handles it automatically
@@ -515,6 +500,7 @@ Remember: Good task management helps maintain project clarity and progress visib
     await editorStore.openFile(projectInstructionsPath);
     
     // Notify Claude in the terminal
+    const { useChatStore } = await import('~/stores/chat');
     const chatStore = useChatStore();
     if (chatStore.claudeStatus === 'connected') {
       const command = `I've created both PROJECT_INSTRUCTIONS.md and TASK_INSTRUCTIONS.md for a new project. Please:
@@ -531,6 +517,17 @@ Remember: Good task management helps maintain project clarity and progress visib
   } catch (error) {
     console.error('Error creating project instructions:', error);
     alert(`Failed to create project instructions: ${error.message}`);
+  }
+};
+
+const openTasksFile = async () => {
+  try {
+    const tasksPath = `${tasksStore.projectPath || process.env.DEFAULT_WORKSPACE_PATH || process.cwd()}/TASKS.md`;
+    const editorStore = useEditorStore();
+    await editorStore.openFile(tasksPath);
+  } catch (error) {
+    console.error('Failed to open TASKS.md:', error);
+    alert(`Failed to open TASKS.md: ${error.message}`);
   }
 };
 
@@ -676,6 +673,7 @@ Remember: Good task management helps maintain project clarity and progress visib
     alert(`✅ Task Instructions Created!\n\nCreated TASK_INSTRUCTIONS.md in your project.\n\nYou can now share this with Claude to ensure consistent task management.`);
     
     // Optionally, also send to Claude immediately
+    const { useChatStore } = await import('~/stores/chat');
     const chatStore = useChatStore();
     if (chatStore.claudeStatus === 'connected') {
       const command = `I've created TASK_INSTRUCTIONS.md with detailed guidelines for task management. Please read it and follow these instructions when creating or updating tasks in TASKS.md.\n`;
