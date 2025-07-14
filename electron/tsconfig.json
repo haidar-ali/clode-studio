@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "node",
+    "lib": ["ES2022"],
+    "outDir": ".",
+    "rootDir": ".",
+    "strict": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "types": ["node", "electron"]
+  },
+  "include": ["main.ts"],
+  "exclude": ["node_modules", "**/*.js", "preload.ts"]
+}

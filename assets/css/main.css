@@ -1,0 +1,75 @@
+* {
+  box-sizing: border-box;
+}
+
+html, body, #__nuxt {
+  margin: 0;
+  padding: 0;
+  height: 100vh;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+.ide-container {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #1e1e1e;
+  color: #d4d4d4;
+}
+
+.splitpanes {
+  height: 100%;
+}
+
+.splitpanes__pane {
+  overflow: hidden;
+}
+
+.splitpanes__splitter {
+  background-color: #2d2d30;
+  position: relative;
+}
+
+.splitpanes--vertical > .splitpanes__splitter {
+  width: 4px;
+  cursor: col-resize;
+}
+
+.splitpanes--horizontal > .splitpanes__splitter {
+  height: 4px;
+  cursor: row-resize;
+}
+
+.splitpanes__splitter:hover {
+  background-color: #007acc;
+}
+
+.monaco-editor-wrapper {
+  height: 100%;
+  width: 100%;
+}
+
+.chat-panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #252526;
+}
+
+.kanban-board {
+  height: 100%;
+  overflow-x: auto;
+  background: #1e1e1e;
+  padding: 16px;
+}
+
+.status-bar {
+  height: 22px;
+  background: #007acc;
+  color: white;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  font-size: 12px;
+}
