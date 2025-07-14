@@ -1,218 +1,189 @@
 # Project Tasks
 
 *This file is synced with Claude Code IDE and Claude's native TodoWrite system.*  
-*Last updated: 2025-07-14T10:30:00Z*
+*Last updated: 2025-07-14T23:44:42.374Z*
 
 ## Backlog (0)
 
-## To Do (5)
 
-- [ ] **Add more language support to CodeMirror**
-  - Assignee: Claude
+
+## To Do (3)
+
+- [ ] **Create MCP connection manager UI**
+  - Assignee: claude
   - Type: feature
   - Priority: medium
-  - Description: Extend CodeMirror to support TypeScript, Vue, CSS, JSON, and other common languages
-  - Files: components/Editor/CodeMirrorEditor.vue, composables/useCodeMirror.ts
-
-- [ ] **Test Kanban board drag-and-drop functionality**
-  - Assignee: Both
-  - Type: bugfix
-  - Priority: medium
-  - Description: Ensure smooth drag operations and verify task persistence after drop
-  - Files: components/Kanban/KanbanBoard.vue, stores/tasks.ts
-
+  - Description: Build UI for managing MCP connections with status display and server discovery
+  - Files: components/MCP/MCPManager.vue (new), components/MCP/ConnectionStatus.vue (new), stores/mcp.ts (new)
+- [ ] **Package application for distribution**
+  - Assignee: both
+  - Type: documentation
+  - Priority: low
+  - Description: Configure electron-builder and create installers for macOS, Windows, and Linux platforms
+  - Files: package.json, electron-builder.yml (new), .github/workflows/build.yml (new)
 - [ ] **Add context visualization and optimization features**
-  - Assignee: Claude
+  - Assignee: claude
   - Type: feature
   - Priority: high
   - Description: Implement visual context meter and token usage tracking to help manage Claude's context window
   - Files: components/Layout/StatusBar.vue, stores/context.ts (new), composables/useContextTracking.ts (new)
 
-- [ ] **Create MCP connection manager UI**
-  - Assignee: Claude
-  - Type: feature
-  - Priority: medium
-  - Description: Build UI for managing MCP connections with status display and server discovery
-  - Files: components/MCP/MCPManager.vue (new), components/MCP/ConnectionStatus.vue (new), stores/mcp.ts (new)
-
-- [ ] **Package application for distribution**
-  - Assignee: Both
-  - Type: documentation
-  - Priority: low
-  - Description: Configure electron-builder and create installers for macOS, Windows, and Linux platforms
-  - Files: package.json, electron-builder.yml (new), .github/workflows/build.yml (new)
-
 ## In Progress (0)
 
-## Completed (24)
 
+
+## Completed (25)
+
+- [x] ~~Add more language support to CodeMirror~~
+  - ~~Assignee: claude~~
+  - ~~Type: feature~~
+  - ~~Priority: medium~~
+  - ~~Description: Extend CodeMirror to support TypeScript, Vue, CSS, JSON, and other common languages~~
+  - ~~Files: components/Editor/CodeMirrorEditor.vue, composables/useCodeMirror.ts~~
 - [x] ~~Initialize Nuxt 3 project with TypeScript~~
-  - ~~Assignee: Claude~~
+  - ~~Assignee: claude~~
   - ~~Type: feature~~
   - ~~Priority: high~~
   - ~~Description: Set up initial Nuxt 3 project with TypeScript configuration~~
   - ~~Files: nuxt.config.ts, tsconfig.json, package.json~~
-
 - [x] ~~Set up Electron integration with Nuxt~~
-  - ~~Assignee: Claude~~
+  - ~~Assignee: claude~~
   - ~~Type: feature~~
   - ~~Priority: high~~
   - ~~Description: Configure Electron to work with Nuxt 3 for desktop app~~
   - ~~Files: electron/main.ts, electron/preload.ts, package.json~~
-
 - [x] ~~Configure nuxt-monaco-editor module~~
-  - ~~Assignee: Claude~~
+  - ~~Assignee: claude~~
   - ~~Type: feature~~
   - ~~Priority: high~~
   - ~~Description: Initially attempted Monaco editor integration (later replaced with CodeMirror)~~
   - ~~Files: nuxt.config.ts~~
-
 - [x] ~~Create basic layout components with splitpanes~~
-  - ~~Assignee: Claude~~
+  - ~~Assignee: claude~~
   - ~~Type: feature~~
   - ~~Priority: high~~
   - ~~Description: Implement resizable panel layout using splitpanes~~
   - ~~Files: components/Layout/IDELayout.vue, pages/index.vue~~
-
 - [x] ~~Implement Claude CLI process management~~
-  - ~~Assignee: Claude~~
+  - ~~Assignee: claude~~
   - ~~Type: feature~~
   - ~~Priority: high~~
   - ~~Description: Create system to spawn and manage Claude Code CLI process~~
   - ~~Files: electron/main.ts, composables/useClaudeProcess.ts~~
-
 - [x] ~~Create chat UI components~~
-  - ~~Assignee: Claude~~
+  - ~~Assignee: claude~~
   - ~~Type: feature~~
   - ~~Priority: high~~
   - ~~Description: Build chat interface for Claude interactions~~
   - ~~Files: components/Chat/ChatPanel.vue, components/Chat/ChatMessage.vue, components/Chat/ChatInput.vue~~
-
 - [x] ~~Set up Pinia stores for state management~~
-  - ~~Assignee: Claude~~
+  - ~~Assignee: claude~~
   - ~~Type: feature~~
   - ~~Priority: high~~
   - ~~Description: Configure Pinia for managing application state~~
   - ~~Files: stores/editor.ts, stores/tasks.ts, stores/chat.ts~~
-
 - [x] ~~Create Monaco editor wrapper components~~
-  - ~~Assignee: Claude~~
+  - ~~Assignee: claude~~
   - ~~Type: feature~~
   - ~~Priority: high~~
   - ~~Description: Initial Monaco editor components (deprecated)~~
   - ~~Files: components/Editor/MonacoWrapper.vue, components/Editor/EditorTabs.vue~~
-
 - [x] ~~Create Kanban board for task management~~
-  - ~~Assignee: Claude~~
+  - ~~Assignee: claude~~
   - ~~Type: feature~~
   - ~~Priority: high~~
   - ~~Description: Implement drag-and-drop Kanban board for task visualization~~
   - ~~Files: components/Kanban/KanbanBoard.vue, components/Kanban/KanbanColumn.vue, components/Kanban/TaskCard.vue~~
-
 - [x] ~~Create file explorer component~~
-  - ~~Assignee: Claude~~
+  - ~~Assignee: claude~~
   - ~~Type: feature~~
   - ~~Priority: high~~
   - ~~Description: Build file tree explorer with directory navigation~~
   - ~~Files: components/FileExplorer/FileTree.vue~~
-
 - [x] ~~Update main page to use IDE layout~~
-  - ~~Assignee: Claude~~
+  - ~~Assignee: claude~~
   - ~~Type: refactor~~
   - ~~Priority: medium~~
   - ~~Description: Integrate all components into main IDE layout~~
   - ~~Files: pages/index.vue~~
-
 - [x] ~~Create Icon component and electron-builder config~~
-  - ~~Assignee: Claude~~
+  - ~~Assignee: claude~~
   - ~~Type: feature~~
   - ~~Priority: low~~
   - ~~Description: Add icon support and build configuration~~
   - ~~Files: components/UI/Icon.vue, package.json~~
-
 - [x] ~~Test the application in development mode~~
-  - ~~Assignee: Both~~
+  - ~~Assignee: both~~
   - ~~Type: research~~
   - ~~Priority: medium~~
   - ~~Description: Initial testing of the development environment~~
   - ~~Files: None~~
-
 - [x] ~~Fix Electron module system compatibility issues~~
-  - ~~Assignee: Claude~~
+  - ~~Assignee: claude~~
   - ~~Type: bugfix~~
   - ~~Priority: high~~
   - ~~Description: Resolve ESM/CommonJS compatibility issues~~
   - ~~Files: electron/main.ts, electron/preload.ts, package.json~~
-
 - [x] ~~Fix Monaco Editor freezing issues~~
-  - ~~Assignee: Claude~~
+  - ~~Assignee: claude~~
   - ~~Type: bugfix~~
   - ~~Priority: high~~
   - ~~Description: Replaced Monaco with CodeMirror 6 due to performance issues~~
   - ~~Files: components/Editor/CodeMirrorEditor.vue, composables/useCodeMirror.ts~~
-
 - [x] ~~Implement file save functionality (Ctrl+S) with CodeMirror~~
-  - ~~Assignee: Claude~~
+  - ~~Assignee: claude~~
   - ~~Type: feature~~
   - ~~Priority: high~~
   - ~~Description: Add keyboard shortcut for saving files~~
   - ~~Files: components/Editor/CodeMirrorEditor.vue~~
-
 - [x] ~~Test and fix Claude CLI chat integration~~
-  - ~~Assignee: Both~~
+  - ~~Assignee: both~~
   - ~~Type: bugfix~~
   - ~~Priority: high~~
   - ~~Description: Ensure Claude CLI communication works properly~~
   - ~~Files: components/Terminal/ClaudeTerminal.vue, electron/main.ts~~
-
 - [x] ~~Implement xterm.js terminal for Claude CLI~~
-  - ~~Assignee: Claude~~
+  - ~~Assignee: claude~~
   - ~~Type: feature~~
   - ~~Priority: high~~
   - ~~Description: Replace basic chat with full terminal emulator~~
   - ~~Files: components/Terminal/ClaudeTerminal.vue~~
-
 - [x] ~~Implement real-time file syncing when Claude modifies files~~
-  - ~~Assignee: Claude~~
+  - ~~Assignee: claude~~
   - ~~Type: feature~~
   - ~~Priority: high~~
   - ~~Description: Auto-reload files in editor when Claude makes changes~~
   - ~~Files: electron/main.ts, stores/editor.ts~~
-
 - [x] ~~Implement task management integration with Claude~~
-  - ~~Assignee: Claude~~
+  - ~~Assignee: claude~~
   - ~~Type: feature~~
   - ~~Priority: high~~
   - ~~Description: Sync TASKS.md with Kanban board~~
   - ~~Files: stores/tasks.ts, components/Kanban/KanbanBoard.vue~~
-
 - [x] ~~Implement global search and replace functionality~~
-  - ~~Assignee: Claude~~
+  - ~~Assignee: claude~~
   - ~~Type: feature~~
   - ~~Priority: medium~~
   - ~~Description: Add workspace-wide search with regex support and Node.js fallback~~
   - ~~Files: components/Search/GlobalSearch.vue, electron/main.ts~~
-
 - [x] ~~Add basic terminal for system commands~~
-  - ~~Assignee: Claude~~
+  - ~~Assignee: claude~~
   - ~~Type: feature~~
   - ~~Priority: medium~~
   - ~~Description: Implement non-Claude terminal for running system commands~~
   - ~~Files: components/Terminal/Terminal.vue, electron/main.ts~~
-
 - [x] ~~Add file management features (create, rename, delete)~~
-  - ~~Assignee: Claude~~
+  - ~~Assignee: claude~~
   - ~~Type: feature~~
   - ~~Priority: high~~
   - ~~Description: Implement complete file operations with context menus~~
   - ~~Files: components/FileExplorer/FileTree.vue, electron/main.ts, electron/preload.ts~~
-
 - [x] ~~Create layout mode system (Full IDE, Kanban+Claude, Kanban Only)~~
-  - ~~Assignee: Claude~~
+  - ~~Assignee: claude~~
   - ~~Type: feature~~
   - ~~Priority: high~~
   - ~~Description: Implement three different layout modes for various workflows~~
   - ~~Files: stores/layout.ts, components/Layout/ModeSelector.vue, components/Layout/IDELayout.vue~~
 
 ---
-*To update tasks, use the Kanban board in Claude Code IDE or ask Claude to modify this file.*
+*To update tasks, use the Kanban board in Claude Code IDE, ask Claude to modify this file, or use Claude's native TodoWrite system.*

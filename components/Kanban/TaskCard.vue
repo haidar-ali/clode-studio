@@ -5,6 +5,7 @@
     draggable="true"
     @dragstart="onDragStart"
     @dragend="onDragEnd"
+    @click="$emit('click')"
   >
     <div class="task-header">
       <h5 class="task-title">{{ task.content }}</h5>
@@ -40,9 +41,17 @@
       </span>
     </div>
     
-    <div v-if="task.filesModified && task.filesModified.length > 0" class="task-files">
-      <Icon name="mdi:file-multiple" size="12" />
-      <span>{{ task.filesModified.length }} files</span>
+    <div v-if="task.filesModified && task.filesModified.length > 0" class="task-files" @click.stop>
+      <div class="files-indicator">
+        <Icon name="mdi:file-multiple" size="12" />
+        <span>{{ task.filesModified.length }} files</span>
+      </div>
+      <div class="files-tooltip">
+        <div class="tooltip-header">Files Modified:</div>
+        <div v-for="(file, index) in task.filesModified" :key="index" class="tooltip-file">
+          {{ file }}
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -70,6 +79,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   edit: [];
   delete: [];
+  click: [];
 }>();
 
 const isDragging = ref(false);
@@ -121,7 +131,7 @@ const getTypeIcon = (type: SimpleTask['type']) => {
   border-radius: 6px;
   padding: 12px;
   margin-bottom: 8px;
-  cursor: grab;
+  cursor: pointer;
   transition: all 0.2s;
   position: relative;
 }
@@ -134,6 +144,7 @@ const getTypeIcon = (type: SimpleTask['type']) => {
 .task-card.dragging {
   opacity: 0.5;
   transform: rotate(5deg);
+  cursor: grabbing;
 }
 
 .task-card.priority-high {
@@ -293,14 +304,71 @@ const getTypeIcon = (type: SimpleTask['type']) => {
 }
 
 .task-files {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  position: relative;
   margin-top: 6px;
-  font-size: 11px;
-  color: #858585;
   padding-top: 6px;
   border-top: 1px solid #3e3e42;
   width: 100%;
+}
+
+.files-indicator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #858585;
+  cursor: help;
+  transition: color 0.2s;
+}
+
+.task-files:hover .files-indicator {
+  color: #cccccc;
+}
+
+.files-tooltip {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  background: #252526;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  padding: 8px 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  z-index: 100;
+  min-width: 200px;
+  max-width: 400px;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(4px);
+  transition: all 0.2s;
+  pointer-events: none;
+  margin-bottom: 4px;
+}
+
+.task-files:hover .files-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.tooltip-header {
+  font-size: 11px;
+  font-weight: 600;
+  color: #cccccc;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.tooltip-file {
+  font-size: 12px;
+  color: #d4d4d4;
+  padding: 3px 0;
+  word-break: break-all;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+}
+
+.tooltip-file:hover {
+  color: #ffffff;
 }
 </style>

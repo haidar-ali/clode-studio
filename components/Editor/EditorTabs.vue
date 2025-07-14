@@ -8,6 +8,7 @@
         @click="setActiveTab(tab.id)"
       >
         <span class="tab-name">{{ tab.name }}</span>
+        <span class="language-indicator">{{ getLanguageName(tab.name) }}</span>
         <span v-if="tab.isDirty" class="dirty-indicator">●</span>
         <button
           @click.stop="closeTab(tab.id)"
@@ -34,8 +35,10 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useEditorStore } from '~/stores/editor';
+import { useCodeMirrorLanguages } from '~/composables/useCodeMirrorLanguages';
 
 const editorStore = useEditorStore();
+const { getLanguageName } = useCodeMirrorLanguages();
 
 const tabs = computed(() => editorStore.tabs);
 const activeTabId = computed(() => editorStore.activeTabId);
@@ -104,8 +107,8 @@ const openFileDialog = async () => {
   color: #969696;
   font-size: 13px;
   white-space: nowrap;
-  min-width: 120px;
-  max-width: 200px;
+  min-width: 150px;
+  max-width: 250px;
   position: relative;
 }
 
@@ -132,6 +135,21 @@ const openFileDialog = async () => {
   flex: 1;
   text-overflow: ellipsis;
   overflow: hidden;
+}
+
+.language-indicator {
+  font-size: 11px;
+  color: #858585;
+  margin-left: 8px;
+  padding: 2px 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.tab.active .language-indicator {
+  color: #cccccc;
+  background: rgba(255, 255, 255, 0.15);
 }
 
 .dirty-indicator {
