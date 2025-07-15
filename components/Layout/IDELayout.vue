@@ -64,10 +64,18 @@
               >
                 Terminal
               </button>
+              <button
+                :class="{ active: bottomTab === 'mcp' }"
+                @click="bottomTab = 'mcp'"
+              >
+                MCP
+                <span v-if="mcpStore.connectedCount > 0" class="mcp-badge">{{ mcpStore.connectedCount }}</span>
+              </button>
             </div>
             <div class="tab-content">
               <KanbanBoard v-if="bottomTab === 'tasks'" />
-              <Terminal v-else :project-path="projectPath" />
+              <Terminal v-else-if="bottomTab === 'terminal'" :project-path="projectPath" />
+              <MCPManager v-else />
             </div>
           </div>
         </Pane>
@@ -124,13 +132,15 @@ import 'splitpanes/dist/splitpanes.css';
 import { useEditorStore } from '~/stores/editor';
 import { useTasksStore } from '~/stores/tasks';
 import { useLayoutStore } from '~/stores/layout';
+import { useMCPStore } from '~/stores/mcp';
 import { useFileWatcher } from '~/composables/useFileWatcher';
 import { useTasksFileWatcher } from '~/composables/useTasksFileWatcher';
 
 const editorStore = useEditorStore();
 const tasksStore = useTasksStore();
 const layoutStore = useLayoutStore();
-const bottomTab = ref<'tasks' | 'terminal'>('tasks');
+const mcpStore = useMCPStore();
+const bottomTab = ref<'tasks' | 'terminal' | 'mcp'>('tasks');
 const showGlobalSearch = ref(false);
 
 const activeTab = computed(() => editorStore.activeTab);
@@ -252,6 +262,17 @@ onUnmounted(() => {
 
 .task-badge {
   background: #007acc;
+  color: white;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  min-width: 18px;
+  text-align: center;
+  font-weight: 600;
+}
+
+.mcp-badge {
+  background: #4ec9b0;
   color: white;
   font-size: 11px;
   padding: 2px 6px;

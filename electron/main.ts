@@ -795,3 +795,225 @@ app.on('before-quit', () => {
   }
   terminals.clear();
 });
+
+// MCP (Model Context Protocol) Management - Using Claude CLI
+ipcMain.handle('mcp:list', async () => {
+  const { exec } = await import('child_process');
+  const { promisify } = await import('util');
+  const execAsync = promisify(exec);
+  
+  try {
+    const { stdout } = await execAsync('claude mcp list', {
+      cwd: process.cwd(),
+      env: process.env
+    });
+    
+    // Parse the text output
+    const lines = stdout.trim().split('\n');
+    const servers: any[] = [];
+    
+    // Skip the "No MCP servers configured" message
+    if (stdout.includes('No MCP servers configured')) {
+      return { success: true, servers: [] };
+    }
+    
+    for (const line of lines) {
+      if (line.includes(':')) {
+        // Parse lines like "context7: https://mcp.context7.com/mcp" or "context7: https://mcp.context7.com/mcp (HTTP)"
+        const colonIndex = line.indexOf(':');
+        const name = line.substring(0, colonIndex).trim();
+        const rest = line.substring(colonIndex + 1).trim();
+        
+        // Check if transport type is specified in parentheses
+        const parenIndex = rest.lastIndexOf('(');
+        let url = rest;
+        let transport = 'stdio'; // default
+        
+        if (parenIndex > -1) {
+          url = rest.substring(0, parenIndex).trim();
+          transport = rest.substring(parenIndex + 1, rest.length - 1).trim().toLowerCase();
+        } else {
+          // Infer transport from URL
+          if (url.startsWith('http://') || url.startsWith('https://')) {
+            transport = 'http';
+          }
+        }
+        
+        servers.push({
+          name,
+          url: url.trim(),
+          transport: transport === 'http' || transport === 'sse' ? transport : 'stdio'
+        });
+      }
+    }
+    
+    return { success: true, servers };
+  } catch (error) {
+    console.error('Failed to list MCP servers:', error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to list servers' 
+    };
+  }
+});
+
+ipcMain.handle('mcp:add', async (event, config) => {
+  const { exec } = await import('child_process');
+  const { promisify } = await import('util');
+  const execAsync = promisify(exec);
+  
+  try {
+    let command = `claude mcp add "${config.name}"`;
+    
+    if (config.type === 'stdio') {
+      command += ` "${config.command}"`;
+      if (config.args && config.args.length > 0) {
+        command += ` ${config.args.map((arg: string) => `"${arg}"`).join(' ')}`;
+      }
+    } else if (config.type === 'sse' || config.type === 'http') {
+      // For HTTP/SSE servers, the URL is the command argument
+      command += ` "${config.url}"`;
+    }
+    
+    // Add environment variables
+    if (config.env) {
+      for (const [key, value] of Object.entries(config.env)) {
+        command += ` --env ${key}="${value}"`;
+      }
+    }
+    
+    const { stdout, stderr } = await execAsync(command, {
+      cwd: process.cwd(),
+      env: process.env
+    });
+    
+    if (stderr && !stdout) {
+      return { success: false, error: stderr };
+    }
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to add MCP server:', error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to add server' 
+    };
+  }
+});
+
+ipcMain.handle('mcp:remove', async (event, name: string) => {
+  const { exec } = await import('child_process');
+  const { promisify } = await import('util');
+  const execAsync = promisify(exec);
+  
+  try {
+    const { stdout, stderr } = await execAsync(`claude mcp remove "${name}"`, {
+      cwd: process.cwd(),
+      env: process.env
+    });
+    
+    if (stderr && !stdout) {
+      return { success: false, error: stderr };
+    }
+    
+    return { success: true };
+  } catch (error) {
+    console.error('Failed to remove MCP server:', error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to remove server' 
+    };
+  }
+});
+
+ipcMain.handle('mcp:get', async (event, name: string) => {
+  const { exec } = await import('child_process');
+  const { promisify } = await import('util');
+  const execAsync = promisify(exec);
+  
+  try {
+    const { stdout } = await execAsync(`claude mcp get "${name}"`, {
+      cwd: process.cwd(),
+      env: process.env
+    });
+    
+    // Parse the text output to extract server details
+    const server: any = { name };
+    const lines = stdout.trim().split('\n');
+    
+    for (const line of lines) {
+      if (line.includes('Type:')) {
+        server.transport = line.split(':')[1].trim().toLowerCase();
+      } else if (line.includes('URL:')) {
+        server.url = line.split('URL:')[1].trim();
+      } else if (line.includes('Command:')) {
+        server.command = line.split('Command:')[1].trim();
+      }
+    }
+    
+    return { success: true, server };
+  } catch (error) {
+    console.error('Failed to get MCP server details:', error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to get server details' 
+    };
+  }
+});
+
+// Test MCP connection by trying to add and immediately remove
+ipcMain.handle('mcp:test', async (event, config) => {
+  const { exec } = await import('child_process');
+  const { promisify } = await import('util');
+  const execAsync = promisify(exec);
+  
+  try {
+    // For HTTP/SSE servers, test the URL directly
+    if (config.type === 'sse' || config.type === 'http') {
+      const https = await import('https');
+      const http = await import('http');
+      const url = new URL(config.url);
+      const client = url.protocol === 'https:' ? https : http;
+
+      return new Promise((resolve) => {
+        const req = client.request(config.url, { method: 'HEAD', timeout: 5000 }, (res) => {
+          resolve({ success: res.statusCode !== undefined && res.statusCode < 500 });
+        });
+
+        req.on('error', (error: Error) => {
+          resolve({ 
+            success: false, 
+            error: `Connection failed: ${error.message}` 
+          });
+        });
+
+        req.on('timeout', () => {
+          req.destroy();
+          resolve({ success: false, error: 'Connection timed out' });
+        });
+
+        req.end();
+      });
+    }
+    
+    // For stdio servers, test if command exists
+    if (config.type === 'stdio') {
+      const { stdout, stderr } = await execAsync(`which "${config.command}"`, {
+        env: process.env
+      });
+      
+      if (stdout.trim()) {
+        return { success: true };
+      } else {
+        return { success: false, error: 'Command not found' };
+      }
+    }
+    
+    return { success: false, error: 'Unknown server type' };
+  } catch (error) {
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Test failed' 
+    };
+  }
+});

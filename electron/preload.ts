@@ -108,6 +108,20 @@ const electronAPI = {
       ipcRenderer.on(channel, (_, data) => callback(data));
       return () => ipcRenderer.removeAllListeners(channel);
     }
+  },
+  mcp: {
+    list: () => ipcRenderer.invoke('mcp:list'),
+    add: (config: {
+      name: string;
+      type: 'stdio' | 'sse' | 'http';
+      command?: string;
+      args?: string[];
+      url?: string;
+      env?: Record<string, string>;
+    }) => ipcRenderer.invoke('mcp:add', config),
+    remove: (name: string) => ipcRenderer.invoke('mcp:remove', name),
+    get: (name: string) => ipcRenderer.invoke('mcp:get', name),
+    test: (config: any) => ipcRenderer.invoke('mcp:test', config)
   }
 };
 
