@@ -136,6 +136,21 @@ const electronAPI = {
     remove: (name: string) => ipcRenderer.invoke('mcp:remove', name),
     get: (name: string) => ipcRenderer.invoke('mcp:get', name),
     test: (config: any) => ipcRenderer.invoke('mcp:test', config)
+  },
+  context: {
+    initialize: (workspacePath: string) => ipcRenderer.invoke('context:initialize', workspacePath),
+    searchFiles: (query: string, limit?: number) => ipcRenderer.invoke('context:searchFiles', query, limit),
+    buildContext: (query: string, workingFiles: string[], maxTokens?: number) => ipcRenderer.invoke('context:buildContext', query, workingFiles, maxTokens),
+    getStatistics: () => ipcRenderer.invoke('context:getStatistics'),
+    getFileContent: (filePath: string) => ipcRenderer.invoke('context:getFileContent', filePath),
+    getRecentFiles: (hours?: number) => ipcRenderer.invoke('context:getRecentFiles', hours),
+    rescan: () => ipcRenderer.invoke('context:rescan'),
+    startWatching: () => ipcRenderer.invoke('context:startWatching'),
+    stopWatching: () => ipcRenderer.invoke('context:stopWatching'),
+    onFileChange: (callback: (event: 'add' | 'change' | 'remove', filePath: string) => void) => {
+      ipcRenderer.on('context:file-changed', (_, data) => callback(data.event, data.filePath));
+      return () => ipcRenderer.removeAllListeners('context:file-changed');
+    }
   }
 };
 

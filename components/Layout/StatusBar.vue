@@ -18,10 +18,14 @@
     </div>
     
     <div class="status-bar-right">
-      <span class="status-item">
-        <Icon name="mdi:memory" />
-        {{ contextPercentage }}% Context
-      </span>
+      <div class="context-meter-wrapper">
+        <ContextMeter 
+          :animated="true"
+          :show-warning="contextStore.contextStatus !== 'normal'"
+          @click="showContextDetails"
+          @optimize="optimizeContext"
+        />
+      </div>
       <span class="status-item" v-if="activeTab">
         Ln {{ cursorLine }}, Col {{ cursorColumn }}
       </span>
@@ -33,16 +37,24 @@
 import { computed, ref } from 'vue';
 import { useEditorStore } from '~/stores/editor';
 import { useChatStore } from '~/stores/chat';
+import { useContextStore } from '~/stores/context';
+import { useClaudeInstancesStore } from '~/stores/claude-instances';
+import ContextMeter from '~/components/Context/ContextMeter.vue';
 
 const editorStore = useEditorStore();
 const chatStore = useChatStore();
+const contextStore = useContextStore();
+const claudeInstancesStore = useClaudeInstancesStore();
 
 const activeTab = computed(() => editorStore.activeTab);
-const claudeStatus = computed(() => chatStore.claudeStatus);
+const claudeStatus = computed(() => {
+  const activeInstance = claudeInstancesStore.activeInstance;
+  return activeInstance?.status || 'disconnected';
+});
 
 const cursorLine = ref(1);
 const cursorColumn = ref(1);
-const contextPercentage = ref(15);
+const contextPercentage = computed(() => contextStore.contextUsage.percentage);
 
 const claudeStatusClass = computed(() => ({
   'status-connected': claudeStatus.value === 'connected',
@@ -61,6 +73,15 @@ const claudeStatusIcon = computed(() => {
       return 'mdi:alert-circle';
   }
 });
+
+const showContextDetails = () => {
+  // TODO: Emit event to show context optimization panel
+  console.log('Show context details');
+};
+
+const optimizeContext = async () => {
+  await contextStore.optimizeContext();
+};
 </script>
 
 <style scoped>
@@ -100,5 +121,11 @@ const claudeStatusIcon = computed(() => {
 
 .status-connecting {
   color: #e7c547;
+}
+
+.context-meter-wrapper {
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
 }
 </style>

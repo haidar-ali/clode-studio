@@ -61,6 +61,7 @@ export interface ChatMessage {
   content: string;
   timestamp: Date;
   error?: boolean;
+  tokens?: number;
 }
 
 export interface FileNode {

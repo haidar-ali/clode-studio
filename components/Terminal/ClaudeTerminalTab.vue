@@ -46,6 +46,8 @@ import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import type { ClaudeInstance } from '~/stores/claude-instances';
 import { useClaudeInstancesStore } from '~/stores/claude-instances';
+import { useContextManager } from '~/composables/useContextManager';
+import { useContextStore } from '~/stores/context';
 import PersonalitySelector from './PersonalitySelector.vue';
 import 'xterm/css/xterm.css';
 
@@ -58,7 +60,14 @@ const emit = defineEmits<{
 }>();
 
 const instancesStore = useClaudeInstancesStore();
+const contextManager = useContextManager();
+const contextStore = useContextStore();
 const terminalElement = ref<HTMLElement>();
+
+// Context preview state
+const isPreviewingContext = ref(false);
+const contextPreview = ref('');
+const lastContextInjectionId = ref<string | null>(null);
 
 let terminal: Terminal | null = null;
 let fitAddon: FitAddon | null = null;
@@ -71,6 +80,7 @@ let listenersSetup = false;
 let cleanupOutputListener: (() => void) | null = null;
 let cleanupErrorListener: (() => void) | null = null;
 let cleanupExitListener: (() => void) | null = null;
+let emergencyCleanupListener: (() => void) | null = null;
 
 const personality = computed(() => {
   return props.instance.personalityId 
@@ -160,10 +170,43 @@ const initTerminal = () => {
     isAtBottom = scrollOffset >= scrollbackSize - 5;
   });
   
-  terminal.onData((data: string) => {
+  terminal.onData(async (data: string) => {
     if (props.instance.status === 'connected') {
-      // Send with instance ID
-      window.electronAPI.claude.send(props.instance.id, data);
+      // Check if this is a complete message (ends with newline)
+      if (data.includes('\n') || data.includes('\r')) {
+        // Extract the message content
+        const message = data.trim();
+        
+        // Build lightweight context for substantial messages
+        if (message.length > 20) {
+          try {
+            // Build context using the lightweight system
+            const context = await contextManager.buildContextForClaude(message, 1000);
+            
+            if (context && context.length > 0) {
+              // Show context indicator
+              terminal.write(`\r\n\x1b[36m[Context: ${context.length} chars]\x1b[0m\r\n`);
+              
+              // Prepend context to message
+              const enhancedMessage = `Context:\n${context}\n\nUser: ${message}`;
+              window.electronAPI.claude.send(props.instance.id, enhancedMessage + '\n');
+            } else {
+              // Send original message if no context
+              window.electronAPI.claude.send(props.instance.id, message + '\n');
+            }
+          } catch (error) {
+            console.error('Failed to build context:', error);
+            // Fallback to original message
+            window.electronAPI.claude.send(props.instance.id, message + '\n');
+          }
+        } else {
+          // Send as-is for short messages
+          window.electronAPI.claude.send(props.instance.id, data);
+        }
+      } else {
+        // Send as-is for partial data
+        window.electronAPI.claude.send(props.instance.id, data);
+      }
     }
   });
   
@@ -188,11 +231,15 @@ const initTerminal = () => {
 const showWelcomeMessage = () => {
   if (!terminal) return;
   
+  console.log('showWelcomeMessage called for instance:', props.instance.name, 'status:', props.instance.status);
+  
   terminal.writeln('Welcome to Claude Code IDE Terminal');
   terminal.writeln(`Instance: ${props.instance.name}`);
   if (personality.value) {
     terminal.writeln(`Personality: ${personality.value.name} - ${personality.value.description}`);
   }
+  terminal.writeln('\x1b[36m[Lightweight Context: Enabled]\x1b[0m');
+  terminal.writeln('\x1b[90mSmart file discovery and project context available\x1b[0m');
   terminal.writeln('Click the \x1b[32mStart\x1b[0m button above to launch Claude CLI');
   terminal.writeln('');
   terminal.scrollToBottom();
@@ -247,6 +294,7 @@ const setupClaudeListeners = () => {
   
   // Setup exit listener
   cleanupExitListener = window.electronAPI.claude.onExit(props.instance.id, (code: number | null) => {
+    console.log('Claude process exited for instance:', props.instance.id, 'code:', code);
     if (terminal) {
       terminal.writeln(`\r\n\x1b[33mClaude process exited with code ${code}\x1b[0m`);
       autoScrollIfNeeded();
@@ -374,13 +422,108 @@ const stopClaude = async () => {
 };
 
 const clearTerminal = () => {
+  console.log('clearTerminal called for instance:', props.instance.name, 'status:', props.instance.status);
   if (terminal) {
     terminal.clear();
+    // Don't auto-show welcome message, let user decide when to start
+    terminal.writeln('\x1b[90mTerminal cleared. Click Start to launch Claude CLI.\x1b[0m\r\n');
   }
+};
+
+const showContextFeedbackPrompt = () => {
+  if (!terminal || !lastContextInjectionId.value) return;
+  
+  terminal.write('\r\n\x1b[33m[Context Feedback]\x1b[0m \x1b[90mWas the injected context helpful? (y/n)\x1b[0m ');
+  
+  // Handle single character input for feedback
+  let feedbackHandler: ((data: string) => void) | null = null;
+  let feedbackTimeout: NodeJS.Timeout | null = null;
+  
+  const cleanupFeedbackHandler = () => {
+    if (feedbackHandler && terminal) {
+      terminal.off('data', feedbackHandler);
+      feedbackHandler = null;
+    }
+    if (feedbackTimeout) {
+      clearTimeout(feedbackTimeout);
+      feedbackTimeout = null;
+    }
+  };
+  
+  feedbackHandler = (data: string) => {
+    if (data.toLowerCase() === 'y') {
+      contextStore.recordUserFeedback(lastContextInjectionId.value!, 'helpful');
+      terminal.write('\x1b[32my\x1b[0m\r\n\x1b[90mThanks! Context effectiveness improved.\x1b[0m\r\n');
+      cleanupFeedbackHandler();
+    } else if (data.toLowerCase() === 'n') {
+      contextStore.recordUserFeedback(lastContextInjectionId.value!, 'unhelpful');
+      terminal.write('\x1b[31mn\x1b[0m\r\n\x1b[90mThanks! Context will be adjusted.\x1b[0m\r\n');
+      cleanupFeedbackHandler();
+    } else if (data === '\r' || data === '\n') {
+      // Skip feedback
+      terminal.write('\r\n\x1b[90mFeedback skipped.\x1b[0m\r\n');
+      cleanupFeedbackHandler();
+    }
+  };
+  
+  terminal.onData(feedbackHandler);
+  
+  // Auto-remove feedback prompt after 10 seconds
+  feedbackTimeout = setTimeout(() => {
+    if (feedbackHandler && terminal) {
+      terminal.write('\r\n\x1b[90m[Feedback timeout]\x1b[0m\r\n');
+      cleanupFeedbackHandler();
+    }
+  }, 10000);
+};
+
+const showContextMetrics = () => {
+  if (!terminal) return;
+  
+  const analytics = contextStore.getContextAnalytics();
+  
+  terminal.write('\r\n\x1b[36m[Context Analytics]\x1b[0m\r\n');
+  terminal.write(`\x1b[90mDecisions: ${analytics.totalDecisions} | Injection Rate: ${analytics.injectionRate.toFixed(1)}%\x1b[0m\r\n`);
+  terminal.write(`\x1b[90mAverage Confidence: ${(analytics.averageConfidence * 100).toFixed(1)}% | Average Tokens: ${analytics.averageTokens.toFixed(0)}\x1b[0m\r\n`);
+  terminal.write(`\x1b[90mEffectiveness: ${analytics.effectiveness.toFixed(1)}%\x1b[0m\r\n`);
+  
+  if (Object.keys(analytics.contextTypeBreakdown).length > 0) {
+    terminal.write('\x1b[90mContext Types: ');
+    Object.entries(analytics.contextTypeBreakdown)
+      .sort(([,a], [,b]) => b - a)
+      .forEach(([type, count], index) => {
+        if (index > 0) terminal.write(', ');
+        terminal.write(`${type}(${count})`);
+      });
+    terminal.write('\x1b[0m\r\n');
+  }
+  
+  terminal.write('\x1b[90m--- End Analytics ---\x1b[0m\r\n\r\n');
 };
 
 onMounted(() => {
   initTerminal();
+  
+  // Set up emergency cleanup listener
+  emergencyCleanupListener = () => {
+    console.log('Emergency cleanup triggered for Claude terminal');
+    
+    // Clear context state
+    lastContextInjectionId.value = null;
+    isPreviewingContext.value = false;
+    contextPreview.value = '';
+    
+    // Clear terminal if it exists
+    if (terminal) {
+      terminal.clear();
+      terminal.writeln('\x1b[90mEmergency cleanup performed. Click Start to launch Claude CLI.\x1b[0m\r\n');
+    }
+    
+    // Clear context data
+    // Note: Old enhancement system removed, no cleanup needed
+  };
+  
+  window.addEventListener('emergency-cleanup', emergencyCleanupListener);
 });
 
 onUnmounted(() => {
@@ -389,6 +532,19 @@ onUnmounted(() => {
   if (terminal) {
     terminal.dispose();
   }
+  
+  // Remove emergency cleanup listener
+  if (emergencyCleanupListener) {
+    window.removeEventListener('emergency-cleanup', emergencyCleanupListener);
+    emergencyCleanupListener = null;
+  }
+  
+  // Clear any pending context state
+  lastContextInjectionId.value = null;
+  isPreviewingContext.value = false;
+  contextPreview.value = '';
+  
+  // Note: Old enhancement system removed, no cleanup needed
 });
 </script>
 

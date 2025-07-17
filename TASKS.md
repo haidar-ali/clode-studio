@@ -1,14 +1,49 @@
 # Project Tasks
 
 *This file is synced with Claude Code IDE and Claude's native TodoWrite system.*  
-*Last updated: 2025-01-17T03:30:00.000Z*
+*Last updated: 2025-01-17T21:30:00.000Z*
 
 ## Backlog (0)
 
 
 
 
-## To Do (2)
+## To Do (6)
+
+- [ ] **Implement user-controlled knowledge base features**
+  - Assignee: Claude
+  - Type: feature
+  - Priority: medium
+  - Description: Add per-workspace knowledge settings, context injection preferences, and interactive knowledge management following the pattern of project summary and task instructions
+  - Files: stores/knowledge.ts (enhance), components/Knowledge/KnowledgeSettings.vue (new), composables/useKnowledgeConfig.ts (new)
+
+- [ ] **Add real-time file watching and incremental indexing**
+  - Assignee: Claude
+  - Type: feature
+  - Priority: medium
+  - Description: Implement file system watching for automatic knowledge base updates, incremental indexing, and context invalidation when files change
+  - Files: electron/knowledge-service.ts (enhance), electron/file-watcher.ts (new), composables/useKnowledgeManager.ts (enhance)
+
+- [ ] **Create visual knowledge base analytics and insights**
+  - Assignee: Claude
+  - Type: feature
+  - Priority: low
+  - Description: Add usage statistics, context effectiveness tracking, knowledge gaps identification, and interactive dependency mapping
+  - Files: components/Knowledge/KnowledgeAnalytics.vue (new), stores/knowledge-analytics.ts (new), composables/useKnowledgeInsights.ts (new)
+
+- [ ] **Implement Claude-powered code analysis for deep understanding**
+  - Assignee: Claude
+  - Type: feature
+  - Priority: medium
+  - Description: Create system that uses Claude AI to analyze code patterns, architecture decisions, and generate intelligent summaries for complex codebases
+  - Files: electron/claude-analyzer.ts (new), composables/useClaudeAnalysis.ts (new), stores/code-analysis.ts (new)
+
+- [ ] **Create caching and learning system for parsed results**
+  - Assignee: Claude
+  - Type: feature
+  - Priority: medium
+  - Description: Implement query caching, context effectiveness tracking, user pattern recognition, and performance metrics for the knowledge base
+  - Files: electron/knowledge-cache.ts (new), stores/knowledge-learning.ts (new), composables/useKnowledgeCache.ts (new)
 
 - [ ] **Add context visualization and optimization features**
   - Assignee: Claude
@@ -16,6 +51,7 @@
   - Priority: medium
   - Description: Implement visual context meter and token usage tracking to help manage Claude's context window
   - Files: components/Layout/StatusBar.vue, stores/context.ts (new), composables/useContextTracking.ts (new)
+
 - [ ] **Package application for distribution**
   - Assignee: Both
   - Type: documentation
@@ -25,9 +61,57 @@
 
 ## In Progress (0)
 
+- [x] ~~Implement intelligent multi-language knowledge base system~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Completed scalable knowledge base with project detection, universal parsing, and intelligent context injection system~~
+  - ~~Files: electron/knowledge-service.ts (updated), electron/project-detector.ts (created), electron/universal-parser.ts (created), composables/useContextDecision.ts (created), composables/useMemoryManager.ts (created)~~
+
+- [x] ~~Design intelligent context injection system for Claude terminals~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Created smart context decision engine with relevance scoring, token-aware context adjustment, conversation tracking, and visual feedback in Claude terminals~~
+  - ~~Files: composables/useClaudeEnhancement.ts (enhanced), stores/context.ts (enhanced), composables/useContextDecision.ts (created), components/Terminal/ClaudeTerminalTab.vue (enhanced)~~
+
+- [x] ~~Fix memory leak causing JavaScript heap out of memory error~~
+  - ~~Assignee: Claude~~
+  - ~~Type: bugfix~~
+  - ~~Priority: high~~
+  - ~~Description: **ACTUALLY FIXED** - Root cause was embedding model loading on startup. Made knowledge base opt-in, disabled embeddings by default, and added lazy loading~~
+  - ~~Files: electron/knowledge-service.ts (lazy loading), composables/useKnowledgeManager.ts (opt-in), stores/knowledge.ts (disabled embeddings), components/Knowledge/KnowledgePanel.vue (initialization UI)~~
+
+- [x] ~~Fix Claude terminal randomly resetting to welcome screen~~
+  - ~~Assignee: Claude~~
+  - ~~Type: bugfix~~
+  - ~~Priority: high~~
+  - ~~Description: Fixed terminal reset issue by disabling context enhancement temporarily and preventing unnecessary welcome message displays~~
+  - ~~Files: components/Terminal/ClaudeTerminalTab.vue (fixed), composables/useMemoryManager.ts (adjusted threshold)~~
 
 
-## Completed (30)
+
+## Completed (39)
+
+- [x] ~~Integrate Tree-sitter for universal language parsing support~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Due to ES module constraints, implemented comprehensive pattern-based parsing instead of Tree-sitter~~
+  - ~~Files: electron/universal-parser.ts~~
+
+- [x] ~~Create project type detection system using file signatures and Claude analysis~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Detect project types and programming languages to choose appropriate parsing strategies~~
+  - ~~Files: electron/project-detector.ts~~
+- [x] ~~Build universal pattern matching for common code constructs~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: medium~~
+  - ~~Description: Implement pattern-based parsing for languages without Tree-sitter support~~
+  - ~~Files: electron/universal-parser.ts~~
 
 - [x] ~~Implement workspace-specific Claude instance persistence~~
   - ~~Assignee: Claude~~

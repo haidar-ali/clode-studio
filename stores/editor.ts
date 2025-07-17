@@ -63,6 +63,15 @@ export const useEditorStore = defineStore('editor', {
       const result = await window.electronAPI.fs.writeFile(tab.path, tab.content);
       if (result.success) {
         tab.isDirty = false;
+        
+        // Add to working files for context
+        try {
+          const { useProjectContextStore } = await import('~/stores/project-context');
+          const contextStore = useProjectContextStore();
+          contextStore.addWorkingFile(tab.path);
+        } catch (error) {
+          console.warn('Failed to add working file to context:', error);
+        }
       } else {
         throw new Error(result.error);
       }

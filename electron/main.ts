@@ -7,6 +7,7 @@ import * as pty from 'node-pty';
 import { watch, FSWatcher } from 'fs';
 import { readFile, mkdir } from 'fs/promises';
 import { claudeCodeService } from './claude-sdk-service.js';
+import { lightweightContext } from './lightweight-context.js';
 
 // Load environment variables from .env file
 import { config } from 'dotenv';
@@ -1021,5 +1022,121 @@ ipcMain.handle('mcp:test', async (event, config) => {
       success: false, 
       error: error instanceof Error ? error.message : 'Test failed' 
     };
+  }
+});
+
+// Lightweight Context Handlers
+ipcMain.handle('context:initialize', async (event, workspacePath: string) => {
+  try {
+    await lightweightContext.initialize(workspacePath);
+    return { success: true };
+  } catch (error) {
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to initialize context' 
+    };
+  }
+});
+
+ipcMain.handle('context:searchFiles', async (event, query: string, limit: number = 20) => {
+  try {
+    const results = await lightweightContext.searchFiles(query, limit);
+    return { success: true, results };
+  } catch (error) {
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to search files' 
+    };
+  }
+});
+
+ipcMain.handle('context:buildContext', async (event, query: string, workingFiles: string[], maxTokens: number = 2000) => {
+  try {
+    const context = await lightweightContext.buildContext(query, workingFiles, maxTokens);
+    return { success: true, context };
+  } catch (error) {
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to build context' 
+    };
+  }
+});
+
+ipcMain.handle('context:getStatistics', async (event) => {
+  try {
+    const statistics = lightweightContext.getStatistics();
+    return { success: true, statistics };
+  } catch (error) {
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to get statistics' 
+    };
+  }
+});
+
+ipcMain.handle('context:getFileContent', async (event, filePath: string) => {
+  try {
+    const content = await lightweightContext.getFileContent(filePath);
+    return { success: true, content };
+  } catch (error) {
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to get file content' 
+    };
+  }
+});
+
+ipcMain.handle('context:getRecentFiles', async (event, hours: number = 24) => {
+  try {
+    const files = lightweightContext.getRecentFiles(hours);
+    return { success: true, files };
+  } catch (error) {
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to get recent files' 
+    };
+  }
+});
+
+ipcMain.handle('context:rescan', async (event) => {
+  try {
+    await lightweightContext.scanWorkspace();
+    return { success: true };
+  } catch (error) {
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to rescan workspace' 
+    };
+  }
+});
+
+ipcMain.handle('context:startWatching', async (event) => {
+  try {
+    lightweightContext.startWatching();
+    return { success: true };
+  } catch (error) {
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to start file watching' 
+    };
+  }
+});
+
+ipcMain.handle('context:stopWatching', async (event) => {
+  try {
+    lightweightContext.stopWatching();
+    return { success: true };
+  } catch (error) {
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to stop file watching' 
+    };
+  }
+});
+
+// Set up file change notifications to frontend
+lightweightContext.onFileChange((event, filePath) => {
+  if (mainWindow) {
+    mainWindow.webContents.send('context:file-changed', { event, filePath });
   }
 });

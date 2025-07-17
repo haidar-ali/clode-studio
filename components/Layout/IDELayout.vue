@@ -76,11 +76,19 @@
                 MCP
                 <span v-if="mcpStore.connectedCount > 0" class="mcp-badge">{{ mcpStore.connectedCount }}</span>
               </button>
+              <button
+                :class="{ active: bottomTab === 'context' }"
+                @click="bottomTab = 'context'"
+              >
+                Context
+                <span v-if="contextFilesCount > 0" class="context-badge">{{ contextFilesCount }}</span>
+              </button>
             </div>
             <div class="tab-content">
               <KanbanBoard v-if="bottomTab === 'tasks'" />
               <Terminal v-else-if="bottomTab === 'terminal'" :project-path="projectPath" />
-              <MCPManager v-else />
+              <MCPManager v-else-if="bottomTab === 'mcp'" />
+              <ContextPanel v-else />
             </div>
           </div>
         </Pane>
@@ -136,7 +144,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { Splitpanes, Pane } from 'splitpanes';
 import 'splitpanes/dist/splitpanes.css';
 import { useEditorStore } from '~/stores/editor';
@@ -145,17 +153,20 @@ import { useLayoutStore } from '~/stores/layout';
 import { useMCPStore } from '~/stores/mcp';
 import { useFileWatcher } from '~/composables/useFileWatcher';
 import { useTasksFileWatcher } from '~/composables/useTasksFileWatcher';
+import { useContextManager } from '~/composables/useContextManager';
 
 const editorStore = useEditorStore();
 const tasksStore = useTasksStore();
 const layoutStore = useLayoutStore();
 const mcpStore = useMCPStore();
-const bottomTab = ref<'tasks' | 'terminal' | 'mcp'>('tasks');
+const contextManager = useContextManager();
+const bottomTab = ref<'tasks' | 'terminal' | 'mcp' | 'context'>('tasks');
 const showGlobalSearch = ref(false);
 
 const activeTab = computed(() => editorStore.activeTab);
 const taskCount = computed(() => tasksStore.taskCount);
 const projectPath = computed(() => tasksStore.projectPath);
+const contextFilesCount = computed(() => contextManager.statistics.value?.totalFiles || 0);
 
 // Set up file watching
 useFileWatcher();
@@ -181,6 +192,18 @@ const handleKeydown = (event: KeyboardEvent) => {
 const handleOpenGlobalSearch = () => {
   showGlobalSearch.value = true;
 };
+
+// Initialize context when workspace changes
+watch(projectPath, async (newPath) => {
+  if (newPath) {
+    try {
+      await contextManager.initialize(newPath);
+      console.log('Context initialized for workspace:', newPath);
+    } catch (error) {
+      console.error('Failed to initialize context:', error);
+    }
+  }
+}, { immediate: true });
 
 onMounted(() => {
   // Load saved layout mode
@@ -295,6 +318,17 @@ onUnmounted(() => {
 
 .mcp-badge {
   background: #4ec9b0;
+  color: white;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  min-width: 18px;
+  text-align: center;
+  font-weight: 600;
+}
+
+.context-badge {
+  background: #d4af37;
   color: white;
   font-size: 11px;
   padding: 2px 6px;
