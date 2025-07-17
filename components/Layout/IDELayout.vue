@@ -41,7 +41,12 @@
             <!-- Right Panel: Claude Terminal -->
             <Pane :size="30" :min-size="20" :max-size="40">
               <div class="panel terminal-panel">
-                <ClaudeTerminal />
+                <ClientOnly>
+                  <ClaudeTerminalTabs />
+                  <template #fallback>
+                    <div class="loading-terminal">Loading Claude terminals...</div>
+                  </template>
+                </ClientOnly>
               </div>
             </Pane>
           </Splitpanes>
@@ -98,7 +103,12 @@
         <!-- Right Panel: Claude Terminal -->
         <Pane :size="100 - layoutStore.kanbanClaudeSplit" :min-size="15" :max-size="40">
           <div class="panel terminal-panel">
-            <ClaudeTerminal />
+            <ClientOnly>
+              <ClaudeTerminalTabs />
+              <template #fallback>
+                <div class="loading-terminal">Loading Claude terminals...</div>
+              </template>
+            </ClientOnly>
           </div>
         </Pane>
       </Splitpanes>
@@ -178,6 +188,18 @@ onMounted(() => {
   
   document.addEventListener('keydown', handleKeydown);
   window.addEventListener('open-global-search', handleOpenGlobalSearch);
+  
+  // Save workspace configuration before app closes
+  window.addEventListener('beforeunload', async () => {
+    const { useWorkspaceManager } = await import('~/composables/useWorkspaceManager');
+    const { currentWorkspacePath } = useWorkspaceManager();
+    const { useClaudeInstancesStore } = await import('~/stores/claude-instances');
+    const claudeInstancesStore = useClaudeInstancesStore();
+    
+    if (currentWorkspacePath.value) {
+      await claudeInstancesStore.saveWorkspaceConfiguration(currentWorkspacePath.value);
+    }
+  });
 });
 
 onUnmounted(() => {
@@ -328,6 +350,11 @@ onUnmounted(() => {
   flex-direction: column;
 }
 
+/* Terminal panel styling */
+.terminal-panel {
+  position: relative;
+}
+
 /* Layout Mode Specific Styles */
 .layout-full-ide {
   flex: 1;
@@ -379,5 +406,14 @@ onUnmounted(() => {
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: #cccccc;
+}
+
+.loading-terminal {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #858585;
+  font-style: italic;
 }
 </style>

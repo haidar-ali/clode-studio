@@ -1,24 +1,24 @@
 <template>
   <div class="file-tree">
     <div class="file-tree-header">
-      <button @click="selectWorkspace" class="workspace-button">
+      <button @click="handleWorkspaceSelect" class="workspace-button">
         <Icon name="mdi:folder-open" />
         Select Workspace
       </button>
       <div class="header-actions">
-        <button @click="createNewFileInRoot" class="action-button" title="New File" :disabled="!workspacePath">
+        <button @click="createNewFileInRoot" class="action-button" title="New File" :disabled="!hasWorkspace">
           <Icon name="mdi:file-plus" />
         </button>
-        <button @click="createNewFolderInRoot" class="action-button" title="New Folder" :disabled="!workspacePath">
+        <button @click="createNewFolderInRoot" class="action-button" title="New Folder" :disabled="!hasWorkspace">
           <Icon name="mdi:folder-plus" />
         </button>
-        <button @click="openGlobalSearch" class="action-button" title="Search in Files (Cmd+Shift+F)" :disabled="!workspacePath">
+        <button @click="openGlobalSearch" class="action-button" title="Search in Files (Cmd+Shift+F)" :disabled="!hasWorkspace">
           <Icon name="mdi:magnify" />
         </button>
       </div>
     </div>
     
-    <div v-if="workspacePath" class="workspace-info">
+    <div v-if="hasWorkspace" class="workspace-info">
       <div class="workspace-path">
         <Icon name="mdi:folder" />
         {{ workspaceName }}
@@ -31,7 +31,7 @@
         Loading...
       </div>
       
-      <div v-else-if="!workspacePath" class="empty-workspace">
+      <div v-else-if="!hasWorkspace" class="empty-workspace">
         <Icon name="mdi:folder-open-outline" size="32" />
         <p>No workspace selected</p>
         <small>Select a folder to start browsing files</small>
@@ -123,15 +123,14 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { useEditorStore } from '~/stores/editor';
-import { useChatStore } from '~/stores/chat';
 import { useTasksStore } from '~/stores/tasks';
+import { useWorkspaceManager } from '~/composables/useWorkspaceManager';
 import type { FileNode } from '~/shared/types';
 
 const editorStore = useEditorStore();
-const chatStore = useChatStore();
 const tasksStore = useTasksStore();
+const workspaceManager = useWorkspaceManager();
 
-const workspacePath = ref<string>('');
 const fileTree = ref<FileNode[]>([]);
 const isLoading = ref(false);
 
@@ -148,67 +147,19 @@ const newName = ref('');
 const renameInput = ref<HTMLInputElement>();
 const modalMode = ref<'rename' | 'newFile' | 'newFolder'>('rename');
 
-const workspaceName = computed(() => {
-  if (!workspacePath.value) return '';
-  return workspacePath.value.split('/').pop() || 'Workspace';
-});
+// Use workspace manager's computed properties
+const { currentWorkspacePath, workspaceName, hasWorkspace, isChangingWorkspace, selectWorkspace } = workspaceManager;
 
-const selectWorkspace = async () => {
+const handleWorkspaceSelect = async () => {
   try {
-    const result = await window.electronAPI.dialog.selectFolder();
-    
-    if (!result.success || result.canceled) {
-      return;
-    }
-    
-    const path = result.path;
-    if (!path) return;
-    
-    // Stop watching the old workspace
-    if (workspacePath.value) {
-      await window.electronAPI.fs.unwatchDirectory(workspacePath.value);
-    }
-    
     isLoading.value = true;
-    
-    // 1. Close all editor tabs and reset terminals to avoid confusion
-    editorStore.closeAllTabs();
-    
-    // 2. Stop and clear Claude terminal for clean slate
-    await chatStore.stopClaude();
-    chatStore.clearMessages();
-    
-    // 3. Update workspace path and load directory structure
-    workspacePath.value = path;
-    await loadDirectory(path);
-    await saveWorkspace();
-    
-    // 4. Start watching the new workspace
-    await window.electronAPI.fs.watchDirectory(path);
-    
-    // 5. Update chat store with new workspace path
-    await chatStore.updateWorkingDirectory(path);
-    
-    // 6. Set project path FIRST, then load existing tasks (don't clear until after loading)
-    tasksStore.setProjectPath(path);
-    
-    // 7. Try to load existing TASKS.md from the new workspace
-    const tasksPath = `${path}/TASKS.md`;
-    const tasksResult = await window.electronAPI.fs.readFile(tasksPath);
-    
-    if (tasksResult.success) {
-      // TASKS.md exists - load it WITHOUT clearing first
-      console.log('Loading existing TASKS.md from new workspace');
-      await tasksStore.loadTasksFromProject();
-    } else {
-      // No TASKS.md exists - NOW we can safely clear and create new
-      console.log('No TASKS.md found, creating new one for workspace');
-      tasksStore.clearAll();
-      await tasksStore.updateTasksMarkdown();
+    await selectWorkspace();
+    // After workspace change, reload the directory
+    if (currentWorkspacePath.value) {
+      await loadDirectory(currentWorkspacePath.value);
     }
   } catch (error) {
     alert(`Failed to load workspace: ${error instanceof Error ? error.message : String(error)}`);
-    workspacePath.value = '';
   } finally {
     isLoading.value = false;
   }
@@ -235,7 +186,7 @@ const loadDirectory = async (dirPath: string): Promise<FileNode[]> => {
       children: file.isDirectory ? [] : undefined
     }));
   
-  if (dirPath === workspacePath.value) {
+  if (dirPath === currentWorkspacePath.value) {
     fileTree.value = nodes;
   }
   
@@ -322,12 +273,12 @@ const hideContextMenu = () => {
 };
 
 const createNewFileInRoot = () => {
-  if (!workspacePath.value) return;
+  if (!currentWorkspacePath.value) return;
   
   // Create a virtual root node for the workspace
   contextNode.value = {
     name: '',
-    path: workspacePath.value,
+    path: currentWorkspacePath.value,
     isDirectory: true,
     expanded: true
   };
@@ -343,12 +294,12 @@ const createNewFileInRoot = () => {
 };
 
 const createNewFolderInRoot = () => {
-  if (!workspacePath.value) return;
+  if (!currentWorkspacePath.value) return;
   
   // Create a virtual root node for the workspace
   contextNode.value = {
     name: '',
-    path: workspacePath.value,
+    path: currentWorkspacePath.value,
     isDirectory: true,
     expanded: true
   };
@@ -451,8 +402,8 @@ const confirmRename = async () => {
     }
     
     // Refresh the directory
-    console.log('Refreshing directory:', workspacePath.value);
-    await loadDirectory(workspacePath.value);
+    console.log('Refreshing directory:', currentWorkspacePath.value);
+    await loadDirectory(currentWorkspacePath.value);
     
   } catch (error) {
     console.error('Failed to perform operation:', error);
@@ -480,7 +431,7 @@ const confirmDelete = async () => {
     }
     
     // Refresh the directory
-    await loadDirectory(workspacePath.value);
+    await loadDirectory(currentWorkspacePath.value);
     
   } catch (error) {
     console.error('Failed to delete:', error);
@@ -495,17 +446,12 @@ const cancelDelete = () => {
   contextNode.value = null;
 };
 
-const saveWorkspace = async () => {
-  if (workspacePath.value) {
-    await window.electronAPI.store.set('workspacePath', workspacePath.value);
-  }
-};
+// saveWorkspace is now handled by the workspace manager
 
 const loadSavedWorkspace = async () => {
-  const savedPath = await window.electronAPI.store.get('workspacePath');
-  if (savedPath && typeof savedPath === 'string') {
+  const savedPath = await workspaceManager.loadWorkspaceFromStorage();
+  if (savedPath) {
     try {
-      workspacePath.value = savedPath;
       await loadDirectory(savedPath);
       // Start watching the saved workspace
       await window.electronAPI.fs.watchDirectory(savedPath);
@@ -524,7 +470,7 @@ const handleDirectoryChange = async (data: { path: string; eventType: string; fi
   console.log('Directory change detected:', data);
   
   // If it's the root workspace
-  if (data.path === workspacePath.value) {
+  if (data.path === currentWorkspacePath.value) {
     await loadDirectory(data.path);
     return;
   }
@@ -568,8 +514,8 @@ onUnmounted(() => {
   window.electronAPI.fs.removeDirectoryChangeListener();
   
   // Stop watching all directories
-  if (workspacePath.value) {
-    window.electronAPI.fs.unwatchDirectory(workspacePath.value);
+  if (currentWorkspacePath.value) {
+    window.electronAPI.fs.unwatchDirectory(currentWorkspacePath.value);
   }
 });
 </script>

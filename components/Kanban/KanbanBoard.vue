@@ -500,16 +500,18 @@ Remember: Good task management helps maintain project clarity and progress visib
     await editorStore.openFile(projectInstructionsPath);
     
     // Notify Claude in the terminal
-    const { useChatStore } = await import('~/stores/chat');
-    const chatStore = useChatStore();
-    if (chatStore.claudeStatus === 'connected') {
+    const { useClaudeInstancesStore } = await import('~/stores/claude-instances');
+    const claudeInstancesStore = useClaudeInstancesStore();
+    const activeInstance = claudeInstancesStore.activeInstance;
+    
+    if (activeInstance && activeInstance.status === 'connected') {
       const command = `I've created both PROJECT_INSTRUCTIONS.md and TASK_INSTRUCTIONS.md for a new project. Please:
 1. Read PROJECT_INSTRUCTIONS.md to understand the project requirements
 2. Review TASK_INSTRUCTIONS.md to understand how to manage tasks
 3. Create an initial task list in TASKS.md based on the project requirements
 4. Let me know when you're ready to start development!\n`;
       
-      await window.electronAPI.claude.send(command);
+      await window.electronAPI.claude.send(activeInstance.id, command);
     }
     
     alert(`✅ Project Setup Complete!\n\nCreated:\n• PROJECT_INSTRUCTIONS.md - Fill this with your project details\n• TASK_INSTRUCTIONS.md - Guidelines for task management\n\nPROJECT_INSTRUCTIONS.md has been opened in the editor. Fill in the template with your project details, then Claude will help you plan and build it!`);
@@ -673,11 +675,13 @@ Remember: Good task management helps maintain project clarity and progress visib
     alert(`✅ Task Instructions Created!\n\nCreated TASK_INSTRUCTIONS.md in your project.\n\nYou can now share this with Claude to ensure consistent task management.`);
     
     // Optionally, also send to Claude immediately
-    const { useChatStore } = await import('~/stores/chat');
-    const chatStore = useChatStore();
-    if (chatStore.claudeStatus === 'connected') {
+    const { useClaudeInstancesStore } = await import('~/stores/claude-instances');
+    const claudeInstancesStore = useClaudeInstancesStore();
+    const activeInstance = claudeInstancesStore.activeInstance;
+    
+    if (activeInstance && activeInstance.status === 'connected') {
       const command = `I've created TASK_INSTRUCTIONS.md with detailed guidelines for task management. Please read it and follow these instructions when creating or updating tasks in TASKS.md.\n`;
-      await window.electronAPI.claude.send(command);
+      await window.electronAPI.claude.send(activeInstance.id, command);
     }
     
   } catch (error) {

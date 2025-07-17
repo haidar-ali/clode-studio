@@ -1,10 +1,15 @@
 <template>
   <div class="terminal-container">
     <div class="terminal-header">
-      <h3>Claude Terminal</h3>
+      <h3>{{ instance.name }}</h3>
       <div class="terminal-actions">
+        <PersonalitySelector
+          :instanceId="instance.id"
+          :currentPersonalityId="instance.personalityId"
+          @update="updatePersonality"
+        />
         <button
-          v-if="claudeStatus === 'disconnected'"
+          v-if="instance.status === 'disconnected'"
           @click="startClaude"
           class="icon-button start-button"
           title="Start Claude"
@@ -13,7 +18,7 @@
           <span>Start</span>
         </button>
         <button
-          v-else-if="claudeStatus === 'connected'"
+          v-else-if="instance.status === 'connected'"
           @click="stopClaude"
           class="icon-button stop-button"
           title="Stop Claude"
@@ -36,28 +41,67 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
-import { useChatStore } from '~/stores/chat';
-import { useTaskMonitor } from '~/composables/useTaskMonitor';
+import type { ClaudeInstance } from '~/stores/claude-instances';
+import { useClaudeInstancesStore } from '~/stores/claude-instances';
+import PersonalitySelector from './PersonalitySelector.vue';
 import 'xterm/css/xterm.css';
 
-const chatStore = useChatStore();
+const props = defineProps<{
+  instance: ClaudeInstance;
+}>();
+
+const emit = defineEmits<{
+  'status-change': [status: ClaudeInstance['status'], pid?: number];
+}>();
+
+const instancesStore = useClaudeInstancesStore();
 const terminalElement = ref<HTMLElement>();
 
 let terminal: Terminal | null = null;
 let fitAddon: FitAddon | null = null;
-let isAtBottom = true; // Track if user is at bottom of terminal
-let lastDataTime = 0; // Track last data received time
-let pendingPromptScroll = false; // Track if we need to scroll for a prompt
+let isAtBottom = true;
+let lastDataTime = 0;
+let pendingPromptScroll = false;
 
-const claudeStatus = computed(() => chatStore.claudeStatus);
+// Track if this instance's listeners are setup
+let listenersSetup = false;
+let cleanupOutputListener: (() => void) | null = null;
+let cleanupErrorListener: (() => void) | null = null;
+let cleanupExitListener: (() => void) | null = null;
 
-// Initialize task monitoring
-useTaskMonitor();
+const personality = computed(() => {
+  return props.instance.personalityId 
+    ? instancesStore.getPersonalityById(props.instance.personalityId)
+    : null;
+});
 
-// Helper function to auto-scroll only if user is at bottom
+const updatePersonality = async (personalityId: string | undefined) => {
+  instancesStore.updateInstancePersonality(props.instance.id, personalityId);
+  
+  // If Claude is running, send the new personality instructions
+  if (props.instance.status === 'connected' && personalityId) {
+    const newPersonality = instancesStore.getPersonalityById(personalityId);
+    if (newPersonality && terminal) {
+      terminal.writeln('\r\n\x1b[36m[Personality Changed: ' + newPersonality.name + ']\x1b[0m');
+      terminal.writeln('\x1b[90m' + newPersonality.description + '\x1b[0m\r\n');
+      
+      // Send the personality instructions to Claude
+      const instructions = `System: Your personality has been changed. ${newPersonality.instructions}`;
+      await window.electronAPI.claude.send(props.instance.id, instructions + '\n');
+    }
+  } else if (!personalityId && props.instance.status === 'connected' && terminal) {
+    terminal.writeln('\r\n\x1b[36m[Personality Removed]\x1b[0m');
+    terminal.writeln('\x1b[90mReverted to default Claude behavior\x1b[0m\r\n');
+    
+    // Tell Claude to revert to default behavior
+    const instructions = `System: Your personality has been reset. Please revert to your default behavior.`;
+    await window.electronAPI.claude.send(props.instance.id, instructions + '\n');
+  }
+};
+
 const autoScrollIfNeeded = () => {
   if (terminal && isAtBottom) {
     terminal.scrollToBottom();
@@ -67,7 +111,6 @@ const autoScrollIfNeeded = () => {
 const initTerminal = () => {
   if (!terminalElement.value) return;
   
-  // Create terminal instance
   terminal = new Terminal({
     theme: {
       background: '#1e1e1e',
@@ -97,57 +140,41 @@ const initTerminal = () => {
     cursorStyle: 'block',
     scrollback: 10000,
     convertEol: true,
-    // Disable local echo since PTY will echo back
-    // This is handled by the PTY, not locally
     disableStdin: false,
-    // Improve scrolling behavior
     smoothScrollDuration: 0,
     fastScrollModifier: 'shift',
     fastScrollSensitivity: 5,
-    // Fix cursor positioning issues
     windowsMode: false
   });
   
-  // Add fit addon
   fitAddon = new FitAddon();
   terminal.loadAddon(fitAddon);
   
-  // Attach to DOM
   terminal.open(terminalElement.value);
   fitAddon.fit();
   
-  // Track scroll position
   terminal.onScroll(() => {
     const buffer = terminal.buffer.active;
     const scrollbackSize = buffer.length - terminal.rows;
     const scrollOffset = buffer.viewportY;
-    
-    // Check if we're at the bottom (within 5 lines of bottom)
     isAtBottom = scrollOffset >= scrollbackSize - 5;
   });
   
-  // Handle terminal input
   terminal.onData((data: string) => {
-    // Send input to Claude process
-    if (chatStore.claudeStatus === 'connected') {
-      // Don't echo locally - let the PTY handle it
-      window.electronAPI.claude.send(data);
+    if (props.instance.status === 'connected') {
+      // Send with instance ID
+      window.electronAPI.claude.send(props.instance.id, data);
     }
   });
   
-  // Setup Claude output listener
-  setupClaudeListeners();
-  
-  // Handle window resize with debouncing
   let resizeTimeout: NodeJS.Timeout;
   const resizeObserver = new ResizeObserver(() => {
     clearTimeout(resizeTimeout);
     resizeTimeout = setTimeout(() => {
       if (fitAddon && terminal) {
         fitAddon.fit();
-        // Notify PTY of the new size
-        if (chatStore.claudeStatus === 'connected') {
-          window.electronAPI.claude.resize(terminal.cols, terminal.rows);
+        if (props.instance.status === 'connected') {
+          window.electronAPI.claude.resize(props.instance.id, terminal.cols, terminal.rows);
         }
       }
     }, 100);
@@ -155,71 +182,104 @@ const initTerminal = () => {
   resizeObserver.observe(terminalElement.value);
   
   // Show welcome message
+  showWelcomeMessage();
+};
+
+const showWelcomeMessage = () => {
+  if (!terminal) return;
+  
   terminal.writeln('Welcome to Claude Code IDE Terminal');
+  terminal.writeln(`Instance: ${props.instance.name}`);
+  if (personality.value) {
+    terminal.writeln(`Personality: ${personality.value.name} - ${personality.value.description}`);
+  }
   terminal.writeln('Click the \x1b[32mStart\x1b[0m button above to launch Claude CLI');
   terminal.writeln('');
   terminal.scrollToBottom();
 };
 
+
 const setupClaudeListeners = () => {
-  // Remove any existing listeners first to avoid duplicates
-  window.electronAPI.claude.removeAllListeners();
+  // Remove any existing listeners for this instance
+  removeClaudeListeners();
   
-  console.log('Setting up Claude listeners...');
+  console.log(`Setting up Claude listeners for instance: ${props.instance.id}`);
   
-  // Listen for Claude output
-  window.electronAPI.claude.onOutput((data: string) => {
-    if (terminal && chatStore.claudeStatus === 'connected') {
+  // Setup output listener
+  cleanupOutputListener = window.electronAPI.claude.onOutput(props.instance.id, (data: string) => {
+    if (terminal && props.instance.status === 'connected') {
       const currentTime = Date.now();
       const timeSinceLastData = currentTime - lastDataTime;
       lastDataTime = currentTime;
       
       terminal.write(data);
       
-      // Check if this looks like an interactive prompt
       const hasPromptIndicators = data.includes('Do you want to') || 
                                  data.includes('❯') ||
                                  data.includes('Yes, and don\'t ask again') ||
                                  data.includes('No, and tell Claude');
       
-      // Check for box drawing characters that indicate a prompt box
       const hasBoxDrawing = data.includes('╭') || data.includes('╰') || 
                            (data.includes('│') && data.includes('─'));
       
-      // If we see prompt indicators, set flag for pending scroll
       if (hasPromptIndicators || (hasBoxDrawing && timeSinceLastData > 100)) {
         pendingPromptScroll = true;
       }
       
-      // If we have a pending prompt scroll and see the end of the prompt box
       if (pendingPromptScroll && (data.includes('╰') || data.includes('❯'))) {
-        // Delay scroll to ensure the full prompt is rendered
         setTimeout(() => {
           terminal.scrollToBottom();
           pendingPromptScroll = false;
         }, 100);
       } else if (!pendingPromptScroll) {
-        // Normal auto-scroll behavior when not in a prompt
         autoScrollIfNeeded();
       }
     }
   });
   
-  // Listen for Claude errors
-  window.electronAPI.claude.onError((data: string) => {
+  // Setup error listener
+  cleanupErrorListener = window.electronAPI.claude.onError(props.instance.id, (data: string) => {
     if (terminal) {
-      terminal.write(`\x1b[31mError: ${data}\x1b[0m`); // Red color for errors
+      terminal.write(`\x1b[31mError: ${data}\x1b[0m`);
       autoScrollIfNeeded();
     }
   });
   
-  // Listen for Claude exit
-  window.electronAPI.claude.onExit((code: number | null) => {
+  // Setup exit listener
+  cleanupExitListener = window.electronAPI.claude.onExit(props.instance.id, (code: number | null) => {
     if (terminal) {
       terminal.writeln(`\r\n\x1b[33mClaude process exited with code ${code}\x1b[0m`);
       autoScrollIfNeeded();
     }
+    emit('status-change', 'disconnected');
   });
+  
+  listenersSetup = true;
+};
+
+const removeClaudeListeners = () => {
+  if (listenersSetup) {
+    console.log(`Removing Claude listeners for instance: ${props.instance.id}`);
+    
+    // Call cleanup functions
+    if (cleanupOutputListener) {
+      cleanupOutputListener();
+      cleanupOutputListener = null;
+    }
+    if (cleanupErrorListener) {
+      cleanupErrorListener();
+      cleanupErrorListener = null;
+    }
+    if (cleanupExitListener) {
+      cleanupExitListener();
+      cleanupExitListener = null;
+    }
+    
+    // Also call the removeAllListeners for this instance
+    window.electronAPI.claude.removeAllListeners(props.instance.id);
+    
+    listenersSetup = false;
+  }
 };
 
 const startClaude = async () => {
@@ -228,46 +288,55 @@ const startClaude = async () => {
   terminal.clear();
   terminal.writeln('Starting Claude CLI...');
   
-  // Ensure listeners are properly setup before starting
+  if (personality.value) {
+    terminal.writeln(`\x1b[36mApplying personality: ${personality.value.name}\x1b[0m`);
+    terminal.writeln(`\x1b[90m${personality.value.instructions}\x1b[0m`);
+    terminal.writeln('');
+  }
+  
   setupClaudeListeners();
   
-  await chatStore.startClaude();
+  emit('status-change', 'connecting');
   
-  if (chatStore.claudeStatus === 'connected') {
+  const result = await window.electronAPI.claude.start(props.instance.id, props.instance.workingDirectory);
+  
+  if (result.success) {
+    emit('status-change', 'connected', result.pid);
     terminal.writeln('Claude CLI started successfully!');
     terminal.writeln('You can now type commands or chat with Claude.');
     terminal.writeln('');
     autoScrollIfNeeded();
     
-    // Aggressive terminal sizing fix for PTY sync
+    // Send personality instructions if set
+    if (personality.value) {
+      setTimeout(async () => {
+        const instructions = `System: ${personality.value.instructions}`;
+        await window.electronAPI.claude.send(props.instance.id, instructions + '\n');
+      }, 1000);
+    }
+    
+    // Terminal sizing fix
     const fixTerminalSize = async () => {
       if (!fitAddon || !terminal) return;
       
-      // Wait for container to be fully rendered
       await new Promise(resolve => setTimeout(resolve, 100));
       
-      // Multiple resize attempts with PTY sync
       for (let i = 0; i < 5; i++) {
         fitAddon.fit();
         
-        // Sync the PTY size after each fit
-        if (chatStore.claudeStatus === 'connected') {
-          await window.electronAPI.claude.resize(terminal.cols, terminal.rows);
+        if (props.instance.status === 'connected') {
+          await window.electronAPI.claude.resize(props.instance.id, terminal.cols, terminal.rows);
           console.log(`Terminal resize attempt ${i + 1}: ${terminal.cols}x${terminal.rows}`);
         }
         
-        // Progressive delays
         await new Promise(resolve => setTimeout(resolve, 100 * (i + 1)));
       }
       
-      // Final focus
       terminal.focus();
     };
     
-    // Start the sizing process
     fixTerminalSize();
     
-    // Also fix size when container becomes visible
     const observer = new IntersectionObserver((entries) => {
       entries.forEach(entry => {
         if (entry.isIntersecting) {
@@ -281,6 +350,7 @@ const startClaude = async () => {
       observer.observe(terminalElement.value);
     }
   } else {
+    emit('status-change', 'disconnected');
     terminal.writeln('\x1b[31mFailed to start Claude CLI\x1b[0m');
     terminal.writeln('Check console for details and try again.');
     autoScrollIfNeeded();
@@ -293,15 +363,13 @@ const stopClaude = async () => {
     autoScrollIfNeeded();
   }
   
-  await chatStore.stopClaude();
+  await window.electronAPI.claude.stop(props.instance.id);
+  removeClaudeListeners();
+  emit('status-change', 'disconnected');
   
-  // Clear the terminal like the trash button for clean visual feedback
   if (terminal) {
     terminal.clear();
-    terminal.writeln('Claude CLI stopped');
-    terminal.writeln('Click the \x1b[32mStart\x1b[0m button above to launch Claude CLI');
-    terminal.writeln('');
-    autoScrollIfNeeded();
+    showWelcomeMessage();
   }
 };
 
@@ -311,32 +379,16 @@ const clearTerminal = () => {
   }
 };
 
-// Handle Claude stopped event from store
-const handleClaudeStop = () => {
-  if (terminal) {
-    terminal.clear();
-    terminal.writeln('Claude CLI stopped');
-    terminal.writeln('Click the \x1b[32mStart\x1b[0m button above to launch Claude CLI');
-    terminal.writeln('');
-    autoScrollIfNeeded();
-  }
-};
-
 onMounted(() => {
   initTerminal();
-  
-  // Listen for Claude stop events (from workspace switching)
-  window.addEventListener('claude-stopped', handleClaudeStop);
 });
 
 onUnmounted(() => {
+  removeClaudeListeners();
+  
   if (terminal) {
     terminal.dispose();
   }
-  window.electronAPI.claude.removeAllListeners();
-  
-  // Clean up event listeners
-  window.removeEventListener('claude-stopped', handleClaudeStop);
 });
 </script>
 
@@ -355,6 +407,8 @@ onUnmounted(() => {
   padding: 8px 16px;
   background: #2d2d30;
   border-bottom: 1px solid #181818;
+  position: relative;
+  z-index: 10;
 }
 
 .terminal-header h3 {
@@ -367,8 +421,12 @@ onUnmounted(() => {
 
 .terminal-actions {
   display: flex;
-  gap: 4px;
+  align-items: center;
+  gap: 8px;
+  position: relative;
 }
+
+/* Personality selector integrated in header */
 
 .icon-button {
   background: none;
@@ -411,9 +469,9 @@ onUnmounted(() => {
   flex: 1;
   padding: 8px;
   overflow: hidden;
+  position: relative;
 }
 
-/* Override xterm.js styles for better integration */
 :deep(.xterm) {
   height: 100%;
   padding: 4px;

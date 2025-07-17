@@ -1,7 +1,7 @@
 # Project Tasks
 
 *This file is synced with Claude Code IDE and Claude's native TodoWrite system.*  
-*Last updated: 2025-01-14T23:54:00.000Z*
+*Last updated: 2025-01-17T03:30:00.000Z*
 
 ## Backlog (0)
 
@@ -10,24 +10,51 @@
 
 ## To Do (2)
 
+- [ ] **Add context visualization and optimization features**
+  - Assignee: Claude
+  - Type: feature
+  - Priority: medium
+  - Description: Implement visual context meter and token usage tracking to help manage Claude's context window
+  - Files: components/Layout/StatusBar.vue, stores/context.ts (new), composables/useContextTracking.ts (new)
 - [ ] **Package application for distribution**
   - Assignee: Both
   - Type: documentation
   - Priority: low
   - Description: Configure electron-builder and create installers for macOS, Windows, and Linux platforms
   - Files: package.json, electron-builder.yml (new), .github/workflows/build.yml (new)
-- [ ] **Add context visualization and optimization features**
-  - Assignee: Claude
-  - Type: feature
-  - Priority: high
-  - Description: Implement visual context meter and token usage tracking to help manage Claude's context window
-  - Files: components/Layout/StatusBar.vue, stores/context.ts (new), composables/useContextTracking.ts (new)
 
 ## In Progress (0)
 
 
 
-## Completed (26)
+## Completed (30)
+
+- [x] ~~Implement workspace-specific Claude instance persistence~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Save and restore Claude terminal configurations (tabs, personalities) per workspace~~
+  - ~~Files: stores/claude-instances.ts, composables/useWorkspaceManager.ts, components/Terminal/ClaudeTerminalTabs.vue, components/Layout/IDELayout.vue~~
+
+- [x] ~~Enhance multi-instance support with proper IPC isolation~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Update electron IPC to support instance-specific communication channels for proper isolation between multiple Claude terminals~~
+  - ~~Files: electron/main.ts, electron/preload.ts, components/Terminal/ClaudeTerminalTab.vue, stores/claude-instances.ts~~
+
+- [x] ~~Implement multiple Claude terminal instances with tabs~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Allow users to run multiple Claude instances simultaneously in the same project with a tab-based interface~~
+  - ~~Files: components/Terminal/ClaudeTerminalTabs.vue, components/Terminal/ClaudeTerminalTab.vue, stores/claude-instances.ts, components/Layout/IDELayout.vue~~
+- [x] ~~Create Claude personality system with role-based instructions~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Add dropdown in terminal header to assign personalities/roles (architect, developer, QA, marketing, product manager, etc.) with custom instructions for each Claude instance~~
+  - ~~Files: components/Terminal/PersonalitySelector.vue, stores/claude-instances.ts (includes personalities), directives/clickOutside.ts~~
 
 - [x] ~~Create MCP connection manager UI~~
   - ~~Assignee: Claude~~

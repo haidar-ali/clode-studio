@@ -16,11 +16,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 let mainWindow: BrowserWindow | null = null;
-let claudeProcess: ChildProcess | null = null;
-let claudePty: pty.IPty | null = null;
 const store = new Store();
 const fileWatchers: Map<string, FSWatcher> = new Map();
 const fileDebounceTimers: Map<string, NodeJS.Timeout> = new Map();
+
+// Multi-instance Claude support
+const claudeInstances: Map<string, pty.IPty> = new Map();
 
 const isDev = process.env.NODE_ENV !== 'production';
 const nuxtURL = isDev ? 'http://localhost:3000' : `file://${join(__dirname, '../.output/public/index.html')}`;
@@ -53,10 +54,11 @@ function createWindow() {
 
   mainWindow.on('closed', () => {
     mainWindow = null;
-    if (claudePty) {
-      claudePty.kill();
-      claudePty = null;
-    }
+    // Clean up all Claude instances
+    claudeInstances.forEach((pty, instanceId) => {
+      pty.kill();
+    });
+    claudeInstances.clear();
   });
 }
 
@@ -80,14 +82,14 @@ app.on('window-all-closed', () => {
   }
 });
 
-// Claude Process Management using PTY
-ipcMain.handle('claude:start', async (event, workingDirectory: string) => {
-  if (claudePty) {
-    return { success: false, error: 'Claude process already running' };
+// Claude Process Management using PTY with multi-instance support
+ipcMain.handle('claude:start', async (event, instanceId: string, workingDirectory: string) => {
+  if (claudeInstances.has(instanceId)) {
+    return { success: false, error: 'Claude instance already running' };
   }
 
   try {
-    console.log('=== STARTING CLAUDE CLI WITH PTY ===');
+    console.log(`=== STARTING CLAUDE CLI WITH PTY FOR INSTANCE ${instanceId} ===`);
     console.log('Working directory:', workingDirectory);
     // Get Node.js bin path from environment or use system PATH
     const nodeBinPath = process.env.NODE_BIN_PATH || '';
@@ -97,8 +99,8 @@ ipcMain.handle('claude:start', async (event, workingDirectory: string) => {
     console.log('Enhanced PATH:', enhancedPath);
     console.log('Claude command:', claudeCommand);
     
-    // Create a pseudo-terminal for Claude
-    claudePty = pty.spawn(claudeCommand, [], {
+    // Create a pseudo-terminal for this Claude instance
+    const claudePty = pty.spawn(claudeCommand, [], {
       name: 'xterm-color',
       cols: 80,
       rows: 30,
@@ -111,51 +113,53 @@ ipcMain.handle('claude:start', async (event, workingDirectory: string) => {
       }
     });
 
-    console.log('=== CLAUDE PTY SPAWNED ===');
+    console.log(`=== CLAUDE PTY SPAWNED FOR ${instanceId} ===`);
     console.log('PID:', claudePty.pid);
     console.log('Process:', claudePty.process);
 
+    // Store this instance
+    claudeInstances.set(instanceId, claudePty);
+
     // Handle output from Claude
     claudePty.onData((data: string) => {
-      // Only log errors or important events, not every character
-      // console.log('Claude PTY output (raw):', JSON.stringify(data));
-      // console.log('Claude PTY output (clean):', data);
-      mainWindow?.webContents.send('claude:output', data);
+      // Send data with instance ID
+      mainWindow?.webContents.send(`claude:output:${instanceId}`, data);
     });
 
     // Handle exit
     claudePty.onExit(({ exitCode, signal }) => {
-      console.log('Claude PTY exited with code:', exitCode, 'signal:', signal);
-      mainWindow?.webContents.send('claude:exit', exitCode);
-      claudePty = null;
+      console.log(`Claude PTY for ${instanceId} exited with code:`, exitCode, 'signal:', signal);
+      mainWindow?.webContents.send(`claude:exit:${instanceId}`, exitCode);
+      claudeInstances.delete(instanceId);
     });
 
     // Log PTY status after a short delay
     setTimeout(() => {
-      if (claudePty) {
-        console.log('Claude PTY still running after 1 second');
+      if (claudeInstances.has(instanceId)) {
+        console.log(`Claude PTY for ${instanceId} still running after 1 second`);
         console.log('PID:', claudePty.pid);
       } else {
-        console.log('Claude PTY not running after 1 second');
+        console.log(`Claude PTY for ${instanceId} not running after 1 second`);
       }
     }, 1000);
 
     return { success: true, pid: claudePty.pid };
   } catch (error) {
-    console.error('Failed to start Claude with PTY:', error);
+    console.error(`Failed to start Claude for ${instanceId}:`, error);
     return { success: false, error: error instanceof Error ? error.message : String(error) };
   }
 });
 
-ipcMain.handle('claude:send', async (event, command: string) => {
+ipcMain.handle('claude:send', async (event, instanceId: string, command: string) => {
+  const claudePty = claudeInstances.get(instanceId);
   if (!claudePty) {
-    return { success: false, error: 'Claude PTY not running' };
+    return { success: false, error: `Claude PTY not running for instance ${instanceId}` };
   }
 
   try {
     // Only log important commands, not every keystroke
     if (command.includes('\n') || command.includes('\r')) {
-      console.log('Sending command to Claude PTY');
+      console.log(`Sending command to Claude PTY ${instanceId}`);
     }
     
     // Write raw data to PTY (xterm.js will handle line endings)
@@ -163,31 +167,33 @@ ipcMain.handle('claude:send', async (event, command: string) => {
     
     return { success: true };
   } catch (error) {
-    console.error('Failed to send command to Claude PTY:', error);
+    console.error(`Failed to send command to Claude PTY ${instanceId}:`, error);
     return { success: false, error: error instanceof Error ? error.message : String(error) };
   }
 });
 
-ipcMain.handle('claude:stop', async () => {
+ipcMain.handle('claude:stop', async (event, instanceId: string) => {
+  const claudePty = claudeInstances.get(instanceId);
   if (claudePty) {
     claudePty.kill();
-    claudePty = null;
+    claudeInstances.delete(instanceId);
     return { success: true };
   }
-  return { success: false, error: 'No Claude PTY running' };
+  return { success: false, error: `No Claude PTY running for instance ${instanceId}` };
 });
 
-ipcMain.handle('claude:resize', async (event, cols: number, rows: number) => {
+ipcMain.handle('claude:resize', async (event, instanceId: string, cols: number, rows: number) => {
+  const claudePty = claudeInstances.get(instanceId);
   if (claudePty) {
     try {
       claudePty.resize(cols, rows);
       return { success: true };
     } catch (error) {
-      console.error('Failed to resize PTY:', error);
+      console.error(`Failed to resize PTY for ${instanceId}:`, error);
       return { success: false, error: error instanceof Error ? error.message : String(error) };
     }
   }
-  return { success: false, error: 'No Claude PTY running' };
+  return { success: false, error: `No Claude PTY running for instance ${instanceId}` };
 });
 
 // File System operations

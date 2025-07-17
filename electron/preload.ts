@@ -2,23 +2,37 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 const electronAPI = {
   claude: {
-    start: (workingDirectory: string) => ipcRenderer.invoke('claude:start', workingDirectory),
-    send: (command: string) => ipcRenderer.invoke('claude:send', command),
-    stop: () => ipcRenderer.invoke('claude:stop'),
-    resize: (cols: number, rows: number) => ipcRenderer.invoke('claude:resize', cols, rows),
-    onOutput: (callback: (data: string) => void) => {
-      ipcRenderer.on('claude:output', (_, data) => callback(data));
+    start: (instanceId: string, workingDirectory: string) => 
+      ipcRenderer.invoke('claude:start', instanceId, workingDirectory),
+    send: (instanceId: string, command: string) => 
+      ipcRenderer.invoke('claude:send', instanceId, command),
+    stop: (instanceId: string) => 
+      ipcRenderer.invoke('claude:stop', instanceId),
+    resize: (instanceId: string, cols: number, rows: number) => 
+      ipcRenderer.invoke('claude:resize', instanceId, cols, rows),
+    onOutput: (instanceId: string, callback: (data: string) => void) => {
+      const channel = `claude:output:${instanceId}`;
+      const handler = (_: any, data: string) => callback(data);
+      ipcRenderer.on(channel, handler);
+      // Return cleanup function
+      return () => ipcRenderer.removeListener(channel, handler);
     },
-    onError: (callback: (data: string) => void) => {
-      ipcRenderer.on('claude:error', (_, data) => callback(data));
+    onError: (instanceId: string, callback: (data: string) => void) => {
+      const channel = `claude:error:${instanceId}`;
+      const handler = (_: any, data: string) => callback(data);
+      ipcRenderer.on(channel, handler);
+      return () => ipcRenderer.removeListener(channel, handler);
     },
-    onExit: (callback: (code: number | null) => void) => {
-      ipcRenderer.on('claude:exit', (_, code) => callback(code));
+    onExit: (instanceId: string, callback: (code: number | null) => void) => {
+      const channel = `claude:exit:${instanceId}`;
+      const handler = (_: any, code: number | null) => callback(code);
+      ipcRenderer.on(channel, handler);
+      return () => ipcRenderer.removeListener(channel, handler);
     },
-    removeAllListeners: () => {
-      ipcRenderer.removeAllListeners('claude:output');
-      ipcRenderer.removeAllListeners('claude:error');
-      ipcRenderer.removeAllListeners('claude:exit');
+    removeAllListeners: (instanceId: string) => {
+      ipcRenderer.removeAllListeners(`claude:output:${instanceId}`);
+      ipcRenderer.removeAllListeners(`claude:error:${instanceId}`);
+      ipcRenderer.removeAllListeners(`claude:exit:${instanceId}`);
     },
     sdk: {
       getTodos: (projectPath: string) => ipcRenderer.invoke('claude:sdk:getTodos', projectPath),
