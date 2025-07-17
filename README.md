@@ -37,7 +37,8 @@ A modern, lightweight IDE specifically designed for developers using Claude Code
 ## 📸 Layout Modes
 
 ### Full IDE Mode
-*[Screenshot placeholder - Full IDE with file tree, editor, Claude terminal, and Kanban board]*
+<img width="3444" height="1986" alt="image" src="https://github.com/user-attachments/assets/0885f492-6fa1-45c6-9213-fdbd06b3767e" />
+
 
 Complete development environment with all tools integrated:
 - File explorer and editor
@@ -46,7 +47,8 @@ Complete development environment with all tools integrated:
 - Global search and replace
 
 ### Kanban + Claude Mode (75/25 split)
-*[Screenshot placeholder - Kanban board on left, Claude terminal on right]*
+<img width="3444" height="1986" alt="image" src="https://github.com/user-attachments/assets/a6cccc60-8391-4192-ae9b-b228a2713f41" />
+
 
 Perfect for project management with AI assistance:
 - Kanban board for task tracking
@@ -54,7 +56,8 @@ Perfect for project management with AI assistance:
 - Clean, focused interface
 
 ### Kanban Only Mode
-*[Screenshot placeholder - Full-screen Kanban board]*
+<img width="3444" height="1986" alt="image" src="https://github.com/user-attachments/assets/7c18a756-27a9-46e7-aae1-01e29bdb2309" />
+
 
 Pure task management experience:
 - Full-screen Kanban board
