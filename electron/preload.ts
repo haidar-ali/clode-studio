@@ -106,6 +106,7 @@ const electronAPI = {
     selectFolder: () => ipcRenderer.invoke('dialog:selectFolder'),
     selectFile: () => ipcRenderer.invoke('dialog:selectFile')
   },
+  getHomeDir: () => ipcRenderer.invoke('getHomeDir'),
   search: {
     findInFiles: (options: {
       query: string;

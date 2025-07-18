@@ -89,13 +89,21 @@
               >
                 Knowledge
               </button>
+              <button
+                :class="{ active: bottomTab === 'commands' }"
+                @click="bottomTab = 'commands'"
+              >
+                <Icon name="mdi:slash-forward" size="16" />
+                Commands
+              </button>
             </div>
             <div class="tab-content">
               <KanbanBoard v-if="bottomTab === 'tasks'" />
               <Terminal v-else-if="bottomTab === 'terminal'" :project-path="projectPath" />
               <MCPManager v-else-if="bottomTab === 'mcp'" />
               <ContextPanel v-else-if="bottomTab === 'context'" />
-              <KnowledgePanel v-else />
+              <KnowledgePanel v-else-if="bottomTab === 'knowledge'" />
+              <CommandStudio v-else />
             </div>
           </div>
         </Pane>
@@ -169,13 +177,21 @@
               >
                 Knowledge
               </button>
+              <button
+                :class="{ active: bottomTab === 'commands' }"
+                @click="bottomTab = 'commands'"
+              >
+                <Icon name="mdi:slash-forward" size="16" />
+                Commands
+              </button>
             </div>
             <div class="tab-content">
               <KanbanBoard v-if="bottomTab === 'tasks'" />
               <Terminal v-else-if="bottomTab === 'terminal'" :project-path="projectPath" />
               <MCPManager v-else-if="bottomTab === 'mcp'" />
               <ContextPanel v-else-if="bottomTab === 'context'" />
-              <KnowledgePanel v-else />
+              <KnowledgePanel v-else-if="bottomTab === 'knowledge'" />
+              <CommandStudio v-else />
             </div>
           </div>
         </Pane>
@@ -232,13 +248,21 @@
               >
                 Knowledge
               </button>
+              <button
+                :class="{ active: bottomTab === 'commands' }"
+                @click="bottomTab = 'commands'"
+              >
+                <Icon name="mdi:slash-forward" size="16" />
+                Commands
+              </button>
             </div>
             <div class="tab-content">
               <KanbanBoard v-if="bottomTab === 'tasks'" />
               <Terminal v-else-if="bottomTab === 'terminal'" :project-path="projectPath" />
               <MCPManager v-else-if="bottomTab === 'mcp'" />
               <ContextPanel v-else-if="bottomTab === 'context'" />
-              <KnowledgePanel v-else />
+              <KnowledgePanel v-else-if="bottomTab === 'knowledge'" />
+              <CommandStudio v-else />
             </div>
           </div>
         </Pane>
@@ -298,6 +322,7 @@ import SessionBrowserModal from '~/components/Sessions/SessionBrowserModal.vue';
 import HookManagerModal from '~/components/Hooks/HookManagerModal.vue';
 import SettingsModal from '~/components/Settings/SettingsModal.vue';
 import KnowledgePanel from '~/components/Knowledge/KnowledgePanel.vue';
+import CommandStudio from '~/components/Commands/CommandStudio.vue';
 
 const editorStore = useEditorStore();
 const tasksStore = useTasksStore();

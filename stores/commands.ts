@@ -226,7 +226,7 @@ export const useCommandsStore = defineStore('commands', {
       this.registerCommand({
         name: 'knowledge',
         description: 'Search knowledge base',
-        category: 'knowledge',
+        category: 'context', // Changed to 'context' to match other categories
         aliases: ['kb', 'know'],
         parameters: [{
           name: 'query',
@@ -383,6 +383,19 @@ export const useCommandsStore = defineStore('commands', {
           window.dispatchEvent(new CustomEvent('show-mcp-panel'));
         },
         icon: 'mdi:connection'
+      });
+
+      // Claude Command Studio
+      this.registerCommand({
+        name: 'commands',
+        description: 'Open Claude command studio',
+        category: 'system',
+        aliases: ['cmd', 'slash'],
+        handler: () => {
+          // Switch to commands tab in bottom panel
+          window.dispatchEvent(new CustomEvent('switch-bottom-tab', { detail: { tab: 'commands' } }));
+        },
+        icon: 'mdi:slash-forward'
       });
 
       // Session Commands

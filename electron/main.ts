@@ -234,6 +234,11 @@ ipcMain.handle('claude:resize', async (event, instanceId: string, cols: number, 
   return { success: false, error: `No Claude PTY running for instance ${instanceId}` };
 });
 
+// Get home directory
+ipcMain.handle('getHomeDir', () => {
+  return homedir();
+});
+
 // File System operations
 ipcMain.handle('fs:readFile', async (event, filePath: string) => {
   const fs = await import('fs/promises');
