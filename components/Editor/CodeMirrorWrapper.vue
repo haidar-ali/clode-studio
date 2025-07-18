@@ -1,5 +1,8 @@
 <template>
   <div class="codemirror-wrapper">
+    <!-- Knowledge Metadata Bar (only for knowledge files) -->
+    <KnowledgeMetadataBar v-if="activeTab" />
+    
     <div
       v-if="activeTab"
       ref="editorContainer"
@@ -21,6 +24,7 @@ import { keymap } from '@codemirror/view';
 import { search } from '@codemirror/search';
 import { useEditorStore } from '~/stores/editor';
 import { useCodeMirrorLanguages } from '~/composables/useCodeMirrorLanguages';
+import KnowledgeMetadataBar from '~/components/Knowledge/KnowledgeMetadataBar.vue';
 
 const editorStore = useEditorStore();
 const { getLanguageSupport, getLanguageName } = useCodeMirrorLanguages();

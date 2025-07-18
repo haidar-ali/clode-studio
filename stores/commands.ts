@@ -222,6 +222,50 @@ export const useCommandsStore = defineStore('commands', {
         icon: 'mdi:bookmark-plus'
       });
 
+      // Knowledge Commands
+      this.registerCommand({
+        name: 'knowledge',
+        description: 'Search knowledge base',
+        category: 'knowledge',
+        aliases: ['kb', 'know'],
+        parameters: [{
+          name: 'query',
+          description: 'Search query',
+          required: false,
+          type: 'string'
+        }],
+        handler: async (args) => {
+          if (args.length > 0) {
+            const query = args.join(' ');
+            // Emit event with search query
+            window.dispatchEvent(new CustomEvent('knowledge-search', { detail: { query } }));
+          }
+          // Show knowledge panel
+          window.dispatchEvent(new CustomEvent('show-knowledge-panel'));
+        },
+        icon: 'mdi:book-open-variant'
+      });
+
+      this.registerCommand({
+        name: 'knowledge-add',
+        description: 'Add new knowledge entry',
+        category: 'knowledge',
+        aliases: ['kb-add'],
+        parameters: [{
+          name: 'title',
+          description: 'Entry title',
+          required: true,
+          type: 'string'
+        }],
+        handler: async (args) => {
+          if (args.length > 0) {
+            const title = args.join(' ');
+            window.dispatchEvent(new CustomEvent('knowledge-create', { detail: { title } }));
+          }
+        },
+        icon: 'mdi:book-plus'
+      });
+
       // Claude Commands
       this.registerCommand({
         name: 'claude',

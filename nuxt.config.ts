@@ -1,4 +1,6 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
+import { nodePolyfills } from 'vite-plugin-node-polyfills'
+
 export default defineNuxtConfig({
   compatibilityDate: '2025-05-15',
   devtools: { enabled: true },
@@ -32,6 +34,16 @@ export default defineNuxtConfig({
       fs: {
         allow: ['..']
       }
-    }
+    },
+    plugins: [
+      nodePolyfills({
+        // Whether to polyfill specific globals.
+        globals: {
+          Buffer: true,
+          global: true,
+          process: true
+        }
+      })
+    ]
   }
 })

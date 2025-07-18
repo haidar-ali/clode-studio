@@ -83,12 +83,19 @@
                 Context
                 <span v-if="contextFilesCount > 0" class="context-badge">{{ contextFilesCount }}</span>
               </button>
+              <button
+                :class="{ active: bottomTab === 'knowledge' }"
+                @click="bottomTab = 'knowledge'"
+              >
+                Knowledge
+              </button>
             </div>
             <div class="tab-content">
               <KanbanBoard v-if="bottomTab === 'tasks'" />
               <Terminal v-else-if="bottomTab === 'terminal'" :project-path="projectPath" />
               <MCPManager v-else-if="bottomTab === 'mcp'" />
-              <ContextPanel v-else />
+              <ContextPanel v-else-if="bottomTab === 'context'" />
+              <KnowledgePanel v-else />
             </div>
           </div>
         </Pane>
@@ -156,12 +163,19 @@
                 Context
                 <span v-if="contextFilesCount > 0" class="context-badge">{{ contextFilesCount }}</span>
               </button>
+              <button
+                :class="{ active: bottomTab === 'knowledge' }"
+                @click="bottomTab = 'knowledge'"
+              >
+                Knowledge
+              </button>
             </div>
             <div class="tab-content">
               <KanbanBoard v-if="bottomTab === 'tasks'" />
               <Terminal v-else-if="bottomTab === 'terminal'" :project-path="projectPath" />
               <MCPManager v-else-if="bottomTab === 'mcp'" />
-              <ContextPanel v-else />
+              <ContextPanel v-else-if="bottomTab === 'context'" />
+              <KnowledgePanel v-else />
             </div>
           </div>
         </Pane>
@@ -212,12 +226,19 @@
                 Context
                 <span v-if="contextFilesCount > 0" class="context-badge">{{ contextFilesCount }}</span>
               </button>
+              <button
+                :class="{ active: bottomTab === 'knowledge' }"
+                @click="bottomTab = 'knowledge'"
+              >
+                Knowledge
+              </button>
             </div>
             <div class="tab-content">
               <KanbanBoard v-if="bottomTab === 'tasks'" />
               <Terminal v-else-if="bottomTab === 'terminal'" :project-path="projectPath" />
               <MCPManager v-else-if="bottomTab === 'mcp'" />
-              <ContextPanel v-else />
+              <ContextPanel v-else-if="bottomTab === 'context'" />
+              <KnowledgePanel v-else />
             </div>
           </div>
         </Pane>
@@ -276,6 +297,7 @@ import ContextStatusModal from '~/components/Context/ContextStatusModal.vue';
 import SessionBrowserModal from '~/components/Sessions/SessionBrowserModal.vue';
 import HookManagerModal from '~/components/Hooks/HookManagerModal.vue';
 import SettingsModal from '~/components/Settings/SettingsModal.vue';
+import KnowledgePanel from '~/components/Knowledge/KnowledgePanel.vue';
 
 const editorStore = useEditorStore();
 const tasksStore = useTasksStore();
@@ -283,7 +305,7 @@ const layoutStore = useLayoutStore();
 const mcpStore = useMCPStore();
 const contextManager = useContextManager();
 const commandsStore = useCommandsStore();
-const bottomTab = ref<'tasks' | 'terminal' | 'mcp' | 'context'>('tasks');
+const bottomTab = ref<'tasks' | 'terminal' | 'mcp' | 'context' | 'knowledge'>('tasks');
 const showGlobalSearch = ref(false);
 
 const activeTab = computed(() => editorStore.activeTab);
@@ -322,6 +344,13 @@ const handleOpenGlobalSearch = () => {
   showGlobalSearch.value = true;
 };
 
+// Handle bottom tab switching
+const handleSwitchBottomTab = (event: CustomEvent) => {
+  if (event.detail?.tab) {
+    bottomTab.value = event.detail.tab;
+  }
+};
+
 // Initialize context when workspace changes
 let contextInitialized = false;
 watch(projectPath, async (newPath) => {
@@ -352,6 +381,7 @@ onMounted(async () => {
   
   document.addEventListener('keydown', handleKeydown);
   window.addEventListener('open-global-search', handleOpenGlobalSearch);
+  window.addEventListener('switch-bottom-tab', handleSwitchBottomTab as EventListener);
   
   // Listen for command-triggered events
   window.addEventListener('show-tasks-panel', () => {
@@ -360,6 +390,10 @@ onMounted(async () => {
   
   window.addEventListener('show-mcp-panel', () => {
     bottomTab.value = 'mcp';
+  });
+  
+  window.addEventListener('show-knowledge-panel', () => {
+    bottomTab.value = 'knowledge';
   });
   
   window.addEventListener('show-context-modal', () => {
@@ -385,6 +419,7 @@ onMounted(async () => {
 onUnmounted(() => {
   document.removeEventListener('keydown', handleKeydown);
   window.removeEventListener('open-global-search', handleOpenGlobalSearch);
+  window.removeEventListener('switch-bottom-tab', handleSwitchBottomTab as EventListener);
 });
 </script>
 

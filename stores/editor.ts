@@ -148,6 +148,7 @@ export const useEditorStore = defineStore('editor', {
         yml: 'yaml',
         xml: 'xml',
         md: 'markdown',
+        markdown: 'markdown',
         sh: 'shell',
         bash: 'shell'
       };
