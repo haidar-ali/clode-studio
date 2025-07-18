@@ -21,14 +21,6 @@ interface ClaudeSettings {
     Stop?: HookMatcher[];
     SubagentStop?: HookMatcher[];
   };
-  // Store our hook format with IDs for the IDE
-  ideHooks?: Array<{
-    id: string;
-    event: string;
-    matcher: string;
-    command: string;
-    disabled?: boolean;
-  }>;
   [key: string]: any;
 }
 
@@ -146,9 +138,50 @@ export class ClaudeSettingsManager {
   }
   
   async getHooks() {
+    // Load hooks from our separate IDE file
+    const ideHooks = await this.loadIDEHooks();
+    if (ideHooks.length > 0) {
+      return ideHooks;
+    }
+    
+    // Otherwise convert from Claude format
     const settings = await this.loadSettings();
-    // Return our ideHooks format if it exists, otherwise convert from Claude format
-    return settings.ideHooks || this.convertFromClaudeFormat(settings.hooks);
+    return this.convertFromClaudeFormat(settings.hooks);
+  }
+  
+  private async loadIDEHooks(): Promise<Array<{
+    id: string;
+    event: string;
+    matcher: string;
+    command: string;
+    disabled?: boolean;
+  }>> {
+    try {
+      const ideHooksPath = join(homedir(), '.claude', 'ide-hooks.json');
+      if (existsSync(ideHooksPath)) {
+        const content = await readFile(ideHooksPath, 'utf-8');
+        return JSON.parse(content);
+      }
+    } catch (error) {
+      console.error('Failed to load IDE hooks:', error);
+    }
+    return [];
+  }
+  
+  private async saveIDEHooks(hooks: Array<{
+    id: string;
+    event: string;
+    matcher: string;
+    command: string;
+    disabled?: boolean;
+  }>): Promise<void> {
+    try {
+      const ideHooksPath = join(homedir(), '.claude', 'ide-hooks.json');
+      await this.ensureClaudeDir();
+      await writeFile(ideHooksPath, JSON.stringify(hooks, null, 2), 'utf-8');
+    } catch (error) {
+      console.error('Failed to save IDE hooks:', error);
+    }
   }
   
   async saveHooks(hooks: Array<{
@@ -159,12 +192,19 @@ export class ClaudeSettingsManager {
     disabled?: boolean;
   }>) {
     console.log('saveHooks called with:', hooks);
+    
+    // Save IDE hooks separately
+    await this.saveIDEHooks(hooks);
+    
+    // Save Claude format (without ideHooks field)
     const settings = await this.loadSettings();
     const convertedHooks = this.convertToClaudeFormat(hooks);
     console.log('Converted hooks to Claude format:', JSON.stringify(convertedHooks, null, 2));
+    
+    // Remove ideHooks if it exists from old version
+    delete settings.ideHooks;
+    
     settings.hooks = convertedHooks;
-    // Also save our format with IDs for the IDE
-    settings.ideHooks = hooks;
     console.log('Final settings to save:', JSON.stringify(settings, null, 2));
     await this.saveSettings(settings);
   }
@@ -175,7 +215,7 @@ export class ClaudeSettingsManager {
     matcher: string;
     command: string;
   }): string {
-    // Wrap the command to capture output
+    // Return a command that sets up environment variables and runs the hook
     return `
 echo "🧪 Testing hook: ${hook.event} (${hook.matcher || 'all tools'})"
 echo "📝 Command: ${hook.command}"
@@ -187,6 +227,8 @@ export FILE_PATH="/test/example.ts"
 export COMMAND="echo 'test command'"
 export TOOL_NAME="${hook.matcher || 'TestTool'}"
 export NOTIFICATION_TYPE="test"
+export CLAUDE_INSTANCE_NAME="Test Instance"
+export CLAUDE_INSTANCE_ID="test-123"
 
 # Execute the command
 ${hook.command}

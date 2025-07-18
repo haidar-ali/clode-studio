@@ -48,7 +48,12 @@ export const useMCPStore = defineStore('mcp', {
         this.error = null;
 
         // Use claude mcp list to get all configured servers
-        const result = await window.electronAPI.mcp.list();
+        // Get current workspace path from editor store
+        const { useEditorStore } = await import('~/stores/editor');
+        const editorStore = useEditorStore();
+        const workspacePath = editorStore.workspacePath;
+        
+        const result = await window.electronAPI.mcp.list(workspacePath);
         if (result.success && result.servers) {
           this.servers = result.servers.map((server: any) => ({
             name: server.name,

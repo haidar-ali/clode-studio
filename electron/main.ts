@@ -4,13 +4,15 @@ import { dirname, join } from 'path';
 import { spawn, ChildProcess } from 'child_process';
 import Store from 'electron-store';
 import * as pty from 'node-pty';
-import { watch, FSWatcher } from 'fs';
+import { watch, FSWatcher, existsSync } from 'fs';
 import { readFile, mkdir } from 'fs/promises';
+import { homedir } from 'os';
 import { claudeCodeService } from './claude-sdk-service.js';
 import { lightweightContext } from './lightweight-context.js';
 import { contextOptimizer } from './context-optimizer.js';
 import { workspacePersistence } from './workspace-persistence.js';
 import { claudeSettingsManager } from './claude-settings-manager.js';
+import { ClaudeDetector } from './claude-detector.js';
 
 // Load environment variables from .env file
 import { config } from 'dotenv';
@@ -20,7 +22,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 let mainWindow: BrowserWindow | null = null;
-const store = new Store();
+const store = new Store<Record<string, any>>();
 const fileWatchers: Map<string, FSWatcher> = new Map();
 const fileDebounceTimers: Map<string, NodeJS.Timeout> = new Map();
 
@@ -87,7 +89,7 @@ app.on('window-all-closed', () => {
 });
 
 // Claude Process Management using PTY with multi-instance support
-ipcMain.handle('claude:start', async (event, instanceId: string, workingDirectory: string) => {
+ipcMain.handle('claude:start', async (event, instanceId: string, workingDirectory: string, instanceName?: string) => {
   if (claudeInstances.has(instanceId)) {
     return { success: false, error: 'Claude instance already running' };
   }
@@ -95,31 +97,55 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
   try {
     console.log(`=== STARTING CLAUDE CLI WITH PTY FOR INSTANCE ${instanceId} ===`);
     console.log('Working directory:', workingDirectory);
-    // Get Node.js bin path from environment or use system PATH
-    const nodeBinPath = process.env.NODE_BIN_PATH || '';
-    const claudeCommand = process.env.CLAUDE_CLI_PATH || 'claude';
-    const enhancedPath = nodeBinPath ? `${nodeBinPath}:${process.env.PATH}` : process.env.PATH;
     
-    console.log('Enhanced PATH:', enhancedPath);
-    console.log('Claude command:', claudeCommand);
+    // Detect Claude installation
+    const claudeInfo = await ClaudeDetector.detectClaude(workingDirectory);
+    console.log('Claude detected:', claudeInfo);
     
-    // Create a pseudo-terminal for this Claude instance
-    const claudePty = pty.spawn(claudeCommand, [], {
+    // Get the command configuration
+    const debugArgs = process.env.CLAUDE_DEBUG === 'true' ? ['--debug'] : [];
+    const { command, args: commandArgs, useShell } = ClaudeDetector.getClaudeCommand(claudeInfo, debugArgs);
+    
+    console.log('Command:', command);
+    console.log('Args:', commandArgs);
+    console.log('Use shell:', useShell);
+    
+    // Log settings file to verify it exists
+    const settingsPath = join(homedir(), '.claude', 'settings.json');
+    if (existsSync(settingsPath)) {
+      console.log(`Claude settings file found at: ${settingsPath}`);
+    } else {
+      console.warn('Claude settings file not found!');
+    }
+    
+    // Get the user's default shell
+    const userShell = process.env.SHELL || '/bin/bash';
+    
+    const claudePty = pty.spawn(command, commandArgs, {
       name: 'xterm-color',
       cols: 80,
       rows: 30,
       cwd: workingDirectory,
       env: {
         ...process.env,
-        PATH: enhancedPath,
         FORCE_COLOR: '1',
-        TERM: 'xterm-256color'
+        TERM: 'xterm-256color',
+        HOME: process.env.HOME, // Ensure HOME is set so Claude can find ~/.claude/settings.json
+        USER: process.env.USER, // Ensure USER is set
+        SHELL: userShell, // Ensure SHELL is set
+        // Add instance-specific environment variables for hooks
+        CLAUDE_INSTANCE_ID: instanceId,
+        CLAUDE_INSTANCE_NAME: instanceName || `Claude-${instanceId.slice(7, 15)}`, // Use provided name or short ID
+        CLAUDE_IDE_INSTANCE: 'true'
       }
     });
 
     console.log(`=== CLAUDE PTY SPAWNED FOR ${instanceId} ===`);
     console.log('PID:', claudePty.pid);
     console.log('Process:', claudePty.process);
+    console.log('Claude Path:', claudeInfo.path);
+    console.log('Claude Source:', claudeInfo.source);
+    console.log('Instance Name:', instanceName || `Claude-${instanceId.slice(7, 15)}`);
 
     // Store this instance
     claudeInstances.set(instanceId, claudePty);
@@ -147,7 +173,15 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
       }
     }, 1000);
 
-    return { success: true, pid: claudePty.pid };
+    return { 
+      success: true, 
+      pid: claudePty.pid,
+      claudeInfo: {
+        path: claudeInfo.path,
+        version: claudeInfo.version,
+        source: claudeInfo.source
+      }
+    };
   } catch (error) {
     console.error(`Failed to start Claude for ${instanceId}:`, error);
     return { success: false, error: error instanceof Error ? error.message : String(error) };
@@ -416,6 +450,12 @@ ipcMain.handle('claude:deleteHook', async (event, hookId: string) => {
     console.error('Error in claude:deleteHook:', error);
     return { success: false, error: error instanceof Error ? error.message : String(error) };
   }
+});
+
+// Clear Claude detector cache (useful if installation changes)
+ipcMain.handle('claude:clearCache', async () => {
+  ClaudeDetector.clearCache();
+  return { success: true };
 });
 
 // Test a hook
@@ -965,14 +1005,25 @@ app.on('before-quit', () => {
 });
 
 // MCP (Model Context Protocol) Management - Using Claude CLI
-ipcMain.handle('mcp:list', async () => {
+ipcMain.handle('mcp:list', async (event, workspacePath?: string) => {
   const { exec } = await import('child_process');
   const { promisify } = await import('util');
   const execAsync = promisify(exec);
   
   try {
-    const { stdout } = await execAsync('claude mcp list', {
-      cwd: process.cwd(),
+    // Get workspace path from store if not provided
+    if (!workspacePath) {
+      workspacePath = (store as any).get('workspacePath') || process.cwd();
+    }
+    
+    console.log('Listing MCP servers for workspace:', workspacePath);
+    
+    // Detect Claude to use the correct binary
+    const claudeInfo = await ClaudeDetector.detectClaude(workspacePath);
+    const claudeCommand = claudeInfo.path;
+    
+    const { stdout } = await execAsync(`${claudeCommand} mcp list`, {
+      cwd: workspacePath,
       env: process.env
     });
     

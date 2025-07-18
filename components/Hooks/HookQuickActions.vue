@@ -126,13 +126,22 @@ const hookTemplates: HookTemplate[] = [
     command: 'if [[ "$FILE_PATH" == *.env* ]]; then echo "BLOCKED: Cannot edit .env files" >&2; exit 1; fi'
   },
   {
-    id: 'notify',
-    name: 'Desktop Notifications',
-    description: 'Get notified when Claude needs input',
-    icon: 'mdi:bell',
+    id: 'notify-finished',
+    name: 'Claude Finished (Instance Aware)',
+    description: 'Get notified when Claude finishes, showing which terminal',
+    icon: 'mdi:bell-check',
+    event: 'Stop',
+    matcher: '',
+    command: `osascript -e 'display notification "'"\${CLAUDE_INSTANCE_NAME:-Claude}"' finished responding" with title "Claude Code - Response Complete"' || echo "Claude finished responding"`
+  },
+  {
+    id: 'notify-input-needed',
+    name: 'Claude Needs Input (Instance Aware)',
+    description: 'Get notified when Claude needs input, showing which terminal',
+    icon: 'mdi:bell-alert',
     event: 'Notification',
     matcher: '',
-    command: `osascript -e 'display notification "Notification from Claude Code" with title "Claude Code"' 2>/dev/null || notify-send "Claude Code" "Notification from Claude" 2>/dev/null || echo "Claude notification triggered"`
+    command: `osascript -e 'display notification "'"\${CLAUDE_INSTANCE_NAME:-Claude}"' needs your input" with title "Claude Code - Input Required"' || echo "Claude needs input"`
   },
   {
     id: 'log-commands',

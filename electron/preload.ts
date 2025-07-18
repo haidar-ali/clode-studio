@@ -2,8 +2,17 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 const electronAPI = {
   claude: {
-    start: (instanceId: string, workingDirectory: string) => 
-      ipcRenderer.invoke('claude:start', instanceId, workingDirectory),
+    start: (instanceId: string, workingDirectory: string, instanceName?: string): Promise<{
+      success: boolean;
+      error?: string;
+      pid?: number;
+      claudeInfo?: {
+        path: string;
+        version: string;
+        source: string;
+      };
+    }> => 
+      ipcRenderer.invoke('claude:start', instanceId, workingDirectory, instanceName),
     send: (instanceId: string, command: string) => 
       ipcRenderer.invoke('claude:send', instanceId, command),
     stop: (instanceId: string) => 
@@ -142,7 +151,7 @@ const electronAPI = {
     }
   },
   mcp: {
-    list: () => ipcRenderer.invoke('mcp:list'),
+    list: (workspacePath?: string) => ipcRenderer.invoke('mcp:list', workspacePath),
     add: (config: {
       name: string;
       type: 'stdio' | 'sse' | 'http';

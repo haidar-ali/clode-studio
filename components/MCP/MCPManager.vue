@@ -2,6 +2,10 @@
   <div class="mcp-manager">
     <div class="mcp-header">
       <h3>MCP Connections</h3>
+      <div v-if="workspacePath" class="workspace-info">
+        <Icon name="mdi:folder-open" size="14" />
+        <span>{{ workspaceName }}</span>
+      </div>
       <div class="header-actions">
         <button @click="showAddModal = true" class="primary-button">
           <Icon name="mdi:plus" size="16" />
@@ -190,8 +194,17 @@
 import { ref, computed, onMounted } from 'vue';
 import { useMCPStore } from '~/stores/mcp';
 import type { MCPServerConfig } from '~/stores/mcp';
+import { useEditorStore } from '~/stores/editor';
 
 const mcpStore = useMCPStore();
+const editorStore = useEditorStore();
+
+// Computed workspace info
+const workspacePath = computed(() => editorStore.workspacePath);
+const workspaceName = computed(() => {
+  if (!workspacePath.value) return '';
+  return workspacePath.value.split('/').pop() || workspacePath.value;
+});
 
 const showAddModal = ref(false);
 const isRefreshing = ref(false);
@@ -336,6 +349,27 @@ onMounted(async () => {
   align-items: center;
   padding: 16px;
   border-bottom: 1px solid #2d2d30;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.workspace-info {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #858585;
+  background: #252526;
+  padding: 4px 8px;
+  border-radius: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.workspace-info span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .mcp-header h3 {

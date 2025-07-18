@@ -328,12 +328,22 @@ const startClaude = async () => {
   
   emit('status-change', 'connecting');
   
-  const result = await window.electronAPI.claude.start(props.instance.id, props.instance.workingDirectory);
+  const result = await window.electronAPI.claude.start(
+    props.instance.id, 
+    props.instance.workingDirectory,
+    props.instance.name // Pass the instance name for hooks
+  );
   
   if (result.success) {
     emit('status-change', 'connected', result.pid);
     terminal.writeln('Claude CLI started successfully!');
+    if (result.claudeInfo) {
+      terminal.writeln(`\x1b[90mUsing: ${result.claudeInfo.path} (${result.claudeInfo.source})\x1b[0m`);
+      terminal.writeln(`\x1b[90mVersion: ${result.claudeInfo.version}\x1b[0m`);
+    }
     terminal.writeln('You can now type commands or chat with Claude.');
+    terminal.writeln('');
+    terminal.writeln(`\x1b[90mInstance: ${props.instance.name} (ID: ${props.instance.id.slice(0, 8)})\x1b[0m`);
     terminal.writeln('');
     autoScrollIfNeeded();
     

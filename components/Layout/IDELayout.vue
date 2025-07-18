@@ -97,26 +97,72 @@
 
     <!-- Kanban + Claude Mode -->
     <div v-else-if="layoutStore.isKanbanClaudeMode" class="layout-kanban-claude">
-      <Splitpanes class="default-theme">
-        <!-- Left Panel: Kanban Board -->
-        <Pane :size="layoutStore.kanbanClaudeSplit" :min-size="60" :max-size="85">
-          <div class="panel kanban-panel">
-            <div class="panel-header">
-              <h3>Task Management</h3>
-            </div>
-            <KanbanBoard />
-          </div>
-        </Pane>
+      <Splitpanes horizontal class="default-theme">
+        <!-- Top Section: Kanban and Claude -->
+        <Pane :size="60" :min-size="40" :max-size="80">
+          <Splitpanes>
+            <!-- Left Panel: Kanban Board -->
+            <Pane :size="layoutStore.kanbanClaudeSplit" :min-size="60" :max-size="85">
+              <div class="panel kanban-panel">
+                <div class="panel-header">
+                  <h3>Task Management</h3>
+                </div>
+                <KanbanBoard />
+              </div>
+            </Pane>
 
-        <!-- Right Panel: Claude Terminal -->
-        <Pane :size="100 - layoutStore.kanbanClaudeSplit" :min-size="15" :max-size="40">
-          <div class="panel terminal-panel">
-            <ClientOnly>
-              <ClaudeTerminalTabs />
-              <template #fallback>
-                <div class="loading-terminal">Loading Claude terminals...</div>
-              </template>
-            </ClientOnly>
+            <!-- Right Panel: Claude Terminal -->
+            <Pane :size="100 - layoutStore.kanbanClaudeSplit" :min-size="15" :max-size="40">
+              <div class="panel terminal-panel">
+                <ClientOnly>
+                  <ClaudeTerminalTabs />
+                  <template #fallback>
+                    <div class="loading-terminal">Loading Claude terminals...</div>
+                  </template>
+                </ClientOnly>
+              </div>
+            </Pane>
+          </Splitpanes>
+        </Pane>
+        
+        <!-- Bottom Section: Full-width Tasks/Terminal -->
+        <Pane :size="40" :min-size="20" :max-size="60">
+          <div class="panel bottom-panel">
+            <div class="tabs">
+              <button
+                :class="{ active: bottomTab === 'tasks' }"
+                @click="bottomTab = 'tasks'"
+              >
+                Tasks
+                <span v-if="taskCount.todo > 0" class="task-badge">{{ taskCount.todo }}</span>
+              </button>
+              <button
+                :class="{ active: bottomTab === 'terminal' }"
+                @click="bottomTab = 'terminal'"
+              >
+                Terminal
+              </button>
+              <button
+                :class="{ active: bottomTab === 'mcp' }"
+                @click="bottomTab = 'mcp'"
+              >
+                MCP
+                <span v-if="mcpStore.connectedCount > 0" class="mcp-badge">{{ mcpStore.connectedCount }}</span>
+              </button>
+              <button
+                :class="{ active: bottomTab === 'context' }"
+                @click="bottomTab = 'context'"
+              >
+                Context
+                <span v-if="contextFilesCount > 0" class="context-badge">{{ contextFilesCount }}</span>
+              </button>
+            </div>
+            <div class="tab-content">
+              <KanbanBoard v-if="bottomTab === 'tasks'" />
+              <Terminal v-else-if="bottomTab === 'terminal'" :project-path="projectPath" />
+              <MCPManager v-else-if="bottomTab === 'mcp'" />
+              <ContextPanel v-else />
+            </div>
           </div>
         </Pane>
       </Splitpanes>
@@ -124,12 +170,58 @@
 
     <!-- Kanban Only Mode -->
     <div v-else-if="layoutStore.isKanbanOnlyMode" class="layout-kanban-only">
-      <div class="panel kanban-panel">
-        <div class="panel-header">
-          <h3>Task Management</h3>
-        </div>
-        <KanbanBoard />
-      </div>
+      <Splitpanes horizontal class="default-theme">
+        <!-- Top Section: Kanban Board -->
+        <Pane :size="60" :min-size="40" :max-size="80">
+          <div class="panel kanban-panel">
+            <div class="panel-header">
+              <h3>Task Management</h3>
+            </div>
+            <KanbanBoard />
+          </div>
+        </Pane>
+        
+        <!-- Bottom Section: Full-width Tasks/Terminal -->
+        <Pane :size="40" :min-size="20" :max-size="60">
+          <div class="panel bottom-panel">
+            <div class="tabs">
+              <button
+                :class="{ active: bottomTab === 'tasks' }"
+                @click="bottomTab = 'tasks'"
+              >
+                Tasks
+                <span v-if="taskCount.todo > 0" class="task-badge">{{ taskCount.todo }}</span>
+              </button>
+              <button
+                :class="{ active: bottomTab === 'terminal' }"
+                @click="bottomTab = 'terminal'"
+              >
+                Terminal
+              </button>
+              <button
+                :class="{ active: bottomTab === 'mcp' }"
+                @click="bottomTab = 'mcp'"
+              >
+                MCP
+                <span v-if="mcpStore.connectedCount > 0" class="mcp-badge">{{ mcpStore.connectedCount }}</span>
+              </button>
+              <button
+                :class="{ active: bottomTab === 'context' }"
+                @click="bottomTab = 'context'"
+              >
+                Context
+                <span v-if="contextFilesCount > 0" class="context-badge">{{ contextFilesCount }}</span>
+              </button>
+            </div>
+            <div class="tab-content">
+              <KanbanBoard v-if="bottomTab === 'tasks'" />
+              <Terminal v-else-if="bottomTab === 'terminal'" :project-path="projectPath" />
+              <MCPManager v-else-if="bottomTab === 'mcp'" />
+              <ContextPanel v-else />
+            </div>
+          </div>
+        </Pane>
+      </Splitpanes>
     </div>
 
     <StatusBar />
