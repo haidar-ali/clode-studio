@@ -1,8 +1,10 @@
 import { ref, computed, watch } from 'vue';
 import { useProjectContextStore, type FileInfo, type ProjectInfo } from '~/stores/project-context';
+import { useContextStore } from '~/stores/context';
 
 export function useContextManager() {
   const contextStore = useProjectContextStore();
+  const tokenStore = useContextStore();
   
   // Local state for UI
   const isSearching = ref(false);
@@ -48,11 +50,50 @@ export function useContextManager() {
   };
   
   const buildContextForClaude = async (query: string, maxTokens: number = 2000): Promise<string> => {
+    if (!isReady.value) return '';
+    
     try {
+      // Use optimized context building - clone the array to avoid serialization issues
+      const workingFiles = [...contextStore.workingFiles];
+      const result = await window.electronAPI.context.buildOptimized(
+        query, 
+        workingFiles, 
+        maxTokens
+      );
+      
+      if (result.success) {
+        // Check if we should inject context based on token budget
+        const tokenEstimate = result.tokens || 0;
+        const decision = await window.electronAPI.context.shouldInject(
+          query,
+          tokenStore.currentTokens,
+          tokenEstimate
+        );
+        
+        if (decision.success && decision.decision) {
+          // Record the decision for analytics
+          tokenStore.recordContextDecision({
+            shouldInject: decision.decision.shouldInject,
+            contextTypes: ['project', 'files'],
+            confidenceScore: decision.decision.confidence,
+            tokenBudget: tokenEstimate,
+            reasoning: decision.decision.reasoning
+          }, query);
+          
+          if (decision.decision.shouldInject) {
+            return result.context || '';
+          }
+        }
+        
+        return ''; // Don't inject if not recommended
+      }
+      
+      // Fallback to simple context building
       return await contextStore.buildContext(query, maxTokens);
     } catch (error) {
-      console.error('Failed to build context:', error);
-      return '';
+      console.error('Failed to build optimized context:', error);
+      // Fallback to simple context
+      return await contextStore.buildContext(query, maxTokens);
     }
   };
   

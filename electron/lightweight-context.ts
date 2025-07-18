@@ -1,6 +1,7 @@
 import { readdir, stat, readFile } from 'fs/promises';
 import { join, extname, basename, dirname, relative } from 'path';
 import { existsSync, watch, FSWatcher } from 'fs';
+import { workspacePersistence } from './workspace-persistence.js';
 
 export interface FileInfo {
   path: string;
@@ -97,7 +98,21 @@ export class LightweightContext {
     this.stopWatching();
     
     this.workspacePath = workspacePath;
+    
+    // Try to load persisted context first
+    const persistedData = await workspacePersistence.loadWorkspaceContext(workspacePath);
+    if (persistedData && persistedData.projectInfo) {
+      console.log('Loaded persisted workspace context');
+      this.projectInfo = persistedData.projectInfo;
+      // Still scan to get fresh file data
+    }
+    
     await this.scanWorkspace();
+    
+    // Save the project info for future sessions
+    if (this.projectInfo) {
+      await workspacePersistence.updateProjectInfo(workspacePath, this.projectInfo);
+    }
     
     // Start watching for file changes
     this.startWatching();
@@ -364,7 +379,18 @@ export class LightweightContext {
       context.push(tree);
     }
 
-    return context.join('\n');
+    const contextString = context.join('\n');
+    
+    // Save to history for future reference
+    if (this.workspacePath && query) {
+      await workspacePersistence.addContextHistory(
+        this.workspacePath,
+        query,
+        contextString
+      );
+    }
+
+    return contextString;
   }
 
   private async buildFileTree(): Promise<string> {

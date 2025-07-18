@@ -8,6 +8,8 @@ import { watch, FSWatcher } from 'fs';
 import { readFile, mkdir } from 'fs/promises';
 import { claudeCodeService } from './claude-sdk-service.js';
 import { lightweightContext } from './lightweight-context.js';
+import { contextOptimizer } from './context-optimizer.js';
+import { workspacePersistence } from './workspace-persistence.js';
 
 // Load environment variables from .env file
 import { config } from 'dotenv';
@@ -208,6 +210,16 @@ ipcMain.handle('fs:readFile', async (event, filePath: string) => {
   }
 });
 
+ipcMain.handle('fs:exists', async (event, filePath: string) => {
+  const fs = await import('fs/promises');
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+});
+
 ipcMain.handle('fs:ensureDir', async (event, dirPath: string) => {
   try {
     await mkdir(dirPath, { recursive: true });
@@ -280,6 +292,114 @@ ipcMain.handle('store:set', (event, key: string, value: any) => {
 ipcMain.handle('store:delete', (event, key: string) => {
   (store as any).delete(key);
   return { success: true };
+});
+
+ipcMain.handle('store:getHomePath', () => {
+  return app.getPath('home');
+});
+
+// Session operations
+ipcMain.handle('claude:listSessions', async () => {
+  try {
+    // For now, return mock data. In a real implementation, this would read from session storage
+    return {
+      success: true,
+      sessions: [
+        {
+          id: 'session-1',
+          name: 'Previous Session',
+          timestamp: new Date(Date.now() - 3600000).toISOString(),
+          messageCount: 15,
+          duration: 1800000,
+          preview: 'Working on implementing the context system...'
+        },
+        {
+          id: 'session-2',
+          name: 'Older Session',
+          timestamp: new Date(Date.now() - 86400000).toISOString(),
+          messageCount: 25,
+          duration: 3600000,
+          preview: 'Fixed the memory issue with the knowledge base...'
+        }
+      ]
+    };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('claude:resumeSession', async (event, instanceId: string, sessionId: string) => {
+  try {
+    // For now, just return success. In a real implementation, this would restore the session
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+// Hook operations
+ipcMain.handle('claude:getHooks', async () => {
+  try {
+    // Return the current hooks configuration
+    const hooks = (store as any).get('hooks') || [];
+    return { success: true, hooks };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('claude:addHook', async (event, hook: any) => {
+  try {
+    const hooks = (store as any).get('hooks') || [];
+    const newHook = {
+      ...hook,
+      id: `hook_${Date.now()}`,
+      disabled: hook.disabled !== undefined ? hook.disabled : false
+    };
+    hooks.push(newHook);
+    (store as any).set('hooks', hooks);
+    return { success: true, hook: newHook };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('claude:updateHook', async (event, hookId: string, updates: any) => {
+  try {
+    const hooks = (store as any).get('hooks') || [];
+    const index = hooks.findIndex((h: any) => h.id === hookId);
+    if (index !== -1) {
+      hooks[index] = { ...hooks[index], ...updates };
+      (store as any).set('hooks', hooks);
+      return { success: true };
+    }
+    return { success: false, error: 'Hook not found' };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+// Add removeHook as an alias for deleteHook for compatibility
+ipcMain.handle('claude:removeHook', async (event, hookId: string) => {
+  try {
+    const hooks = (store as any).get('hooks') || [];
+    const filteredHooks = hooks.filter((h: any) => h.id !== hookId);
+    (store as any).set('hooks', filteredHooks);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('claude:deleteHook', async (event, hookId: string) => {
+  try {
+    const hooks = (store as any).get('hooks') || [];
+    const filtered = hooks.filter((h: any) => h.id !== hookId);
+    (store as any).set('hooks', filtered);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
 });
 
 // Open external links
@@ -1138,5 +1258,175 @@ ipcMain.handle('context:stopWatching', async (event) => {
 lightweightContext.onFileChange((event, filePath) => {
   if (mainWindow) {
     mainWindow.webContents.send('context:file-changed', { event, filePath });
+  }
+});
+
+// Context optimization handlers
+ipcMain.handle('context:analyzeUsage', async (event, messages: any[], currentContext: string) => {
+  try {
+    const analysis = contextOptimizer.analyzeContextUsage(messages, currentContext);
+    return { success: true, analysis };
+  } catch (error) {
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to analyze context usage' 
+    };
+  }
+});
+
+ipcMain.handle('context:buildOptimized', async (event, query: string, workingFiles: string[], maxTokens: number) => {
+  try {
+    const result = await contextOptimizer.buildOptimizedContext(query, workingFiles, maxTokens);
+    return { success: true, ...result };
+  } catch (error) {
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to build optimized context' 
+    };
+  }
+});
+
+ipcMain.handle('context:optimize', async (event, content: string, strategy: any) => {
+  try {
+    const result = contextOptimizer.optimizeContext(content, strategy);
+    return { success: true, result };
+  } catch (error) {
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to optimize context' 
+    };
+  }
+});
+
+ipcMain.handle('context:getRecommendations', async (event, usage: any) => {
+  try {
+    const recommendations = contextOptimizer.getOptimizationRecommendations(usage);
+    return { success: true, recommendations };
+  } catch (error) {
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to get recommendations' 
+    };
+  }
+});
+
+ipcMain.handle('context:shouldInject', async (event, query: string, availableTokens: number, contextSize: number) => {
+  try {
+    const decision = contextOptimizer.shouldInjectContext(query, availableTokens, contextSize);
+    return { success: true, decision };
+  } catch (error) {
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to evaluate context injection' 
+    };
+  }
+});
+
+// Workspace persistence handlers
+ipcMain.handle('workspace:loadContext', async (event, workspacePath: string) => {
+  try {
+    const data = await workspacePersistence.loadWorkspaceContext(workspacePath);
+    return { success: true, data };
+  } catch (error) {
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to load workspace context' 
+    };
+  }
+});
+
+ipcMain.handle('workspace:saveContext', async (event, data: any) => {
+  try {
+    await workspacePersistence.saveWorkspaceContext(data);
+    return { success: true };
+  } catch (error) {
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to save workspace context' 
+    };
+  }
+});
+
+ipcMain.handle('workspace:updateOptimizationTime', async (event, workspacePath: string, lastOptimization: string) => {
+  try {
+    await workspacePersistence.updateOptimizationTime(workspacePath, lastOptimization);
+    return { success: true };
+  } catch (error) {
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to update optimization time' 
+    };
+  }
+});
+
+ipcMain.handle('workspace:updateWorkingFiles', async (event, workspacePath: string, workingFiles: string[]) => {
+  try {
+    await workspacePersistence.updateWorkingFiles(workspacePath, workingFiles);
+    return { success: true };
+  } catch (error) {
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to update working files' 
+    };
+  }
+});
+
+ipcMain.handle('workspace:saveCheckpoint', async (event, workspacePath: string, checkpoint: any) => {
+  try {
+    await workspacePersistence.saveCheckpoint(workspacePath, checkpoint);
+    return { success: true };
+  } catch (error) {
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to save checkpoint' 
+    };
+  }
+});
+
+ipcMain.handle('workspace:removeCheckpoint', async (event, workspacePath: string, checkpointId: string) => {
+  try {
+    await workspacePersistence.removeCheckpoint(workspacePath, checkpointId);
+    return { success: true };
+  } catch (error) {
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to remove checkpoint' 
+    };
+  }
+});
+
+ipcMain.handle('workspace:getRecentHistory', async (event, workspacePath: string, limit: number) => {
+  try {
+    const history = await workspacePersistence.getRecentContextHistory(workspacePath, limit);
+    return { success: true, history };
+  } catch (error) {
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to get recent history' 
+    };
+  }
+});
+
+ipcMain.handle('workspace:exportContext', async (event, workspacePath: string) => {
+  try {
+    const jsonData = await workspacePersistence.exportWorkspaceContext(workspacePath);
+    return { success: true, data: jsonData };
+  } catch (error) {
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to export workspace context' 
+    };
+  }
+});
+
+ipcMain.handle('workspace:importContext', async (event, workspacePath: string, jsonData: string) => {
+  try {
+    await workspacePersistence.importWorkspaceContext(workspacePath, jsonData);
+    return { success: true };
+  } catch (error) {
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to import workspace context' 
+    };
   }
 });

@@ -1,7 +1,5 @@
 import { defineStore } from 'pinia';
 import type { ChatMessage } from '~/shared/types';
-import { useContextStore } from './context';
-import { useTokenCounter } from '~/composables/useTokenCounter';
 
 export const useChatStore = defineStore('chat', {
   state: () => ({
@@ -94,107 +92,57 @@ export const useChatStore = defineStore('chat', {
     },
 
     addUserMessage(content: string) {
-      const contextStore = useContextStore();
-      const { countMessageTokens } = useTokenCounter();
-      
-      const tokens = countMessageTokens(content);
       const message: ChatMessage = {
         id: `msg-${Date.now()}`,
         role: 'user',
         content,
-        timestamp: new Date(),
-        tokens
+        timestamp: new Date()
       };
       
       this.messages.push(message);
-      contextStore.addTokens(tokens, 'chat');
     },
 
     addAssistantMessage(content: string) {
-      const contextStore = useContextStore();
-      const { countMessageTokens } = useTokenCounter();
-      
-      const tokens = countMessageTokens(content);
       const message: ChatMessage = {
         id: `msg-${Date.now()}`,
         role: 'assistant',
         content,
-        timestamp: new Date(),
-        tokens
+        timestamp: new Date()
       };
       
       this.messages.push(message);
-      contextStore.addTokens(tokens, 'chat');
     },
 
     addSystemMessage(content: string, error = false) {
-      const contextStore = useContextStore();
-      const { countMessageTokens } = useTokenCounter();
-      
-      const tokens = countMessageTokens(content);
       const message: ChatMessage = {
         id: `msg-${Date.now()}`,
         role: 'system',
         content,
         timestamp: new Date(),
-        error,
-        tokens
+        error
       };
       
       this.messages.push(message);
-      contextStore.addTokens(tokens, 'system');
     },
 
     appendToLastAssistantMessage(content: string) {
       const lastMessage = this.messages[this.messages.length - 1];
       
       if (lastMessage && lastMessage.role === 'assistant') {
-        const contextStore = useContextStore();
-        const { countMessageTokens } = useTokenCounter();
-        
-        // Remove old token count
-        if (lastMessage.tokens) {
-          contextStore.removeTokens(lastMessage.tokens, 'chat');
-        }
-        
-        // Update content and recalculate tokens
         lastMessage.content += content;
-        lastMessage.tokens = countMessageTokens(lastMessage.content);
-        
-        // Add new token count
-        contextStore.addTokens(lastMessage.tokens, 'chat');
       } else {
         this.addAssistantMessage(content);
       }
     },
 
     clearMessages() {
-      const contextStore = useContextStore();
-      
-      // Calculate total tokens to remove
-      const totalTokens = this.messages.reduce((sum, msg) => sum + (msg.tokens || 0), 0);
-      
-      // Remove tokens from context tracking
-      if (totalTokens > 0) {
-        contextStore.removeTokens(totalTokens, 'chat');
-      }
-      
       this.messages = [];
     },
     
     pruneOldMessages(keepCount: number = 20) {
-      const contextStore = useContextStore();
-      
       if (this.messages.length <= keepCount) return;
       
-      // Calculate tokens to remove from pruned messages
       const messagesToRemove = this.messages.slice(0, -keepCount);
-      const tokensToRemove = messagesToRemove.reduce((sum, msg) => sum + (msg.tokens || 0), 0);
-      
-      // Remove tokens from context
-      if (tokensToRemove > 0) {
-        contextStore.removeTokens(tokensToRemove, 'chat');
-      }
       
       // Keep only the most recent messages
       this.messages = this.messages.slice(-keepCount);

@@ -140,6 +140,29 @@
       :is-open="showGlobalSearch" 
       @close="showGlobalSearch = false" 
     />
+    
+    
+    <!-- Command Palette -->
+    <CommandPalette 
+      :is-open="commandsStore.isCommandPaletteOpen"
+      @close="commandsStore.closeCommandPalette()"
+    />
+    
+    <!-- Memory Editor Modal -->
+    <MemoryEditorModal />
+    
+    <!-- Context Status Modal -->
+    <ContextStatusModal />
+    
+    <!-- Session Browser Modal -->
+    <SessionBrowserModal />
+    
+    <!-- Hook Manager Modal -->
+    <HookManagerModal />
+    
+    <!-- Settings Modal -->
+    <SettingsModal />
+    
   </div>
 </template>
 
@@ -154,12 +177,20 @@ import { useMCPStore } from '~/stores/mcp';
 import { useFileWatcher } from '~/composables/useFileWatcher';
 import { useTasksFileWatcher } from '~/composables/useTasksFileWatcher';
 import { useContextManager } from '~/composables/useContextManager';
+import { useCommandsStore } from '~/stores/commands';
+import CommandPalette from '~/components/Commands/CommandPalette.vue';
+import MemoryEditorModal from '~/components/Memory/MemoryEditorModal.vue';
+import ContextStatusModal from '~/components/Context/ContextStatusModal.vue';
+import SessionBrowserModal from '~/components/Sessions/SessionBrowserModal.vue';
+import HookManagerModal from '~/components/Hooks/HookManagerModal.vue';
+import SettingsModal from '~/components/Settings/SettingsModal.vue';
 
 const editorStore = useEditorStore();
 const tasksStore = useTasksStore();
 const layoutStore = useLayoutStore();
 const mcpStore = useMCPStore();
 const contextManager = useContextManager();
+const commandsStore = useCommandsStore();
 const bottomTab = ref<'tasks' | 'terminal' | 'mcp' | 'context'>('tasks');
 const showGlobalSearch = ref(false);
 
@@ -183,8 +214,14 @@ const handleKeydown = (event: KeyboardEvent) => {
   if ((event.ctrlKey || event.metaKey) && event.shiftKey && (event.key === 'F' || event.key === 'f')) {
     event.preventDefault();
     event.stopPropagation();
-    console.log('Opening global search...');
     showGlobalSearch.value = true;
+  }
+  
+  // Ctrl/Cmd + K for command palette (handle here as backup)
+  if ((event.ctrlKey || event.metaKey) && event.key === 'k') {
+    event.preventDefault();
+    event.stopPropagation();
+    commandsStore.openCommandPalette();
   }
 };
 
@@ -194,10 +231,12 @@ const handleOpenGlobalSearch = () => {
 };
 
 // Initialize context when workspace changes
+let contextInitialized = false;
 watch(projectPath, async (newPath) => {
-  if (newPath) {
+  if (newPath && !contextInitialized) {
     try {
       await contextManager.initialize(newPath);
+      contextInitialized = true;
       console.log('Context initialized for workspace:', newPath);
     } catch (error) {
       console.error('Failed to initialize context:', error);
@@ -205,12 +244,38 @@ watch(projectPath, async (newPath) => {
   }
 }, { immediate: true });
 
-onMounted(() => {
+// Reset flag when project path changes to a different value
+watch(projectPath, (newPath, oldPath) => {
+  if (newPath !== oldPath && oldPath) {
+    contextInitialized = false;
+  }
+});
+
+onMounted(async () => {
+  // Initialize command store
+  await commandsStore.initialize();
+  
   // Load saved layout mode
   layoutStore.loadSavedMode();
   
   document.addEventListener('keydown', handleKeydown);
   window.addEventListener('open-global-search', handleOpenGlobalSearch);
+  
+  // Listen for command-triggered events
+  window.addEventListener('show-tasks-panel', () => {
+    bottomTab.value = 'tasks';
+  });
+  
+  window.addEventListener('show-mcp-panel', () => {
+    bottomTab.value = 'mcp';
+  });
+  
+  window.addEventListener('show-context-modal', () => {
+    const contextModal = document.querySelector('.context-status-modal');
+    if (contextModal) {
+      contextModal.dispatchEvent(new Event('open'));
+    }
+  });
   
   // Save workspace configuration before app closes
   window.addEventListener('beforeunload', async () => {
@@ -337,6 +402,7 @@ onUnmounted(() => {
   text-align: center;
   font-weight: 600;
 }
+
 
 .tab-content {
   flex: 1;

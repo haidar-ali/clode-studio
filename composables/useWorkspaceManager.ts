@@ -72,6 +72,12 @@ export function useWorkspaceManager() {
       // 8. Set project path FIRST, then load existing tasks (don't clear until after loading)
       tasksStore.setProjectPath(path);
       
+      // 8.5. Initialize context store with persisted data
+      const { useContextStore } = await import('~/stores/context');
+      const contextStore = useContextStore();
+      await contextStore.loadPersistedTokenUsage();
+      console.log('Loaded persisted context data for workspace');
+      
       // 9. Try to load existing TASKS.md from the new workspace
       const tasksPath = `${path}/TASKS.md`;
       const tasksResult = await window.electronAPI.fs.readFile(tasksPath);

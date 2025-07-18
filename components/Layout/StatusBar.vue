@@ -18,14 +18,7 @@
     </div>
     
     <div class="status-bar-right">
-      <div class="context-meter-wrapper">
-        <ContextMeter 
-          :animated="true"
-          :show-warning="contextStore.contextStatus !== 'normal'"
-          @click="showContextDetails"
-          @optimize="optimizeContext"
-        />
-      </div>
+      <QuickAccessToolbar />
       <span class="status-item" v-if="activeTab">
         Ln {{ cursorLine }}, Col {{ cursorColumn }}
       </span>
@@ -37,13 +30,11 @@
 import { computed, ref } from 'vue';
 import { useEditorStore } from '~/stores/editor';
 import { useChatStore } from '~/stores/chat';
-import { useContextStore } from '~/stores/context';
 import { useClaudeInstancesStore } from '~/stores/claude-instances';
-import ContextMeter from '~/components/Context/ContextMeter.vue';
+import QuickAccessToolbar from '~/components/Layout/QuickAccessToolbar.vue';
 
 const editorStore = useEditorStore();
 const chatStore = useChatStore();
-const contextStore = useContextStore();
 const claudeInstancesStore = useClaudeInstancesStore();
 
 const activeTab = computed(() => editorStore.activeTab);
@@ -54,7 +45,6 @@ const claudeStatus = computed(() => {
 
 const cursorLine = ref(1);
 const cursorColumn = ref(1);
-const contextPercentage = computed(() => contextStore.contextUsage.percentage);
 
 const claudeStatusClass = computed(() => ({
   'status-connected': claudeStatus.value === 'connected',
@@ -74,14 +64,6 @@ const claudeStatusIcon = computed(() => {
   }
 });
 
-const showContextDetails = () => {
-  // TODO: Emit event to show context optimization panel
-  console.log('Show context details');
-};
-
-const optimizeContext = async () => {
-  await contextStore.optimizeContext();
-};
 </script>
 
 <style scoped>
@@ -97,12 +79,25 @@ const optimizeContext = async () => {
   font-weight: 500;
 }
 
-.status-bar-left,
-.status-bar-center,
-.status-bar-right {
+.status-bar-left {
   display: flex;
   align-items: center;
   gap: 16px;
+}
+
+.status-bar-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.status-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  justify-content: flex-end;
 }
 
 .status-item {
@@ -121,11 +116,5 @@ const optimizeContext = async () => {
 
 .status-connecting {
   color: #e7c547;
-}
-
-.context-meter-wrapper {
-  display: flex;
-  align-items: center;
-  padding: 0 8px;
 }
 </style>

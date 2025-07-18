@@ -41,7 +41,22 @@ const electronAPI = {
     },
     onTodosUpdated: (callback: (todos: any[]) => void) => {
       ipcRenderer.on('claude:todos:updated', (_, todos) => callback(todos));
-    }
+    },
+    // Hook management
+    getHooks: () => ipcRenderer.invoke('claude:getHooks'),
+    addHook: (hook: {
+      event: string;
+      matcher: string;
+      command: string;
+      disabled?: boolean;
+    }) => ipcRenderer.invoke('claude:addHook', hook),
+    updateHook: (id: string, updates: any) => ipcRenderer.invoke('claude:updateHook', id, updates),
+    removeHook: (id: string) => ipcRenderer.invoke('claude:removeHook', id),
+    deleteHook: (id: string) => ipcRenderer.invoke('claude:deleteHook', id),
+    // Session management
+    listSessions: () => ipcRenderer.invoke('claude:listSessions'),
+    resumeSession: (instanceId: string, sessionId: string) => 
+      ipcRenderer.invoke('claude:resumeSession', instanceId, sessionId)
   },
   fs: {
     readFile: (path: string) => ipcRenderer.invoke('fs:readFile', path),
@@ -50,6 +65,7 @@ const electronAPI = {
     ensureDir: (path: string) => ipcRenderer.invoke('fs:ensureDir', path),
     rename: (oldPath: string, newPath: string) => ipcRenderer.invoke('fs:rename', oldPath, newPath),
     delete: (path: string) => ipcRenderer.invoke('fs:delete', path),
+    exists: (path: string) => ipcRenderer.invoke('fs:exists', path),
     watchFile: (path: string) => ipcRenderer.invoke('fs:watchFile', path),
     unwatchFile: (path: string) => ipcRenderer.invoke('fs:unwatchFile', path),
     watchDirectory: (path: string) => ipcRenderer.invoke('fs:watchDirectory', path),
@@ -70,7 +86,8 @@ const electronAPI = {
   store: {
     get: (key: string) => ipcRenderer.invoke('store:get', key),
     set: (key: string, value: any) => ipcRenderer.invoke('store:set', key, value),
-    delete: (key: string) => ipcRenderer.invoke('store:delete', key)
+    delete: (key: string) => ipcRenderer.invoke('store:delete', key),
+    getHomePath: () => ipcRenderer.invoke('store:getHomePath')
   },
   shell: {
     openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url)
@@ -150,7 +167,37 @@ const electronAPI = {
     onFileChange: (callback: (event: 'add' | 'change' | 'remove', filePath: string) => void) => {
       ipcRenderer.on('context:file-changed', (_, data) => callback(data.event, data.filePath));
       return () => ipcRenderer.removeAllListeners('context:file-changed');
-    }
+    },
+    analyzeUsage: (messages: any[], currentContext: string) => 
+      ipcRenderer.invoke('context:analyzeUsage', messages, currentContext),
+    buildOptimized: (query: string, workingFiles: string[], maxTokens: number) =>
+      ipcRenderer.invoke('context:buildOptimized', query, workingFiles, maxTokens),
+    optimize: (content: string, strategy: any) =>
+      ipcRenderer.invoke('context:optimize', content, strategy),
+    getRecommendations: (usage: any) =>
+      ipcRenderer.invoke('context:getRecommendations', usage),
+    shouldInject: (query: string, availableTokens: number, contextSize: number) =>
+      ipcRenderer.invoke('context:shouldInject', query, availableTokens, contextSize)
+  },
+  workspace: {
+    loadContext: (workspacePath: string) =>
+      ipcRenderer.invoke('workspace:loadContext', workspacePath),
+    saveContext: (data: any) =>
+      ipcRenderer.invoke('workspace:saveContext', data),
+    updateOptimizationTime: (workspacePath: string, lastOptimization: string) =>
+      ipcRenderer.invoke('workspace:updateOptimizationTime', workspacePath, lastOptimization),
+    updateWorkingFiles: (workspacePath: string, workingFiles: string[]) =>
+      ipcRenderer.invoke('workspace:updateWorkingFiles', workspacePath, workingFiles),
+    saveCheckpoint: (workspacePath: string, checkpoint: any) =>
+      ipcRenderer.invoke('workspace:saveCheckpoint', workspacePath, checkpoint),
+    removeCheckpoint: (workspacePath: string, checkpointId: string) =>
+      ipcRenderer.invoke('workspace:removeCheckpoint', workspacePath, checkpointId),
+    getRecentHistory: (workspacePath: string, limit: number) =>
+      ipcRenderer.invoke('workspace:getRecentHistory', workspacePath, limit),
+    exportContext: (workspacePath: string) =>
+      ipcRenderer.invoke('workspace:exportContext', workspacePath),
+    importContext: (workspacePath: string, jsonData: string) =>
+      ipcRenderer.invoke('workspace:importContext', workspacePath, jsonData)
   }
 };
 

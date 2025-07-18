@@ -70,6 +70,17 @@ export const useProjectContextStore = defineStore('projectContext', () => {
       
       if (result.success) {
         isInitialized.value = true;
+        
+        // Load persisted workspace data
+        const persistedData = await window.electronAPI.workspace.loadContext(workspacePath);
+        if (persistedData.success && persistedData.data) {
+          // Restore working files
+          if (persistedData.data.workingFiles && persistedData.data.workingFiles.length > 0) {
+            workingFiles.value = persistedData.data.workingFiles;
+            console.log('Restored working files:', workingFiles.value.length);
+          }
+        }
+        
         await refreshStatistics();
         await refreshRecentFiles();
         await startFileWatching();
@@ -114,7 +125,9 @@ export const useProjectContextStore = defineStore('projectContext', () => {
     }
 
     try {
-      const result = await window.electronAPI.context.buildContext(query, workingFiles.value, maxTokens);
+      // Clone the working files array to avoid serialization issues
+      const files = [...workingFiles.value];
+      const result = await window.electronAPI.context.buildContext(query, files, maxTokens);
       
       if (result.success) {
         return result.context;
@@ -196,21 +209,57 @@ export const useProjectContextStore = defineStore('projectContext', () => {
     }
   };
 
-  const addWorkingFile = (filePath: string) => {
+  const addWorkingFile = async (filePath: string) => {
     if (!workingFiles.value.includes(filePath)) {
       workingFiles.value.push(filePath);
+      
+      // Persist working files
+      if (currentWorkspace.value) {
+        try {
+          await window.electronAPI.workspace.updateWorkingFiles(
+            currentWorkspace.value, 
+            [...workingFiles.value] // Clone the array to avoid IPC serialization issues
+          );
+        } catch (error) {
+          console.error('Failed to persist working files:', error);
+        }
+      }
     }
   };
 
-  const removeWorkingFile = (filePath: string) => {
+  const removeWorkingFile = async (filePath: string) => {
     const index = workingFiles.value.indexOf(filePath);
     if (index > -1) {
       workingFiles.value.splice(index, 1);
+      
+      // Persist working files
+      if (currentWorkspace.value) {
+        try {
+          await window.electronAPI.workspace.updateWorkingFiles(
+            currentWorkspace.value, 
+            [...workingFiles.value] // Clone the array to avoid IPC serialization issues
+          );
+        } catch (error) {
+          console.error('Failed to persist working files:', error);
+        }
+      }
     }
   };
 
-  const clearWorkingFiles = () => {
+  const clearWorkingFiles = async () => {
     workingFiles.value = [];
+    
+    // Persist empty working files
+    if (currentWorkspace.value) {
+      try {
+        await window.electronAPI.workspace.updateWorkingFiles(
+          currentWorkspace.value, 
+          [...workingFiles.value] // Clone the array to avoid IPC serialization issues
+        );
+      } catch (error) {
+        console.error('Failed to persist working files:', error);
+      }
+    }
   };
 
   const clearSearchResults = () => {
