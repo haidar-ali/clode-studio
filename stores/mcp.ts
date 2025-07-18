@@ -25,6 +25,7 @@ export interface MCPServerConfig {
   args?: string[];
   url?: string;
   env?: Record<string, string>;
+  headers?: Record<string, string>;
 }
 
 export const useMCPStore = defineStore('mcp', {
@@ -81,7 +82,20 @@ export const useMCPStore = defineStore('mcp', {
 
     async addServer(config: MCPServerConfig) {
       try {
-        const result = await window.electronAPI.mcp.add(config);
+        // Ensure config is a plain object that can be serialized
+        const plainConfig = {
+          name: config.name,
+          type: config.type,
+          ...(config.command && { command: config.command }),
+          ...(config.args && { args: [...config.args] }),
+          ...(config.url && { url: config.url }),
+          ...(config.env && { env: { ...config.env } }),
+          ...(config.headers && { headers: { ...config.headers } })
+        };
+        
+        console.log('Sending config to main process:', plainConfig);
+        
+        const result = await window.electronAPI.mcp.add(plainConfig);
         if (result.success) {
           // Reload servers after adding
           await this.loadServers();

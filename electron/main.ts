@@ -1082,27 +1082,52 @@ ipcMain.handle('mcp:add', async (event, config) => {
   const execAsync = promisify(exec);
   
   try {
-    let command = `claude mcp add "${config.name}"`;
+    // Get workspace path from store
+    const workspacePath = (store as any).get('workspacePath') || process.cwd();
     
+    // Detect Claude to use the correct binary
+    const claudeInfo = await ClaudeDetector.detectClaude(workspacePath);
+    const claudeCommand = claudeInfo.path;
+    
+    // Build the command with proper transport flag
+    let command = `${claudeCommand} mcp add`;
+    
+    // Add transport type
+    command += ` --transport ${config.type}`;
+    
+    // Add the name
+    command += ` "${config.name}"`;
+    
+    // Add environment variables BEFORE the command (they're options for claude mcp add)
+    if (config.env) {
+      for (const [key, value] of Object.entries(config.env)) {
+        command += ` -e "${key}=${value}"`;
+      }
+    }
+    
+    // Add headers for SSE/HTTP servers BEFORE the command
+    if (config.headers && (config.type === 'sse' || config.type === 'http')) {
+      for (const [key, value] of Object.entries(config.headers)) {
+        command += ` -H "${key}: ${value}"`;
+      }
+    }
+    
+    // Add -- to stop option parsing, then add the command/URL based on type
     if (config.type === 'stdio') {
-      command += ` "${config.command}"`;
+      command += ` -- "${config.command}"`;
       if (config.args && config.args.length > 0) {
+        // Pass each argument separately
         command += ` ${config.args.map((arg: string) => `"${arg}"`).join(' ')}`;
       }
     } else if (config.type === 'sse' || config.type === 'http') {
       // For HTTP/SSE servers, the URL is the command argument
-      command += ` "${config.url}"`;
+      command += ` -- "${config.url}"`;
     }
     
-    // Add environment variables
-    if (config.env) {
-      for (const [key, value] of Object.entries(config.env)) {
-        command += ` --env ${key}="${value}"`;
-      }
-    }
+    console.log('Adding MCP server with command:', command);
     
     const { stdout, stderr } = await execAsync(command, {
-      cwd: process.cwd(),
+      cwd: workspacePath,
       env: process.env
     });
     
@@ -1126,8 +1151,15 @@ ipcMain.handle('mcp:remove', async (event, name: string) => {
   const execAsync = promisify(exec);
   
   try {
-    const { stdout, stderr } = await execAsync(`claude mcp remove "${name}"`, {
-      cwd: process.cwd(),
+    // Get workspace path from store
+    const workspacePath = (store as any).get('workspacePath') || process.cwd();
+    
+    // Detect Claude to use the correct binary
+    const claudeInfo = await ClaudeDetector.detectClaude(workspacePath);
+    const claudeCommand = claudeInfo.path;
+    
+    const { stdout, stderr } = await execAsync(`${claudeCommand} mcp remove "${name}"`, {
+      cwd: workspacePath,
       env: process.env
     });
     
@@ -1151,8 +1183,15 @@ ipcMain.handle('mcp:get', async (event, name: string) => {
   const execAsync = promisify(exec);
   
   try {
-    const { stdout } = await execAsync(`claude mcp get "${name}"`, {
-      cwd: process.cwd(),
+    // Get workspace path from store
+    const workspacePath = (store as any).get('workspacePath') || process.cwd();
+    
+    // Detect Claude to use the correct binary
+    const claudeInfo = await ClaudeDetector.detectClaude(workspacePath);
+    const claudeCommand = claudeInfo.path;
+    
+    const { stdout } = await execAsync(`${claudeCommand} mcp get "${name}"`, {
+      cwd: workspacePath,
       env: process.env
     });
     

@@ -7,9 +7,13 @@
         <span>{{ workspaceName }}</span>
       </div>
       <div class="header-actions">
-        <button @click="showAddModal = true" class="primary-button">
+        <button @click="showQuickAdd = true" class="primary-button">
+          <Icon name="mdi:lightning-bolt" size="16" />
+          Quick Add
+        </button>
+        <button @click="showAddModal = true" class="secondary-button">
           <Icon name="mdi:plus" size="16" />
-          Add Server
+          Custom
         </button>
         <button @click="refreshServers" class="icon-button" title="Refresh">
           <Icon name="mdi:refresh" :class="{ 'spinning': isRefreshing }" size="18" />
@@ -40,10 +44,16 @@
         <Icon name="mdi:server-network-off" size="48" />
         <h4>No MCP Servers Configured</h4>
         <p>Add your first MCP server to extend Claude's capabilities</p>
-        <button @click="showAddModal = true" class="primary-button">
-          <Icon name="mdi:plus" size="16" />
-          Add Server
-        </button>
+        <div class="empty-actions">
+          <button @click="showQuickAdd = true" class="primary-button">
+            <Icon name="mdi:lightning-bolt" size="16" />
+            Quick Add Popular Servers
+          </button>
+          <button @click="showAddModal = true" class="secondary-button">
+            <Icon name="mdi:plus" size="16" />
+            Add Custom Server
+          </button>
+        </div>
       </div>
 
       <!-- Loading State -->
@@ -187,6 +197,21 @@
         </form>
       </div>
     </div>
+
+    <!-- Quick Add Modal -->
+    <div v-if="showQuickAdd" class="modal-overlay" @click="closeQuickAdd">
+      <div class="modal quick-add-modal" @click.stop>
+        <div class="modal-header">
+          <h3>Quick Add MCP Servers</h3>
+          <button @click="closeQuickAdd" class="close-button">
+            <Icon name="mdi:close" />
+          </button>
+        </div>
+        <div class="modal-content">
+          <MCPQuickAdd @server-added="onServerAdded" />
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -195,6 +220,8 @@ import { ref, computed, onMounted } from 'vue';
 import { useMCPStore } from '~/stores/mcp';
 import type { MCPServerConfig } from '~/stores/mcp';
 import { useEditorStore } from '~/stores/editor';
+import MCPQuickAdd from './MCPQuickAdd.vue';
+import type { MCPServerTemplate } from './MCPQuickAdd.vue';
 
 const mcpStore = useMCPStore();
 const editorStore = useEditorStore();
@@ -207,6 +234,7 @@ const workspaceName = computed(() => {
 });
 
 const showAddModal = ref(false);
+const showQuickAdd = ref(false);
 const isRefreshing = ref(false);
 const isTestingConnection = ref(false);
 const testResult = ref<{ success: boolean; message: string } | null>(null);
@@ -328,6 +356,14 @@ const closeAddModal = () => {
     envVars: [],
   };
   testResult.value = null;
+};
+
+const closeQuickAdd = () => {
+  showQuickAdd.value = false;
+};
+
+const onServerAdded = (server: MCPServerTemplate) => {
+  refreshServers();
 };
 
 onMounted(async () => {
@@ -510,6 +546,16 @@ onMounted(async () => {
   max-width: 600px;
   max-height: 90vh;
   overflow-y: auto;
+}
+
+.quick-add-modal {
+  max-width: 900px;
+  max-height: 90vh;
+}
+
+.quick-add-modal .modal-content {
+  padding: 0;
+  overflow: hidden;
 }
 
 .modal-header {

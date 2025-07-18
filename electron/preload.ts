@@ -159,6 +159,7 @@ const electronAPI = {
       args?: string[];
       url?: string;
       env?: Record<string, string>;
+      headers?: Record<string, string>;
     }) => ipcRenderer.invoke('mcp:add', config),
     remove: (name: string) => ipcRenderer.invoke('mcp:remove', name),
     get: (name: string) => ipcRenderer.invoke('mcp:get', name),
