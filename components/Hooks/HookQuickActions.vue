@@ -22,7 +22,12 @@
     </div>
 
     <div class="active-hooks">
-      <h4>Active Hooks</h4>
+      <div class="hooks-header">
+        <h4>Active Hooks</h4>
+        <span v-if="saveStatus" class="save-status" :class="{ error: saveStatus.includes('Failed') }">
+          {{ saveStatus }}
+        </span>
+      </div>
       <div v-if="activeHooks.length === 0" class="no-hooks">
         No hooks configured. Click a template above to get started.
       </div>
@@ -35,6 +40,13 @@
           <div class="hook-header">
             <span class="hook-event">{{ hook.event }}</span>
             <span class="hook-matcher">{{ hook.matcher || 'all tools' }}</span>
+            <button
+              class="test-button"
+              @click="testHook(hook)"
+              title="Test this hook"
+            >
+              <Icon name="mdi:test-tube" size="16" />
+            </button>
             <button
               class="toggle-button"
               :class="{ disabled: hook.disabled }"
@@ -61,9 +73,9 @@
         <Icon name="mdi:plus" size="16" />
         Create Custom Hook
       </button>
-      <button @click="testHooks" class="action-button">
-        <Icon name="mdi:play" size="16" />
-        Test Hooks
+      <button @click="viewClaudeSettings" class="action-button">
+        <Icon name="mdi:file-eye" size="16" />
+        View Settings File
       </button>
     </div>
   </div>
@@ -91,6 +103,8 @@ interface ActiveHook {
 }
 
 const activeHooks = ref<ActiveHook[]>([]);
+const isSaving = ref(false);
+const saveStatus = ref('');
 
 const hookTemplates: HookTemplate[] = [
   {
@@ -118,7 +132,7 @@ const hookTemplates: HookTemplate[] = [
     icon: 'mdi:bell',
     event: 'Notification',
     matcher: '',
-    command: 'osascript -e \'display notification "Claude needs your input" with title "Claude Code"\' 2>/dev/null || notify-send "Claude Code" "Claude needs your input" 2>/dev/null || true'
+    command: `osascript -e 'display notification "Notification from Claude Code" with title "Claude Code"' 2>/dev/null || notify-send "Claude Code" "Notification from Claude" 2>/dev/null || echo "Claude notification triggered"`
   },
   {
     id: 'log-commands',
@@ -172,13 +186,24 @@ const applyTemplate = async (template: HookTemplate) => {
   };
 
   try {
+    isSaving.value = true;
+    saveStatus.value = 'Adding hook...';
+    
     const result = await window.electronAPI.claude.addHook(newHook);
     if (result.success) {
       // Reload hooks to get the server-assigned ID
       await loadHooks();
+      saveStatus.value = 'Hook added to ~/.claude/settings.json';
+      setTimeout(() => {
+        saveStatus.value = '';
+      }, 2000);
     }
   } catch (error) {
     console.error('Failed to add hook:', error);
+    saveStatus.value = 'Failed to add hook';
+    alert(`Failed to add hook:\n\n${error}\n\nCheck the console for details.`);
+  } finally {
+    isSaving.value = false;
   }
 };
 
@@ -186,6 +211,9 @@ const applyTemplate = async (template: HookTemplate) => {
 const toggleHook = async (hook: ActiveHook) => {
   hook.disabled = !hook.disabled;
   try {
+    isSaving.value = true;
+    saveStatus.value = 'Saving to Claude settings...';
+    
     // Clone the hook to avoid serialization issues
     const hookData = {
       id: hook.id,
@@ -195,10 +223,21 @@ const toggleHook = async (hook: ActiveHook) => {
       disabled: hook.disabled
     };
     await window.electronAPI.claude.updateHook(hook.id, hookData);
+    
+    // Reload hooks to ensure UI is in sync
+    await loadHooks();
+    
+    saveStatus.value = 'Saved to ~/.claude/settings.json';
+    setTimeout(() => {
+      saveStatus.value = '';
+    }, 2000);
   } catch (error) {
     console.error('Failed to update hook:', error);
     // Revert on error
     hook.disabled = !hook.disabled;
+    saveStatus.value = 'Failed to save';
+  } finally {
+    isSaving.value = false;
   }
 };
 
@@ -209,13 +248,16 @@ const deleteHook = async (hook: ActiveHook) => {
   try {
     const result = await window.electronAPI.claude.deleteHook(hook.id);
     if (result.success) {
-      const index = activeHooks.value.findIndex(h => h.id === hook.id);
-      if (index !== -1) {
-        activeHooks.value.splice(index, 1);
-      }
+      // Reload hooks to ensure UI is in sync
+      await loadHooks();
+      saveStatus.value = 'Hook deleted';
+      setTimeout(() => {
+        saveStatus.value = '';
+      }, 2000);
     }
   } catch (error) {
     console.error('Failed to delete hook:', error);
+    saveStatus.value = 'Failed to delete hook';
   }
 };
 
@@ -226,9 +268,49 @@ const openHookEditor = () => {
   alert('Advanced hook editor coming soon! Use the template buttons above for now.');
 };
 
-// Test hooks
-const testHooks = () => {
-  window.dispatchEvent(new CustomEvent('test-hooks'));
+// Test a specific hook
+const testHook = async (hook: ActiveHook) => {
+  const result = await window.electronAPI.claude.testHook({
+    event: hook.event,
+    matcher: hook.matcher,
+    command: hook.command
+  });
+  
+  if (result.success) {
+    alert(`Hook Test Results:\n\n${result.output}`);
+  } else {
+    alert(`Hook Test Failed:\n\n${result.error}\n\nOutput:\n${result.output || '(no output)'}`);
+  }
+};
+
+// View Claude settings file
+const viewClaudeSettings = async () => {
+  const homePath = await window.electronAPI.store.getHomePath();
+  const settingsPath = `${homePath}/.claude/settings.json`;
+  
+  // First ensure the file exists
+  const exists = await window.electronAPI.fs.exists(settingsPath);
+  if (!exists) {
+    // Try to create an empty settings file
+    try {
+      const claudeDir = `${homePath}/.claude`;
+      await window.electronAPI.fs.ensureDir(claudeDir);
+      await window.electronAPI.fs.writeFile(settingsPath, JSON.stringify({ hooks: {} }, null, 2));
+      console.log('Created new Claude settings file');
+    } catch (error) {
+      console.error('Failed to create settings file:', error);
+      alert(`Claude settings file not found at ~/.claude/settings.json\n\nError: ${error}\n\nPlease manually create the .claude directory in your home folder.`);
+      return;
+    }
+  }
+  
+  // Open the settings file in the editor
+  const { useEditorStore } = await import('~/stores/editor');
+  const editorStore = useEditorStore();
+  await editorStore.openFile(settingsPath);
+  
+  // Also refresh hooks to show any that might be in the file
+  await loadHooks();
 };
 
 onMounted(() => {
@@ -306,13 +388,35 @@ onMounted(() => {
   margin-bottom: 20px;
 }
 
+.hooks-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
 .active-hooks h4 {
   font-size: 14px;
   font-weight: 500;
-  margin: 0 0 12px;
+  margin: 0;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: #858585;
+}
+
+.save-status {
+  font-size: 12px;
+  color: #4ec9b0;
+  animation: fadeIn 0.3s ease-in;
+}
+
+.save-status.error {
+  color: #f48771;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .no-hooks {
@@ -361,7 +465,8 @@ onMounted(() => {
 }
 
 .toggle-button,
-.delete-button {
+.delete-button,
+.test-button {
   background: none;
   border: none;
   color: #858585;
@@ -375,7 +480,8 @@ onMounted(() => {
 }
 
 .toggle-button:hover,
-.delete-button:hover {
+.delete-button:hover,
+.test-button:hover {
   background: #3e3e42;
   color: #cccccc;
 }

@@ -10,6 +10,7 @@ import { claudeCodeService } from './claude-sdk-service.js';
 import { lightweightContext } from './lightweight-context.js';
 import { contextOptimizer } from './context-optimizer.js';
 import { workspacePersistence } from './workspace-persistence.js';
+import { claudeSettingsManager } from './claude-settings-manager.js';
 
 // Load environment variables from .env file
 import { config } from 'dotenv';
@@ -340,8 +341,8 @@ ipcMain.handle('claude:resumeSession', async (event, instanceId: string, session
 // Hook operations
 ipcMain.handle('claude:getHooks', async () => {
   try {
-    // Return the current hooks configuration
-    const hooks = (store as any).get('hooks') || [];
+    // Return hooks from Claude's settings file
+    const hooks = await claudeSettingsManager.getHooks();
     return { success: true, hooks };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : String(error) };
@@ -350,31 +351,40 @@ ipcMain.handle('claude:getHooks', async () => {
 
 ipcMain.handle('claude:addHook', async (event, hook: any) => {
   try {
-    const hooks = (store as any).get('hooks') || [];
+    console.log('claude:addHook called with:', hook);
+    const existingHooks = await claudeSettingsManager.getHooks();
+    console.log('Existing hooks:', existingHooks);
     const newHook = {
       ...hook,
       id: `hook_${Date.now()}`,
       disabled: hook.disabled !== undefined ? hook.disabled : false
     };
-    hooks.push(newHook);
-    (store as any).set('hooks', hooks);
+    console.log('New hook:', newHook);
+    existingHooks.push(newHook);
+    await claudeSettingsManager.saveHooks(existingHooks);
+    console.log('Hooks saved successfully');
     return { success: true, hook: newHook };
   } catch (error) {
+    console.error('Error in claude:addHook:', error);
     return { success: false, error: error instanceof Error ? error.message : String(error) };
   }
 });
 
 ipcMain.handle('claude:updateHook', async (event, hookId: string, updates: any) => {
   try {
-    const hooks = (store as any).get('hooks') || [];
+    console.log('claude:updateHook called with:', hookId, updates);
+    const hooks = await claudeSettingsManager.getHooks();
     const index = hooks.findIndex((h: any) => h.id === hookId);
     if (index !== -1) {
       hooks[index] = { ...hooks[index], ...updates };
-      (store as any).set('hooks', hooks);
+      await claudeSettingsManager.saveHooks(hooks);
+      console.log('Hook updated successfully');
       return { success: true };
     }
+    console.log('Hook not found:', hookId);
     return { success: false, error: 'Hook not found' };
   } catch (error) {
+    console.error('Error in claude:updateHook:', error);
     return { success: false, error: error instanceof Error ? error.message : String(error) };
   }
 });
@@ -382,23 +392,54 @@ ipcMain.handle('claude:updateHook', async (event, hookId: string, updates: any) 
 // Add removeHook as an alias for deleteHook for compatibility
 ipcMain.handle('claude:removeHook', async (event, hookId: string) => {
   try {
-    const hooks = (store as any).get('hooks') || [];
+    console.log('claude:removeHook called with:', hookId);
+    const hooks = await claudeSettingsManager.getHooks();
     const filteredHooks = hooks.filter((h: any) => h.id !== hookId);
-    (store as any).set('hooks', filteredHooks);
+    await claudeSettingsManager.saveHooks(filteredHooks);
+    console.log('Hook removed successfully');
     return { success: true };
   } catch (error) {
+    console.error('Error in claude:removeHook:', error);
     return { success: false, error: error instanceof Error ? error.message : String(error) };
   }
 });
 
 ipcMain.handle('claude:deleteHook', async (event, hookId: string) => {
   try {
-    const hooks = (store as any).get('hooks') || [];
+    console.log('claude:deleteHook called with:', hookId);
+    const hooks = await claudeSettingsManager.getHooks();
     const filtered = hooks.filter((h: any) => h.id !== hookId);
-    (store as any).set('hooks', filtered);
+    await claudeSettingsManager.saveHooks(filtered);
+    console.log('Hook deleted successfully');
     return { success: true };
   } catch (error) {
+    console.error('Error in claude:deleteHook:', error);
     return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+// Test a hook
+ipcMain.handle('claude:testHook', async (event, hook: any) => {
+  try {
+    const { exec } = await import('child_process');
+    const { promisify } = await import('util');
+    const execAsync = promisify(exec);
+    
+    const testCommand = claudeSettingsManager.createTestCommand(hook);
+    const { stdout, stderr } = await execAsync(testCommand, {
+      timeout: 5000 // 5 second timeout
+    });
+    
+    return { 
+      success: true, 
+      output: stdout + (stderr ? '\n\nErrors:\n' + stderr : '')
+    };
+  } catch (error: any) {
+    return { 
+      success: false, 
+      error: error.message || String(error),
+      output: error.stdout || ''
+    };
   }
 });
 

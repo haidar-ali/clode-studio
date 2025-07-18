@@ -53,6 +53,7 @@ const electronAPI = {
     updateHook: (id: string, updates: any) => ipcRenderer.invoke('claude:updateHook', id, updates),
     removeHook: (id: string) => ipcRenderer.invoke('claude:removeHook', id),
     deleteHook: (id: string) => ipcRenderer.invoke('claude:deleteHook', id),
+    testHook: (hook: any) => ipcRenderer.invoke('claude:testHook', hook),
     // Session management
     listSessions: () => ipcRenderer.invoke('claude:listSessions'),
     resumeSession: (instanceId: string, sessionId: string) => 
