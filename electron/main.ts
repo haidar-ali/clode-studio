@@ -69,10 +69,6 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  console.log('=== ELECTRON MAIN PROCESS STARTED ===');
-  console.log('Node version:', process.version);
-  console.log('Electron version:', process.versions.electron);
-  
   createWindow();
 
   app.on('activate', () => {
@@ -95,26 +91,16 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
   }
 
   try {
-    console.log(`=== STARTING CLAUDE CLI WITH PTY FOR INSTANCE ${instanceId} ===`);
-    console.log('Working directory:', workingDirectory);
-    
     // Detect Claude installation
     const claudeInfo = await ClaudeDetector.detectClaude(workingDirectory);
-    console.log('Claude detected:', claudeInfo);
     
     // Get the command configuration
     const debugArgs = process.env.CLAUDE_DEBUG === 'true' ? ['--debug'] : [];
     const { command, args: commandArgs, useShell } = ClaudeDetector.getClaudeCommand(claudeInfo, debugArgs);
     
-    console.log('Command:', command);
-    console.log('Args:', commandArgs);
-    console.log('Use shell:', useShell);
-    
     // Log settings file to verify it exists
     const settingsPath = join(homedir(), '.claude', 'settings.json');
-    if (existsSync(settingsPath)) {
-      console.log(`Claude settings file found at: ${settingsPath}`);
-    } else {
+    if (!existsSync(settingsPath)) {
       console.warn('Claude settings file not found!');
     }
     
@@ -140,12 +126,6 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
       }
     });
 
-    console.log(`=== CLAUDE PTY SPAWNED FOR ${instanceId} ===`);
-    console.log('PID:', claudePty.pid);
-    console.log('Process:', claudePty.process);
-    console.log('Claude Path:', claudeInfo.path);
-    console.log('Claude Source:', claudeInfo.source);
-    console.log('Instance Name:', instanceName || `Claude-${instanceId.slice(7, 15)}`);
 
     // Store this instance
     claudeInstances.set(instanceId, claudePty);
@@ -158,20 +138,9 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
 
     // Handle exit
     claudePty.onExit(({ exitCode, signal }) => {
-      console.log(`Claude PTY for ${instanceId} exited with code:`, exitCode, 'signal:', signal);
       mainWindow?.webContents.send(`claude:exit:${instanceId}`, exitCode);
       claudeInstances.delete(instanceId);
     });
-
-    // Log PTY status after a short delay
-    setTimeout(() => {
-      if (claudeInstances.has(instanceId)) {
-        console.log(`Claude PTY for ${instanceId} still running after 1 second`);
-        console.log('PID:', claudePty.pid);
-      } else {
-        console.log(`Claude PTY for ${instanceId} not running after 1 second`);
-      }
-    }, 1000);
 
     return { 
       success: true, 
@@ -195,11 +164,6 @@ ipcMain.handle('claude:send', async (event, instanceId: string, command: string)
   }
 
   try {
-    // Only log important commands, not every keystroke
-    if (command.includes('\n') || command.includes('\r')) {
-      console.log(`Sending command to Claude PTY ${instanceId}`);
-    }
-    
     // Write raw data to PTY (xterm.js will handle line endings)
     claudePty.write(command);
     
@@ -390,18 +354,14 @@ ipcMain.handle('claude:getHooks', async () => {
 
 ipcMain.handle('claude:addHook', async (event, hook: any) => {
   try {
-    console.log('claude:addHook called with:', hook);
     const existingHooks = await claudeSettingsManager.getHooks();
-    console.log('Existing hooks:', existingHooks);
     const newHook = {
       ...hook,
       id: `hook_${Date.now()}`,
       disabled: hook.disabled !== undefined ? hook.disabled : false
     };
-    console.log('New hook:', newHook);
     existingHooks.push(newHook);
     await claudeSettingsManager.saveHooks(existingHooks);
-    console.log('Hooks saved successfully');
     return { success: true, hook: newHook };
   } catch (error) {
     console.error('Error in claude:addHook:', error);
@@ -411,16 +371,13 @@ ipcMain.handle('claude:addHook', async (event, hook: any) => {
 
 ipcMain.handle('claude:updateHook', async (event, hookId: string, updates: any) => {
   try {
-    console.log('claude:updateHook called with:', hookId, updates);
     const hooks = await claudeSettingsManager.getHooks();
     const index = hooks.findIndex((h: any) => h.id === hookId);
     if (index !== -1) {
       hooks[index] = { ...hooks[index], ...updates };
       await claudeSettingsManager.saveHooks(hooks);
-      console.log('Hook updated successfully');
       return { success: true };
     }
-    console.log('Hook not found:', hookId);
     return { success: false, error: 'Hook not found' };
   } catch (error) {
     console.error('Error in claude:updateHook:', error);
@@ -431,11 +388,9 @@ ipcMain.handle('claude:updateHook', async (event, hookId: string, updates: any) 
 // Add removeHook as an alias for deleteHook for compatibility
 ipcMain.handle('claude:removeHook', async (event, hookId: string) => {
   try {
-    console.log('claude:removeHook called with:', hookId);
     const hooks = await claudeSettingsManager.getHooks();
     const filteredHooks = hooks.filter((h: any) => h.id !== hookId);
     await claudeSettingsManager.saveHooks(filteredHooks);
-    console.log('Hook removed successfully');
     return { success: true };
   } catch (error) {
     console.error('Error in claude:removeHook:', error);
@@ -445,11 +400,9 @@ ipcMain.handle('claude:removeHook', async (event, hookId: string) => {
 
 ipcMain.handle('claude:deleteHook', async (event, hookId: string) => {
   try {
-    console.log('claude:deleteHook called with:', hookId);
     const hooks = await claudeSettingsManager.getHooks();
     const filtered = hooks.filter((h: any) => h.id !== hookId);
     await claudeSettingsManager.saveHooks(filtered);
-    console.log('Hook deleted successfully');
     return { success: true };
   } catch (error) {
     console.error('Error in claude:deleteHook:', error);
@@ -545,8 +498,6 @@ ipcMain.handle('fs:watchFile', async (event, filePath: string) => {
       return { success: true };
     }
 
-    console.log('Starting file watcher for:', filePath);
-    
     const watcher = watch(filePath, async (eventType, filename) => {
       if (eventType === 'change') {
         // Clear existing timer for this file
@@ -557,8 +508,6 @@ ipcMain.handle('fs:watchFile', async (event, filePath: string) => {
         
         // Set new timer with debounce
         const timer = setTimeout(async () => {
-          console.log('File changed:', filePath);
-          
           try {
             // Read the new content
             const content = await readFile(filePath, 'utf-8');
@@ -598,11 +547,7 @@ ipcMain.handle('fs:watchDirectory', async (event, dirPath: string) => {
       return { success: true };
     }
 
-    console.log('Starting directory watcher for:', dirPath);
-    
     const watcher = watch(dirPath, { recursive: false }, async (eventType, filename) => {
-      console.log('Directory change detected:', eventType, filename, 'in', dirPath);
-      
       // Send update to renderer
       mainWindow?.webContents.send('directory:changed', {
         path: dirPath,
@@ -627,7 +572,6 @@ ipcMain.handle('fs:unwatchDirectory', async (event, dirPath: string) => {
     if (watcher) {
       watcher.close();
       fileWatchers.delete(watchKey);
-      console.log('Stopped watching directory:', dirPath);
     }
     return { success: true };
   } catch (error) {
@@ -648,8 +592,6 @@ ipcMain.handle('fs:unwatchFile', async (event, filePath: string) => {
         clearTimeout(timer);
         fileDebounceTimers.delete(filePath);
       }
-      
-      console.log('Stopped watching file:', filePath);
     }
     return { success: true };
   } catch (error) {
@@ -772,8 +714,6 @@ ipcMain.handle('search:findInFiles', async (event, options) => {
     
     return Array.from(results.values());
   } catch (error) {
-    console.log('Ripgrep not available, falling back to Node.js search...');
-    
     // Fallback to Node.js implementation
     return await fallbackSearch(workingDir, options);
   }
@@ -1021,8 +961,6 @@ ipcMain.handle('mcp:list', async (event, workspacePath?: string) => {
       workspacePath = (store as any).get('workspacePath') || process.cwd();
     }
     
-    console.log('Listing MCP servers for workspace:', workspacePath);
-    
     // Detect Claude to use the correct binary
     const claudeInfo = await ClaudeDetector.detectClaude(workspacePath);
     const claudeCommand = claudeInfo.path;
@@ -1128,8 +1066,6 @@ ipcMain.handle('mcp:add', async (event, config) => {
       // For HTTP/SSE servers, the URL is the command argument
       command += ` -- "${config.url}"`;
     }
-    
-    console.log('Adding MCP server with command:', command);
     
     const { stdout, stderr } = await execAsync(command, {
       cwd: workspacePath,

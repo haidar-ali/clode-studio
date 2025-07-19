@@ -1,68 +1,108 @@
-# Clode IDE + KANBAN
+# Claude Code IDE
 
-A modern, lightweight IDE specifically designed for developers using Claude Code CLI. This IDE provides a beautiful graphical interface around the Claude Code CLI tool, solving context loss issues in long coding sessions through persistent project knowledge, task management, and visual context tracking.
+A powerful, modern IDE specifically designed for developers using Claude Code CLI. This IDE provides a comprehensive graphical interface around the Claude Code CLI tool, solving context loss issues in long coding sessions through intelligent features like persistent knowledge base, multi-instance support, visual task management, and context optimization.
 
-## ✨ Features
+## ✨ Key Features
 
-- **🖥️ Three Layout Modes**: Full IDE, Kanban+Claude, and Kanban-only modes for different workflows
-- **📋 Visual Task Management**: Integrated Kanban board with drag-and-drop functionality
-- **🤖 Claude Integration**: Seamless Claude Code CLI integration with interactive terminal
-- **📁 Smart File Management**: File explorer with context menus, search, and file operations
-- **🔍 Global Search & Replace**: Powerful search across all project files with regex support
-- **💾 Persistent State**: Project settings and tasks persist across sessions
-- **⚡ Performance**: Fast startup and smooth interactions built with modern web technologies
+### 🤖 Multi-Instance Claude Support
+- Run multiple Claude instances simultaneously
+- Each instance maintains independent context
+- 9 specialized personalities (Frontend, Backend, Architect, etc.)
+- Instance-specific working directories
+- Visual status indicators
+
+### 📚 Intelligent Knowledge Base
+- Create and maintain project-specific documentation
+- Full-text search with Lunr.js
+- Markdown editor with YAML frontmatter
+- Auto-complete for tags and cross-references
+- Seamless integration with Claude's context
+
+### 🎯 Advanced Task Management
+- Visual Kanban board with drag-and-drop
+- Automatic sync with TASKS.md
+- Claude can read and update tasks
+- Task context preservation
+- Project-specific task persistence
+
+### 🔧 MCP (Model Context Protocol) Integration
+- Visual MCP server management
+- Quick-add popular servers
+- Custom server configuration
+- Real-time connection status
+- 47+ pre-configured popular servers
+
+### 🪝 Powerful Hooks System
+- Automate actions based on Claude's activities
+- Pre/Post tool use hooks
+- Notification and stop event handlers
+- Visual hook manager with testing
+- Instance-aware hook execution
+
+### ⚡ Slash Command Studio
+- Visual editor for custom Claude commands
+- Browse project and personal commands
+- Template with placeholders support
+- Tool permission management
+- Live preview and testing
+
+### 💡 Context Enhancement
+- Visual context meter and optimization
+- Smart checkpointing system
+- Lightweight context injection
+- Memory management (CLAUDE.md)
+- Context-aware file operations
+
+### 🎨 Flexible Layout System
+- **Full IDE Mode**: Complete development environment
+- **Kanban + Claude Mode**: Task-focused with AI assistance
+- **Kanban Only Mode**: Pure project management
+- Resizable panels with persistence
+- Multi-monitor friendly
 
 ## 🚀 Technology Stack
 
 ### Core Technologies
-- **Nuxt 3** - Vue framework with excellent developer experience
-- **Vue 3** - Reactive UI framework with Composition API
-- **Electron** - Cross-platform desktop application framework
-- **TypeScript** - Type safety throughout the application
-- **Node.js** - Runtime environment
+- **Nuxt 3** - Vue framework with excellent DX
+- **Vue 3** - Reactive UI with Composition API  
+- **Electron** - Cross-platform desktop application
+- **TypeScript** - Type safety throughout
+- **Node.js 22.x LTS** - Runtime environment
 
 ### Editor & UI
-- **CodeMirror 6** - Modern code editor with syntax highlighting
-- **Splitpanes** - Resizable panel layouts
-- **XTerm.js** - Terminal emulator for Claude integration
+- **CodeMirror 6** - Advanced code editing
+- **XTerm.js** - Terminal emulation
+- **Splitpanes** - Flexible layouts
 - **Pinia** - State management
-- **Node-PTY** - Pseudo terminal for Claude CLI communication
+- **gray-matter** - Frontmatter parsing
 
-### Additional Features
-- **Ripgrep** - Fast file searching (with Node.js fallback)
-- **File System Watchers** - Real-time file change detection
-- **Drag & Drop** - Intuitive task management
-- **Icon System** - Material Design Icons
+### Integration
+- **Node-PTY** - Pseudo terminal for Claude
+- **Ripgrep** - Fast file searching
+- **Lunr.js** - Client-side search
+- **File System Watchers** - Real-time updates
+- **JSON-RPC** - MCP protocol communication
 
-## 📸 Layout Modes
+## 📸 Screenshots
 
 ### Full IDE Mode
-<img width="3444" height="1986" alt="image" src="https://github.com/user-attachments/assets/0885f492-6fa1-45c6-9213-fdbd06b3767e" />
-
-
 Complete development environment with all tools integrated:
+- Multi-instance Claude terminals
 - File explorer and editor
-- Claude terminal integration
-- Task management board
-- Global search and replace
+- Knowledge base and task management
+- MCP connections and hooks
 
 ### Kanban + Claude Mode (75/25 split)
-<img width="3444" height="1986" alt="image" src="https://github.com/user-attachments/assets/a6cccc60-8391-4192-ae9b-b228a2713f41" />
-
-
 Perfect for project management with AI assistance:
-- Kanban board for task tracking
+- Large Kanban board for task tracking
 - Claude terminal for AI-powered insights
 - Clean, focused interface
 
 ### Kanban Only Mode
-<img width="3444" height="1986" alt="image" src="https://github.com/user-attachments/assets/7c18a756-27a9-46e7-aae1-01e29bdb2309" />
-
-
 Pure task management experience:
 - Full-screen Kanban board
 - Ideal for project managers
-- Works great alongside external IDEs
+- Works alongside external IDEs
 
 ## 🛠️ Installation
 
@@ -71,13 +111,14 @@ Pure task management experience:
 - **Node.js 20+** (LTS recommended)
 - **Claude Code CLI** installed and configured
 - **Git** for cloning the repository
+- **Ripgrep** (optional, for faster search)
 
 ### Quick Start
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/clode-ide-kanban.git
-   cd clode-ide-kanban
+   git clone https://github.com/yourusername/claude-code-ide-vue.git
+   cd claude-code-ide-vue
    ```
 
 2. **Install dependencies**
@@ -96,40 +137,39 @@ Pure task management experience:
    npm run electron:compile
    ```
 
-5. **Start the application in development mode**
+5. **Start the application**
    ```bash
    npm run electron:dev
    ```
 
 6. **Build for production**
    ```bash
-   npm run build
-   npm run electron:build
+   npm run dist
    ```
 
 ## ⚙️ Configuration
 
 ### Environment Variables
 
-Copy `.env.example` to `.env` and configure:
+Create a `.env` file:
 
 ```env
-# Claude CLI Configuration
-CLAUDE_CLI_PATH=/path/to/claude
-NODE_BIN_PATH=/path/to/node/bin
-
-# Application Settings
+# Application
+APP_NAME=Claude Code IDE
 DEFAULT_WORKSPACE_PATH=/path/to/default/workspace
-APP_NAME=Clode IDE + KANBAN
+
+# Development
+NUXT_PUBLIC_API_BASE=http://localhost:3000
+CLAUDE_DEBUG=false
 ```
 
 ### Claude Code CLI Setup
 
-Ensure Claude Code CLI is installed and accessible:
+Ensure Claude Code CLI is installed:
 
 ```bash
-# Install Claude Code CLI (if not already installed)
-npm install -g @anthropic/claude-code
+# Install Claude Code CLI
+npm install -g claude-code
 
 # Verify installation
 claude --version
@@ -140,138 +180,188 @@ claude --version
 ### Getting Started
 
 1. **Launch the application**
-2. **Select your layout mode** using the mode selector at the top
-3. **Choose a workspace** by clicking "Select Workspace"
-4. **Start coding** with integrated Claude assistance!
+2. **Select workspace** using the folder button
+3. **Choose layout mode** (Full IDE, Kanban+Claude, Kanban Only)
+4. **Start coding** with Claude assistance!
 
-### Layout Modes
+### Multi-Instance Claude
 
-- **Switch modes** using the buttons in the top-right corner
-- **Resize panels** by dragging the split dividers
-- **Settings persist** automatically across sessions
+1. Click **+** to create new instance
+2. Name your instance (e.g., "Frontend", "API")
+3. Select personality from dropdown
+4. Each instance maintains separate context
 
-### Task Management
+### Knowledge Base
 
-- **Create tasks** by clicking the "+" button or right-clicking columns
-- **Drag and drop** to move tasks between columns (To Do, In Progress, Done)
-- **Edit tasks** by clicking on them
-- **Auto-sync** with TASKS.md file in your project
+1. Click **Knowledge** tab
+2. Create entries with **New** button
+3. Use markdown with frontmatter for metadata
+4. Double-click titles to edit inline
+5. Claude automatically accesses your knowledge
 
-### Claude Integration
+### Custom Slash Commands
 
-- **Start Claude** by clicking the play button in the Claude terminal
-- **Interactive chat** directly in the terminal
-- **Workspace context** - Claude knows about your current project
-- **Auto-restart** when switching workspaces
+1. Open **Commands** tab
+2. Browse existing commands
+3. Create new with visual editor
+4. Test commands before saving
+5. Use in any Claude instance
 
-### File Management
+### Hooks Automation
 
-- **Right-click** files/folders for context menu options
-- **Create, rename, delete** files and folders
-- **Global search** with Cmd+Shift+F (or Ctrl+Shift+F)
-- **Search and replace** across all project files
+1. Press **Cmd/Ctrl + Shift + H** for Hook Manager
+2. Add hooks for tool events
+3. Test with simulated events
+4. Enable/disable as needed
 
-## 🔧 Development
+### MCP Servers
 
-### Project Structure
+1. Click **MCP** tab
+2. Browse popular servers
+3. Quick-add with one click
+4. Configure custom servers
+5. Monitor connection status
 
-```
-clode-ide-claude-code-ide-vue/
-├── components/           # Vue components
-│   ├── Editor/          # Code editor components
-│   ├── FileExplorer/    # File tree and management
-│   ├── Kanban/          # Task management board
-│   ├── Layout/          # Application layouts
-│   ├── Search/          # Global search functionality
-│   └── Terminal/        # Claude terminal integration
-├── electron/            # Electron main process
-├── stores/              # Pinia state management
-├── composables/         # Vue composables
-└── shared/              # Shared types and utilities
-```
+## 🔧 Advanced Features
+
+### Personality System
+- **Full Stack**: General development
+- **Frontend/Backend**: Specialized roles
+- **Architect**: System design focus
+- **Plumber**: DevOps and systems
+- **Theorist**: Algorithms and theory
+- **Pedagogue**: Teaching mode
+- **Jester**: Creative problem-solving
+
+### Context Optimization
+- Visual context usage meter
+- Checkpoint creation and restoration
+- Smart file inclusion
+- Context pruning suggestions
+- Memory file integration
+
+### Task Integration
+- Automatic TASKS.md synchronization
+- Drag-and-drop between columns
+- Claude can read/update tasks
+- Visual progress tracking
+- Markdown-based persistence
+
+### Search & Replace
+- Global project search
+- Regex support
+- Multi-file replace
+- Search history
+- Ripgrep integration
+
+## 📚 Documentation
+
+Comprehensive guides available in `/docs`:
+- [Knowledge Base Guide](docs/KNOWLEDGE_BASE_GUIDE.md)
+- [Multi-Instance Guide](docs/MULTI_INSTANCE_GUIDE.md)
+- [Hooks User Guide](docs/HOOKS_USER_GUIDE.md)
+- [Slash Commands Guide](docs/SLASH_COMMANDS_GUIDE.md)
+- [MCP Troubleshooting](docs/MCP_TROUBLESHOOTING.md)
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create feature branch: `git checkout -b feature/amazing-feature`
+3. Commit changes: `git commit -m 'Add amazing feature'`
+4. Push to branch: `git push origin feature/amazing-feature`
+5. Open Pull Request
+
+### Development Guidelines
+
+- Use **TypeScript** for type safety
+- Follow **Vue 3 Composition API** patterns
+- Add **proper error handling**
+- Test in **all layout modes**
+- Update **documentation** for new features
 
 ### Available Scripts
 
 ```bash
 # Development
-npm run electron:compile # Compile TypeScript files for Electron
-npm run electron:dev     # Start Electron application in development mode
-npm run dev              # Start Nuxt dev server only (for web development)
+npm run electron:dev      # Start Electron app in dev mode
+npm run dev              # Start Nuxt dev server only
 
 # Building
 npm run build            # Build Nuxt application
-npm run electron:build   # Build Electron app for distribution
-npm run dist             # Full build pipeline (generate + compile + build)
+npm run electron:build   # Build Electron distributables
+npm run dist            # Complete build pipeline
 
-# Type checking
-npm run typecheck        # Run TypeScript checks
-
-# Linting
-npm run lint             # Run ESLint
-npm run lint:fix         # Fix linting issues
+# Code Quality
+npm run typecheck       # TypeScript type checking
+npm run lint           # ESLint checking
+npm run lint:fix       # Auto-fix linting issues
 ```
-
-### Key Features Implementation
-
-- **Layout Management**: `stores/layout.ts` handles mode switching
-- **Task Persistence**: Tasks sync with `TASKS.md` in project root
-- **File Operations**: Full CRUD operations with confirmation dialogs
-- **Search Integration**: Ripgrep with Node.js fallback for compatibility
-- **Terminal Management**: PTY-based Claude CLI integration
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/amazing-feature`
-3. Commit your changes: `git commit -m 'Add amazing feature'`
-4. Push to the branch: `git push origin feature/amazing-feature`
-5. Open a Pull Request
-
-### Development Guidelines
-
-- Use **TypeScript** for all new code
-- Follow **Vue 3 Composition API** patterns
-- Add **proper error handling** for all operations
-- Include **console logging** for debugging
-- Test in **all three layout modes**
-
-## 📝 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- **Anthropic** for Claude Code CLI
-- **Vue.js team** for the amazing framework
-- **Electron team** for cross-platform desktop apps
-- **CodeMirror** for the excellent editor component
-- **All contributors** who help improve this project
 
 ## 🐛 Troubleshooting
 
 ### Common Issues
 
-**Claude CLI not found**
-- Ensure Claude Code CLI is installed globally
-- Check that the path in `.env` is correct
-- Verify `claude --version` works in terminal
+**Claude not starting**
+- Verify Claude Code CLI is installed
+- Check terminal for error messages
+- Ensure proper permissions
 
-**Terminal sizing issues**
-- Try resizing the window slightly
-- Restart Claude terminal using the stop/start buttons
-- Check browser console for resize debugging logs
+**Knowledge base not loading**
+- Check `.claude/knowledge/` directory exists
+- Verify file permissions
+- Restart the application
 
-**File operations not working**
-- Ensure proper file permissions in workspace
-- Check that the workspace path is accessible
-- Restart the application if file watchers stop working
+**MCP connection failed**
+- Verify server URL/command
+- Check firewall settings
+- Review server logs
 
 **Search not working**
-- Install `ripgrep` for faster search: `brew install ripgrep` (macOS)
-- Node.js fallback will be used if ripgrep is not available
-- Ensure workspace is selected before searching
+- Install ripgrep: `brew install ripgrep` (macOS)
+- Falls back to Node.js search if unavailable
+
+## 📈 Performance Tips
+
+- Close unused Claude instances
+- Use checkpoint system for long sessions
+- Enable context optimization
+- Limit file watchers in large projects
+- Use specific personalities for tasks
+
+## 🔒 Security
+
+- All data stored locally
+- No external API calls (except MCP)
+- Secure IPC communication
+- Sandboxed file operations
+- Environment variable protection
+
+## 📝 License
+
+MIT License - see [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- **Anthropic** for Claude and Claude Code CLI
+- **Vue.js Team** for the amazing framework
+- **Electron Team** for desktop capabilities
+- **CodeMirror** for the editor component
+- **MCP Community** for server ecosystem
+- **All Contributors** who improve this project
+
+## 🚧 Roadmap
+
+- [ ] Plugin system for extensions
+- [ ] Collaborative features
+- [ ] Cloud sync for settings
+- [ ] Mobile companion app
+- [ ] Voice commands
+- [ ] AI-powered code review
+- [ ] Integrated debugging
+- [ ] Performance profiling
 
 ---
 
-**Made with ❤️ for the Claude Code community**
+**Built with ❤️ for the Claude Code community**
 
+For questions, issues, or contributions, please visit our [GitHub repository](https://github.com/yourusername/claude-code-ide-vue).

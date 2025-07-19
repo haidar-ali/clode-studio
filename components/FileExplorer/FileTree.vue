@@ -259,7 +259,6 @@ const onContextMenu = (event: MouseEvent, node: FileNode) => {
   event.preventDefault();
   event.stopPropagation();
   
-  console.log('Context menu triggered for:', node.name, node.path);
   
   contextNode.value = node;
   contextMenuX.value = event.clientX;
@@ -315,7 +314,6 @@ const createNewFolderInRoot = () => {
 };
 
 const createNewFile = async () => {
-  console.log('createNewFile called, contextNode:', contextNode.value);
   hideContextMenu();
   modalMode.value = 'newFile';
   newName.value = 'new-file.txt';
@@ -340,7 +338,6 @@ const createNewFolder = async () => {
 };
 
 const renameItem = () => {
-  console.log('renameItem called, contextNode:', contextNode.value);
   hideContextMenu();
   modalMode.value = 'rename';
   newName.value = contextNode.value?.name || '';
@@ -353,19 +350,12 @@ const renameItem = () => {
 };
 
 const deleteItem = () => {
-  console.log('deleteItem called, contextNode:', contextNode.value);
   hideContextMenu();
   showDeleteModal.value = true;
 };
 
 const confirmRename = async () => {
-  console.log('confirmRename called');
-  console.log('modalMode:', modalMode.value);
-  console.log('contextNode:', contextNode.value);
-  console.log('newName:', newName.value);
-  
   if (!newName.value.trim() || !contextNode.value) {
-    console.log('Early return: missing newName or contextNode');
     return;
   }
   
@@ -373,18 +363,14 @@ const confirmRename = async () => {
     if (modalMode.value === 'newFile') {
       // Create new file
       const newPath = `${contextNode.value.path}/${newName.value}`;
-      console.log('Creating file at:', newPath);
       const result = await window.electronAPI.fs.writeFile(newPath, '');
-      console.log('Create file result:', result);
       if (!result.success) {
         throw new Error(result.error);
       }
     } else if (modalMode.value === 'newFolder') {
       // Create new folder
       const newPath = `${contextNode.value.path}/${newName.value}`;
-      console.log('Creating folder at:', newPath);
       const result = await window.electronAPI.fs.ensureDir(newPath);
-      console.log('Create folder result:', result);
       if (!result.success) {
         throw new Error(result.error);
       }
@@ -393,16 +379,13 @@ const confirmRename = async () => {
       const oldPath = contextNode.value.path;
       const parentDir = oldPath.substring(0, oldPath.lastIndexOf('/'));
       const newPath = `${parentDir}/${newName.value}`;
-      console.log('Renaming from:', oldPath, 'to:', newPath);
       const result = await window.electronAPI.fs.rename(oldPath, newPath);
-      console.log('Rename result:', result);
       if (!result.success) {
         throw new Error(result.error);
       }
     }
     
     // Refresh the directory
-    console.log('Refreshing directory:', currentWorkspacePath.value);
     await loadDirectory(currentWorkspacePath.value);
     
   } catch (error) {
@@ -467,7 +450,6 @@ const loadSavedWorkspace = async () => {
 
 // Handle directory changes
 const handleDirectoryChange = async (data: { path: string; eventType: string; filename: string }) => {
-  console.log('Directory change detected:', data);
   
   // If it's the root workspace
   if (data.path === currentWorkspacePath.value) {

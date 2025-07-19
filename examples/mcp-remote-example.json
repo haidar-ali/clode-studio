@@ -1,0 +1,49 @@
+{
+  "// This is an example MCP configuration for Claude Code IDE": "",
+  "// It shows how to configure both local (stdio) and remote (SSE/HTTP) servers": "",
+  
+  "mcpServers": {
+    "filesystem": {
+      "name": "filesystem",
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem"],
+      "description": "Local filesystem access"
+    },
+    
+    "context7-sse": {
+      "name": "context7",
+      "type": "sse",
+      "url": "https://mcp.context7.com/sse",
+      "description": "Real-time library documentation (SSE)"
+    },
+    
+    "context7-http": {
+      "name": "context7-http",
+      "type": "http",
+      "url": "https://mcp.context7.com/mcp",
+      "description": "Library documentation (Streamable HTTP)"
+    },
+    
+    "github": {
+      "name": "github",
+      "type": "stdio",
+      "command": "mcp-server-github",
+      "env": {
+        "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+      },
+      "description": "GitHub API access"
+    },
+    
+    "custom-remote": {
+      "name": "my-custom-mcp",
+      "type": "http",
+      "url": "https://my-api.example.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${API_TOKEN}",
+        "X-Custom-Header": "custom-value"
+      },
+      "description": "Example of custom remote MCP with authentication"
+    }
+  }
+}

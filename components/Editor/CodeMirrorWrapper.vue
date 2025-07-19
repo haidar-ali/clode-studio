@@ -46,10 +46,7 @@ const createEditorExtensions = (filename?: string): any[] => {
         mac: 'Cmd-s',
         run: () => {
           if (activeTab.value) {
-            console.log('Saving file:', activeTab.value.name);
-            editorStore.saveTab(activeTab.value.id).then(() => {
-              console.log('File saved successfully');
-            }).catch((error) => {
+            editorStore.saveTab(activeTab.value.id).catch((error) => {
               console.error('Save failed:', error);
             });
           }
@@ -116,9 +113,7 @@ const createEditorExtensions = (filename?: string): any[] => {
     const languageSupport = getLanguageSupport(filename);
     if (languageSupport) {
       extensions.push(languageSupport);
-      console.log(`Loaded language support for ${filename}: ${getLanguageName(filename)}`);
-    } else {
-      console.log(`No specific language support for ${filename}, using plain text`);
+      // Language support loaded
     }
   }
 
@@ -130,8 +125,6 @@ onMounted(async () => {
   if (!process.client || !editorContainer.value) return;
   
   try {
-    console.log('Initializing CodeMirror 6...');
-    
     const state = EditorState.create({
       doc: '',
       extensions: createEditorExtensions(activeTab.value?.name)
@@ -141,8 +134,6 @@ onMounted(async () => {
       state,
       parent: editorContainer.value
     });
-    
-    console.log('CodeMirror 6 initialized successfully!');
     
     // Load initial content if there's an active tab
     if (activeTab.value) {
@@ -159,7 +150,6 @@ const setEditorContent = (tab: any) => {
   if (!editorView) return;
   
   try {
-    console.log('CodeMirror: Setting content for tab:', tab.name);
     const content = tab.content || '';
     
     isSettingContent = true;
@@ -173,7 +163,6 @@ const setEditorContent = (tab: any) => {
     });
     
     editorView.dispatch(transaction);
-    console.log('CodeMirror: Content set successfully');
     
     // Reset flag after a short delay
     setTimeout(() => {
@@ -189,7 +178,6 @@ const setEditorContent = (tab: any) => {
 // Watch for tab changes
 watch(activeTab, async (newTab, oldTab) => {
   if (newTab && editorView) {
-    console.log('CodeMirror: Tab changed to:', newTab.name);
     await nextTick();
     
     // Check if we need to update the language support
@@ -198,8 +186,6 @@ watch(activeTab, async (newTab, oldTab) => {
     
     if (newExt !== oldExt || !oldTab) {
       // Recreate editor with new language support
-      console.log('Reconfiguring editor for new language...');
-      
       // Save current scroll position
       const scrollTop = editorView.scrollDOM.scrollTop;
       
@@ -235,7 +221,6 @@ watch(
       const currentContent = editorView.state.doc.toString();
       // Only update if content is different and we're not currently typing
       if (newContent !== currentContent && !isSettingContent) {
-        console.log('CodeMirror: External content change detected');
         setEditorContent(activeTab.value);
       }
     }

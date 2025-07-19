@@ -15,10 +15,8 @@ export const useChatStore = defineStore('chat', {
       // Get the current working directory from stored workspace
       const storedWorkspace = await window.electronAPI?.store?.get('workspacePath');
       if (storedWorkspace && typeof storedWorkspace === 'string') {
-        console.log('Using stored workspace:', storedWorkspace);
         this.workingDirectory = storedWorkspace;
       } else {
-        console.log('No stored workspace, using default directory');
         this.workingDirectory = process.env.DEFAULT_WORKSPACE_PATH || process.cwd();
       }
     },
@@ -26,19 +24,13 @@ export const useChatStore = defineStore('chat', {
     async startClaude() {
       if (this.claudeStatus !== 'disconnected') return;
       
-      console.log('Starting Claude CLI...');
-      
       // Initialize working directory if not set
       if (!this.workingDirectory) {
         await this.init();
       }
       
-      console.log('Working directory:', this.workingDirectory);
-      
       this.claudeStatus = 'connecting';
       const result = await window.electronAPI.claude.start(this.workingDirectory);
-      
-      console.log('Claude start result:', result);
       
       if (result.success) {
         this.claudeStatus = 'connected';
@@ -51,8 +43,6 @@ export const useChatStore = defineStore('chat', {
     },
 
     setupClaudeListeners() {
-      console.log('Setting up Claude listeners...');
-      
       window.electronAPI.claude.onOutput((data: string) => {
         // Don't log every character from the terminal
         // console.log('Received Claude output:', data);
@@ -60,12 +50,10 @@ export const useChatStore = defineStore('chat', {
       });
 
       window.electronAPI.claude.onError((data: string) => {
-        console.log('Received Claude error:', data);
         this.addSystemMessage(data, true);
       });
 
       window.electronAPI.claude.onExit((code: number | null) => {
-        console.log('Claude process exited with code:', code);
         this.claudeStatus = 'disconnected';
         this.addSystemMessage(`Claude process exited with code ${code}`);
       });
@@ -74,10 +62,6 @@ export const useChatStore = defineStore('chat', {
     async sendMessage(content: string) {
       if (this.claudeStatus !== 'connected' || !content.trim()) return;
       
-      // Only log actual messages, not every keystroke
-      if (content.trim()) {
-        console.log('Sending message to Claude');
-      }
       this.addUserMessage(content);
       this.isProcessing = true;
       
@@ -164,13 +148,11 @@ export const useChatStore = defineStore('chat', {
     },
 
     async updateWorkingDirectory(path: string) {
-      console.log('Updating working directory to:', path);
       this.workingDirectory = path;
       
       // Don't auto-restart Claude - let user manually restart when ready
       // This prevents race conditions and gives better control
       if (this.claudeStatus === 'connected') {
-        console.log('Claude was running, stopped for workspace switch. Click Start to restart.');
         await this.stopClaude();
       }
     }
