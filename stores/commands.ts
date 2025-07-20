@@ -398,6 +398,19 @@ export const useCommandsStore = defineStore('commands', {
         icon: 'mdi:slash-forward'
       });
 
+      // Prompt Engineering Studio
+      this.registerCommand({
+        name: 'prompts',
+        description: 'Open prompt engineering studio',
+        category: 'system',
+        aliases: ['prompt', 'studio'],
+        handler: () => {
+          // Switch to prompts tab in bottom panel
+          window.dispatchEvent(new CustomEvent('switch-bottom-tab', { detail: { tab: 'prompts' } }));
+        },
+        icon: 'heroicons:sparkles'
+      });
+
       // Session Commands
       this.registerCommand({
         name: 'session',

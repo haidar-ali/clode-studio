@@ -27,6 +27,14 @@
           <span>Stop</span>
         </button>
         <button
+          @click="toggleChatInput"
+          class="icon-button"
+          :class="{ active: showChatInput }"
+          title="Toggle chat input"
+        >
+          <Icon name="heroicons:chat-bubble-left-right" size="16" />
+        </button>
+        <button
           @click="clearTerminal"
           class="icon-button"
           title="Clear terminal"
@@ -37,6 +45,13 @@
     </div>
     
     <div ref="terminalElement" class="terminal-content"></div>
+    
+    <!-- Chat Input Overlay -->
+    <TerminalChatInput 
+      :isVisible="showChatInput" 
+      :instanceId="instance.id"
+      @close="showChatInput = false"
+    />
   </div>
 </template>
 
@@ -49,6 +64,7 @@ import { useClaudeInstancesStore } from '~/stores/claude-instances';
 import { useContextManager } from '~/composables/useContextManager';
 import { useCommandsStore } from '~/stores/commands';
 import PersonalitySelector from './PersonalitySelector.vue';
+import TerminalChatInput from './TerminalChatInput.vue';
 import 'xterm/css/xterm.css';
 
 const props = defineProps<{
@@ -63,6 +79,7 @@ const instancesStore = useClaudeInstancesStore();
 const contextManager = useContextManager();
 const commandsStore = useCommandsStore();
 const terminalElement = ref<HTMLElement>();
+const showChatInput = ref(false);
 
 // Command handling state
 const currentInputLine = ref('');
@@ -433,6 +450,10 @@ const clearTerminal = () => {
     // Don't auto-show welcome message, let user decide when to start
     terminal.writeln('\x1b[90mTerminal cleared. Click Start to launch Claude CLI.\x1b[0m\r\n');
   }
+};
+
+const toggleChatInput = () => {
+  showChatInput.value = !showChatInput.value;
 };
 
 

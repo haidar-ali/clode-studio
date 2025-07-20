@@ -13,6 +13,8 @@ import { contextOptimizer } from './context-optimizer.js';
 import { workspacePersistence } from './workspace-persistence.js';
 import { claudeSettingsManager } from './claude-settings-manager.js';
 import { ClaudeDetector } from './claude-detector.js';
+import { fileWatcherService } from './file-watcher.js';
+import { createKnowledgeCache } from './knowledge-cache.js';
 
 // Load environment variables from .env file
 import { config } from 'dotenv';
@@ -28,6 +30,9 @@ const fileDebounceTimers: Map<string, NodeJS.Timeout> = new Map();
 
 // Multi-instance Claude support
 const claudeInstances: Map<string, pty.IPty> = new Map();
+
+// Knowledge cache instances per workspace
+const knowledgeCaches: Map<string, any> = new Map();
 
 const isDev = process.env.NODE_ENV !== 'production';
 const nuxtURL = isDev ? 'http://localhost:3000' : `file://${join(__dirname, '../.output/public/index.html')}`;
@@ -201,6 +206,139 @@ ipcMain.handle('claude:resize', async (event, instanceId: string, cols: number, 
 // Get home directory
 ipcMain.handle('getHomeDir', () => {
   return homedir();
+});
+
+// File Watcher operations
+ipcMain.handle('fileWatcher:start', async (event, dirPath: string, options?: any) => {
+  try {
+    await fileWatcherService.watchDirectory(dirPath, options);
+    
+    // Set up event forwarding to renderer
+    fileWatcherService.on('file:change', (data) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('file:change', data);
+      }
+    });
+    
+    fileWatcherService.on('batch:change', (data) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('batch:change', data);
+      }
+    });
+    
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('fileWatcher:stop', async (event, dirPath: string) => {
+  try {
+    await fileWatcherService.unwatchDirectory(dirPath);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('fileWatcher:indexFile', async (event, filePath: string) => {
+  try {
+    const result = await fileWatcherService.performIncrementalIndex(filePath, 'change');
+    return { success: true, data: result };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('fileWatcher:getStats', () => {
+  try {
+    const stats = fileWatcherService.getStatistics();
+    return { success: true, stats };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+// Knowledge Cache operations
+ipcMain.handle('knowledgeCache:recordQuery', async (event, workspacePath: string, metrics: any) => {
+  try {
+    let cache = knowledgeCaches.get(workspacePath);
+    if (!cache) {
+      cache = createKnowledgeCache(workspacePath);
+      knowledgeCaches.set(workspacePath, cache);
+    }
+    
+    await cache.learnFromQuery(
+      metrics.query,
+      metrics.result || {},
+      metrics.responseTime,
+      metrics.success
+    );
+    
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('knowledgeCache:getStats', async (event, workspacePath: string) => {
+  try {
+    let cache = knowledgeCaches.get(workspacePath);
+    if (!cache) {
+      cache = createKnowledgeCache(workspacePath);
+      knowledgeCaches.set(workspacePath, cache);
+    }
+    
+    const stats = cache.getStatistics();
+    return { success: true, stats };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('knowledgeCache:predict', async (event, workspacePath: string, context: any) => {
+  try {
+    let cache = knowledgeCaches.get(workspacePath);
+    if (!cache) {
+      cache = createKnowledgeCache(workspacePath);
+      knowledgeCaches.set(workspacePath, cache);
+    }
+    
+    const predictions = await cache.predictNextQueries(context);
+    return { success: true, predictions };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('knowledgeCache:clear', async (event, workspacePath: string) => {
+  try {
+    let cache = knowledgeCaches.get(workspacePath);
+    if (!cache) {
+      cache = createKnowledgeCache(workspacePath);
+      knowledgeCaches.set(workspacePath, cache);
+    }
+    
+    await cache.clear();
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('knowledgeCache:invalidate', async (event, workspacePath: string, pattern?: string, tags?: string[]) => {
+  try {
+    let cache = knowledgeCaches.get(workspacePath);
+    if (!cache) {
+      cache = createKnowledgeCache(workspacePath);
+      knowledgeCaches.set(workspacePath, cache);
+    }
+    
+    const count = await cache.invalidate(pattern, tags);
+    return { success: true, count };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
 });
 
 // File System operations

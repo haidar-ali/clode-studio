@@ -30,7 +30,8 @@ export const useTasksStore = defineStore('tasks', {
     isAutoSaveEnabled: true,
     lastSyncedWithClaude: null as Date | null,
     claudeNativeTodos: [] as Array<{content: string, status: string, priority: string, id: string}>,
-    isImportingFromFile: false
+    isImportingFromFile: false,
+    isInitialized: false
   }),
 
   getters: {
@@ -67,6 +68,21 @@ export const useTasksStore = defineStore('tasks', {
   actions: {
     setProjectPath(path: string) {
       this.projectPath = path;
+    },
+
+    // Initialize the store
+    async initialize(projectPath?: string) {
+      if (projectPath) {
+        this.projectPath = projectPath;
+      }
+      
+      // Mark as initialized
+      this.isInitialized = true;
+      
+      // Load tasks if we have a project path
+      if (this.projectPath) {
+        await this.loadTasksFromProject();
+      }
     },
 
     // Add task from user input

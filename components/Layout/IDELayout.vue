@@ -96,6 +96,13 @@
                 <Icon name="mdi:slash-forward" size="16" />
                 Commands
               </button>
+              <button
+                :class="{ active: bottomTab === 'prompts' }"
+                @click="bottomTab = 'prompts'"
+              >
+                <Icon name="heroicons:sparkles" size="16" />
+                Prompts
+              </button>
             </div>
             <div class="tab-content">
               <KanbanBoard v-if="bottomTab === 'tasks'" />
@@ -103,7 +110,8 @@
               <MCPManager v-else-if="bottomTab === 'mcp'" />
               <ContextPanel v-else-if="bottomTab === 'context'" />
               <KnowledgePanel v-else-if="bottomTab === 'knowledge'" />
-              <CommandStudio v-else />
+              <CommandStudio v-else-if="bottomTab === 'commands'" />
+              <PromptStudio v-else />
             </div>
           </div>
         </Pane>
@@ -184,6 +192,13 @@
                 <Icon name="mdi:slash-forward" size="16" />
                 Commands
               </button>
+              <button
+                :class="{ active: bottomTab === 'prompts' }"
+                @click="bottomTab = 'prompts'"
+              >
+                <Icon name="heroicons:sparkles" size="16" />
+                Prompts
+              </button>
             </div>
             <div class="tab-content">
               <KanbanBoard v-if="bottomTab === 'tasks'" />
@@ -191,7 +206,8 @@
               <MCPManager v-else-if="bottomTab === 'mcp'" />
               <ContextPanel v-else-if="bottomTab === 'context'" />
               <KnowledgePanel v-else-if="bottomTab === 'knowledge'" />
-              <CommandStudio v-else />
+              <CommandStudio v-else-if="bottomTab === 'commands'" />
+              <PromptStudio v-else />
             </div>
           </div>
         </Pane>
@@ -255,6 +271,13 @@
                 <Icon name="mdi:slash-forward" size="16" />
                 Commands
               </button>
+              <button
+                :class="{ active: bottomTab === 'prompts' }"
+                @click="bottomTab = 'prompts'"
+              >
+                <Icon name="heroicons:sparkles" size="16" />
+                Prompts
+              </button>
             </div>
             <div class="tab-content">
               <KanbanBoard v-if="bottomTab === 'tasks'" />
@@ -262,7 +285,8 @@
               <MCPManager v-else-if="bottomTab === 'mcp'" />
               <ContextPanel v-else-if="bottomTab === 'context'" />
               <KnowledgePanel v-else-if="bottomTab === 'knowledge'" />
-              <CommandStudio v-else />
+              <CommandStudio v-else-if="bottomTab === 'commands'" />
+              <PromptStudio v-else />
             </div>
           </div>
         </Pane>
@@ -323,6 +347,7 @@ import HookManagerModal from '~/components/Hooks/HookManagerModal.vue';
 import SettingsModal from '~/components/Settings/SettingsModal.vue';
 import KnowledgePanel from '~/components/Knowledge/KnowledgePanel.vue';
 import CommandStudio from '~/components/Commands/CommandStudio.vue';
+import PromptStudio from '~/components/Prompts/PromptStudio.vue';
 
 const editorStore = useEditorStore();
 const tasksStore = useTasksStore();
@@ -330,7 +355,7 @@ const layoutStore = useLayoutStore();
 const mcpStore = useMCPStore();
 const contextManager = useContextManager();
 const commandsStore = useCommandsStore();
-const bottomTab = ref<'tasks' | 'terminal' | 'mcp' | 'context' | 'knowledge'>('tasks');
+const bottomTab = ref<'tasks' | 'terminal' | 'mcp' | 'context' | 'knowledge' | 'prompts'>('tasks');
 const showGlobalSearch = ref(false);
 
 const activeTab = computed(() => editorStore.activeTab);
@@ -419,6 +444,10 @@ onMounted(async () => {
   
   window.addEventListener('show-knowledge-panel', () => {
     bottomTab.value = 'knowledge';
+  });
+  
+  window.addEventListener('show-prompts-panel', () => {
+    bottomTab.value = 'prompts';
   });
   
   window.addEventListener('show-context-modal', () => {

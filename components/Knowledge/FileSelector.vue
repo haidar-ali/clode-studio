@@ -416,6 +416,7 @@ onUnmounted(() => {
 .file-name {
   font-size: 13px;
   font-weight: 500;
+  color: #cccccc;
 }
 
 .file-path {

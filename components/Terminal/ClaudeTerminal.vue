@@ -22,6 +22,14 @@
           <span>Stop</span>
         </button>
         <button
+          @click="toggleChatInput"
+          class="icon-button"
+          :class="{ active: showChatInput }"
+          title="Toggle chat input"
+        >
+          <Icon name="heroicons:chat-bubble-left-right" size="16" />
+        </button>
+        <button
           @click="clearTerminal"
           class="icon-button"
           title="Clear terminal"
@@ -32,6 +40,13 @@
     </div>
     
     <div ref="terminalElement" class="terminal-content"></div>
+    
+    <!-- Chat Input Overlay -->
+    <TerminalChatInput 
+      :isVisible="showChatInput" 
+      :instanceId="instanceId"
+      @close="showChatInput = false"
+    />
   </div>
 </template>
 
@@ -41,10 +56,16 @@ import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { useChatStore } from '~/stores/chat';
 import { useTaskMonitor } from '~/composables/useTaskMonitor';
+import TerminalChatInput from './TerminalChatInput.vue';
 import 'xterm/css/xterm.css';
+
+const props = defineProps<{
+  instanceId: string;
+}>();
 
 const chatStore = useChatStore();
 const terminalElement = ref<HTMLElement>();
+const showChatInput = ref(false);
 
 let terminal: Terminal | null = null;
 let fitAddon: FitAddon | null = null;
@@ -309,6 +330,10 @@ const clearTerminal = () => {
   if (terminal) {
     terminal.clear();
   }
+};
+
+const toggleChatInput = () => {
+  showChatInput.value = !showChatInput.value;
 };
 
 // Handle Claude stopped event from store

@@ -107,6 +107,37 @@ const electronAPI = {
     selectFile: () => ipcRenderer.invoke('dialog:selectFile')
   },
   getHomeDir: () => ipcRenderer.invoke('getHomeDir'),
+  
+  // File Watcher operations
+  fileWatcher: {
+    start: (dirPath: string, options?: any) => ipcRenderer.invoke('fileWatcher:start', dirPath, options),
+    stop: (dirPath: string) => ipcRenderer.invoke('fileWatcher:stop', dirPath),
+    indexFile: (filePath: string) => ipcRenderer.invoke('fileWatcher:indexFile', filePath),
+    getStats: () => ipcRenderer.invoke('fileWatcher:getStats')
+  },
+  
+  // File change events
+  onFileChange: (callback: (event: any) => void) => {
+    ipcRenderer.on('file:change', (_, data) => callback(data));
+  },
+  onBatchChange: (callback: (event: any) => void) => {
+    ipcRenderer.on('batch:change', (_, data) => callback(data));
+  },
+  
+  // Knowledge Cache operations
+  knowledgeCache: {
+    recordQuery: (workspacePath: string, metrics: any) => 
+      ipcRenderer.invoke('knowledgeCache:recordQuery', workspacePath, metrics),
+    getStats: (workspacePath: string) => 
+      ipcRenderer.invoke('knowledgeCache:getStats', workspacePath),
+    predict: (workspacePath: string, context: any) => 
+      ipcRenderer.invoke('knowledgeCache:predict', workspacePath, context),
+    clear: (workspacePath: string) => 
+      ipcRenderer.invoke('knowledgeCache:clear', workspacePath),
+    invalidate: (workspacePath: string, pattern?: string, tags?: string[]) => 
+      ipcRenderer.invoke('knowledgeCache:invalidate', workspacePath, pattern, tags)
+  },
+  
   search: {
     findInFiles: (options: {
       query: string;
