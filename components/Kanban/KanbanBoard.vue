@@ -257,7 +257,7 @@ const closeModal = () => {
 
 const createNewProject = async () => {
   try {
-    const projectPath = tasksStore.projectPath || process.env.DEFAULT_WORKSPACE_PATH || process.cwd();
+    const projectPath = tasksStore.projectPath || '';
     const projectInstructionsPath = `${projectPath}/PROJECT_INSTRUCTIONS.md`;
     const taskInstructionsPath = `${projectPath}/TASK_INSTRUCTIONS.md`;
     
@@ -385,7 +385,7 @@ Each task in TASKS.md should include the following metadata:
 \`\`\`markdown
 # Project Tasks
 
-*This file is synced with Claude Code IDE and Claude's native TodoWrite system.*  
+*This file is synced with Clode Studio and Claude's native TodoWrite system.*  
 *Last updated: [timestamp]*
 
 ## Backlog ([count])
@@ -469,7 +469,7 @@ Each task in TASKS.md should include the following metadata:
 
 ## Integration with IDE
 
-The Claude Code IDE will:
+The Clode Studio will:
 - Automatically detect changes to TASKS.md
 - Update the visual Kanban board in real-time
 - Allow drag-and-drop task management
@@ -524,7 +524,7 @@ Remember: Good task management helps maintain project clarity and progress visib
 
 const openTasksFile = async () => {
   try {
-    const tasksPath = `${tasksStore.projectPath || process.env.DEFAULT_WORKSPACE_PATH || process.cwd()}/TASKS.md`;
+    const tasksPath = `${tasksStore.projectPath || ''}/TASKS.md`;
     const editorStore = useEditorStore();
     await editorStore.openFile(tasksPath);
   } catch (error) {
@@ -535,7 +535,7 @@ const openTasksFile = async () => {
 
 const createTaskInstructions = async () => {
   try {
-    const instructionsPath = `${tasksStore.projectPath || process.env.DEFAULT_WORKSPACE_PATH || process.cwd()}/TASK_INSTRUCTIONS.md`;
+    const instructionsPath = `${tasksStore.projectPath || ''}/TASK_INSTRUCTIONS.md`;
     
     const instructions = `# Task Management Instructions for Claude
 
@@ -563,7 +563,7 @@ Each task in TASKS.md should include the following metadata:
 \`\`\`markdown
 # Project Tasks
 
-*This file is synced with Claude Code IDE and Claude's native TodoWrite system.*  
+*This file is synced with Clode Studio and Claude's native TodoWrite system.*  
 *Last updated: [timestamp]*
 
 ## Backlog ([count])
@@ -647,7 +647,7 @@ Each task in TASKS.md should include the following metadata:
 
 ## Integration with IDE
 
-The Claude Code IDE will:
+The Clode Studio will:
 - Automatically detect changes to TASKS.md
 - Update the visual Kanban board in real-time
 - Allow drag-and-drop task management

@@ -43,13 +43,15 @@ function createWindow() {
     height: 1000,
     minWidth: 1200,
     minHeight: 800,
+    title: 'Clode Studio',
     webPreferences: {
       preload: join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
       webSecurity: !isDev
     },
-    titleBarStyle: 'hiddenInset',
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
+    trafficLightPosition: { x: 15, y: 13 }, // macOS traffic light position
     backgroundColor: '#1e1e1e',
     show: false
   });
@@ -625,6 +627,25 @@ ipcMain.handle('dialog:selectFile', async () => {
     return { success: true, path: result.filePaths[0] };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('dialog:showOpenDialog', async (event, options) => {
+  try {
+    const result = await dialog.showOpenDialog(mainWindow!, options);
+    return result;
+  } catch (error) {
+    return { canceled: true, filePaths: [] };
+  }
+});
+
+// Claude installation detection
+ipcMain.handle('claude:detectInstallation', async () => {
+  try {
+    const claudeInfo = await ClaudeDetector.detectClaude();
+    return { success: true, info: claudeInfo };
+  } catch (error) {
+    return { success: false };
   }
 });
 

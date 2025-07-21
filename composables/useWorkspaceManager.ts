@@ -96,6 +96,12 @@ export function useWorkspaceManager() {
       // Store the workspace path
       await window.electronAPI.store.set('workspacePath', path);
       
+      // Update recent workspaces if this is not the default workspace
+      const defaultPath = await window.electronAPI.store.get('workspace.lastPath');
+      if (path !== defaultPath) {
+        await updateRecentWorkspaces(path);
+      }
+      
       console.log('Workspace changed successfully to:', path);
       
     } catch (error) {
@@ -104,6 +110,31 @@ export function useWorkspaceManager() {
     } finally {
       isChangingWorkspace.value = false;
     }
+  };
+
+  const updateRecentWorkspaces = async (workspace: string) => {
+    interface RecentWorkspace {
+      path: string;
+      lastAccessed: string;
+    }
+    
+    // Get current recent workspaces
+    let recent: RecentWorkspace[] = await window.electronAPI.store.get('workspace.recent') || [];
+    
+    // Remove this workspace if it already exists
+    recent = recent.filter((w: RecentWorkspace) => w.path !== workspace);
+    
+    // Add to the beginning
+    recent.unshift({
+      path: workspace,
+      lastAccessed: new Date().toISOString()
+    });
+    
+    // Keep only the last 5
+    recent = recent.slice(0, 5);
+    
+    // Save back
+    await window.electronAPI.store.set('workspace.recent', recent);
   };
 
   const selectWorkspace = async () => {

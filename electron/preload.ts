@@ -13,6 +13,14 @@ const electronAPI = {
       };
     }> => 
       ipcRenderer.invoke('claude:start', instanceId, workingDirectory, instanceName),
+    detectInstallation: (): Promise<{
+      success: boolean;
+      info?: {
+        path: string;
+        version: string;
+        source: string;
+      };
+    }> => ipcRenderer.invoke('claude:detectInstallation'),
     send: (instanceId: string, command: string) => 
       ipcRenderer.invoke('claude:send', instanceId, command),
     stop: (instanceId: string) => 
@@ -104,7 +112,8 @@ const electronAPI = {
   },
   dialog: {
     selectFolder: () => ipcRenderer.invoke('dialog:selectFolder'),
-    selectFile: () => ipcRenderer.invoke('dialog:selectFile')
+    selectFile: () => ipcRenderer.invoke('dialog:selectFile'),
+    showOpenDialog: (options: any) => ipcRenderer.invoke('dialog:showOpenDialog', options)
   },
   getHomeDir: () => ipcRenderer.invoke('getHomeDir'),
   

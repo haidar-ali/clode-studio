@@ -169,6 +169,15 @@ const hookTemplates: HookTemplate[] = [
     event: 'PostToolUse',
     matcher: 'Edit',
     command: 'git add "$FILE_PATH" 2>/dev/null || true'
+  },
+  {
+    id: 'update-tasks',
+    name: 'Update TASKS.md',
+    description: 'Remind Claude to update TASKS.md when finishing tasks',
+    icon: 'mdi:checkbox-marked-circle',
+    event: 'Stop',
+    matcher: '',
+    command: 'echo -e "\\n\\033[33mREMINDER: If you completed any tasks, please update TASKS.md to reflect the current status!\\033[0m\\n"'
   }
 ];
 

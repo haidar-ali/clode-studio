@@ -402,7 +402,7 @@ export const useKnowledgeStore = defineStore('knowledge', {
     },
 
     async createSampleEntry() {
-      const sampleContent = `# Welcome to Claude Code IDE Knowledge Base
+      const sampleContent = `# Welcome to Clode Studio Knowledge Base
 
 This is your personal knowledge base where you can store project-specific information, documentation, and notes that Claude can reference.
 

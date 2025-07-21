@@ -2,7 +2,7 @@
   <div class="mode-selector">
     <div class="title-area">
       <Icon name="mdi:view-dashboard" class="logo-icon" />
-      <span class="app-title">Clode IDE + KANBAN</span>
+      <span class="app-title">Clode Studio</span>
     </div>
     
     <div class="mode-group">
@@ -63,7 +63,7 @@ const setMode = (mode: LayoutMode) => {
   padding: 8px 16px;
   background: #252526;
   border-bottom: 1px solid #3e3e42;
-  -webkit-app-region: no-drag; /* Prevent dragging on macOS */
+  -webkit-app-region: drag; /* Allow dragging the window */
 }
 
 .mode-group {
@@ -72,6 +72,7 @@ const setMode = (mode: LayoutMode) => {
   border-radius: 6px;
   padding: 2px;
   gap: 2px;
+  -webkit-app-region: no-drag; /* Make buttons clickable */
 }
 
 .mode-button {

@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Claude Code IDE Knowledge Base is an intelligent documentation system that allows you to create, organize, and maintain project-specific knowledge that Claude can reference during your coding sessions.
+The Clode Studio Knowledge Base is an intelligent documentation system that allows you to create, organize, and maintain project-specific knowledge that Claude can reference during your coding sessions.
 
 ## Features
 

@@ -1,6 +1,6 @@
 # Project Tasks
 
-*This file is synced with Claude Code IDE and Claude's native TodoWrite system.*  
+*This file is synced with Clode Studio and Claude's native TodoWrite system.*  
 *Last updated: 2025-01-19T21:30:00.000Z*
 
 ## Backlog (9)
@@ -363,4 +363,4 @@
   - ~~Files: stores/layout.ts, components/Layout/ModeSelector.vue, components/Layout/IDELayout.vue~~
 
 ---
-*To update tasks, use the Kanban board in Claude Code IDE, ask Claude to modify this file, or use Claude's native TodoWrite system.*
+*To update tasks, use the Kanban board in Clode Studio, ask Claude to modify this file, or use Claude's native TodoWrite system.*

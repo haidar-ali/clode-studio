@@ -2,7 +2,7 @@
 
 ## Overview
 
-Claude Code IDE supports running multiple Claude instances simultaneously, allowing you to work on different tasks or contexts in parallel. Each instance maintains its own context, personality, and working directory.
+Clode Studio supports running multiple Claude instances simultaneously, allowing you to work on different tasks or contexts in parallel. Each instance maintains its own context, personality, and working directory.
 
 ## Features
 

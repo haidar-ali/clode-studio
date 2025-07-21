@@ -8,6 +8,21 @@ html, body, #__nuxt {
   height: 100vh;
   overflow: hidden;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  color: #d4d4d4;
+  background: #1e1e1e;
+}
+
+/* Window dragging styles */
+button,
+input,
+select,
+textarea,
+a,
+.icon-button,
+.mode-button,
+.tab-item,
+.close-button {
+  -webkit-app-region: no-drag;
 }
 
 .ide-container {
@@ -72,4 +87,143 @@ html, body, #__nuxt {
   align-items: center;
   padding: 0 10px;
   font-size: 12px;
+}
+
+/* Modal Global Styles - Ensure proper text color */
+.modal-overlay {
+  color: #cccccc;
+}
+
+.modal-container,
+.modal-content {
+  color: #cccccc;
+}
+
+/* Ensure all text elements in modals have proper color */
+.modal-container *,
+.modal-content * {
+  color: inherit;
+}
+
+/* Override for specific elements that need different colors */
+.modal-container h1,
+.modal-container h2,
+.modal-container h3,
+.modal-container h4,
+.modal-container h5,
+.modal-container h6,
+.modal-content h1,
+.modal-content h2,
+.modal-content h3,
+.modal-content h4,
+.modal-content h5,
+.modal-content h6 {
+  color: #ffffff;
+}
+
+/* Ensure form elements have proper styling */
+.modal-container input,
+.modal-container textarea,
+.modal-container select,
+.modal-content input,
+.modal-content textarea,
+.modal-content select {
+  background: #2d2d30;
+  color: #cccccc;
+  border: 1px solid #454545;
+}
+
+.modal-container input::placeholder,
+.modal-container textarea::placeholder,
+.modal-content input::placeholder,
+.modal-content textarea::placeholder {
+  color: #858585;
+}
+
+/* Ensure buttons in modals have proper styling */
+.modal-container button,
+.modal-content button {
+  color: #cccccc;
+}
+
+.modal-container button:hover,
+.modal-content button:hover {
+  color: #ffffff;
+}
+
+/* Fix for any components that might have missing color inheritance */
+.memory-editor,
+.session-browser,
+.hook-manager,
+.settings-panel {
+  color: #cccccc;
+}
+
+/* Ensure all paragraphs and divs in modals have proper color */
+.modal-overlay p,
+.modal-overlay div,
+.modal-container p,
+.modal-container div,
+.modal-content p,
+.modal-content div {
+  color: inherit;
+}
+
+/* Fix for any labels or spans that might default to black */
+.modal-overlay label,
+.modal-overlay span,
+.modal-container label,
+.modal-container span,
+.modal-content label,
+.modal-content span {
+  color: inherit;
+}
+
+/* Ensure code blocks and pre elements have proper styling */
+.modal-container pre,
+.modal-container code,
+.modal-content pre,
+.modal-content code {
+  background: #2d2d30;
+  color: #d4d4d4;
+}
+
+/* Fix for table elements in modals */
+.modal-container table,
+.modal-content table {
+  color: #cccccc;
+}
+
+.modal-container th,
+.modal-content th {
+  color: #ffffff;
+  background: #2d2d30;
+}
+
+.modal-container td,
+.modal-content td {
+  color: #cccccc;
+}
+
+/* IMPORTANT: Ensure modal text is never black - high specificity override */
+body .modal-overlay,
+body .modal-overlay *:not(input):not(textarea):not(select) {
+  color: #cccccc !important;
+}
+
+body .modal-container,
+body .modal-container *:not(input):not(textarea):not(select),
+body .modal-content,
+body .modal-content *:not(input):not(textarea):not(select) {
+  color: inherit !important;
+}
+
+/* Specific fix for any text that might still appear black */
+body .modal-overlay :is(p, div, span, label, li, td, th):not([class*="color-"]) {
+  color: #cccccc !important;
+}
+
+/* Ensure headings are white */
+body .modal-overlay :is(h1, h2, h3, h4, h5, h6) {
+  color: #ffffff !important;
 }

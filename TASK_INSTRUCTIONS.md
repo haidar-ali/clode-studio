@@ -24,7 +24,7 @@ Each task in TASKS.md should include the following metadata:
 ```markdown
 # Project Tasks
 
-*This file is synced with Claude Code IDE and Claude's native TodoWrite system.*  
+*This file is synced with Clode Studio and Claude's native TodoWrite system.*  
 *Last updated: [timestamp]*
 
 ## Backlog ([count])
@@ -108,7 +108,7 @@ Each task in TASKS.md should include the following metadata:
 
 ## Integration with IDE
 
-The Claude Code IDE will:
+The Clode Studio will:
 - Automatically detect changes to TASKS.md
 - Update the visual Kanban board in real-time
 - Allow drag-and-drop task management

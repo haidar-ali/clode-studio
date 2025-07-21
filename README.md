@@ -1,4 +1,4 @@
-# Claude Code IDE
+# Clode Studio
 
 A powerful, modern IDE specifically designed for developers using Claude Code CLI. This IDE provides a comprehensive graphical interface around the Claude Code CLI tool, solving context loss issues in long coding sessions through intelligent features like persistent knowledge base, multi-instance support, visual task management, and context optimization.
 
@@ -46,6 +46,12 @@ A powerful, modern IDE specifically designed for developers using Claude Code CL
 - Tool permission management
 - Live preview and testing
 
+### 🎨 Prompt Studio
+- Build and manage complex prompts with templates
+- Template library
+- Sub-agent designer
+- Resource management
+
 ### 💡 Context Enhancement
 - Visual context meter and optimization
 - Smart checkpointing system
@@ -56,7 +62,6 @@ A powerful, modern IDE specifically designed for developers using Claude Code CL
 ### 🎨 Flexible Layout System
 - **Full IDE Mode**: Complete development environment
 - **Kanban + Claude Mode**: Task-focused with AI assistance
-- **Kanban Only Mode**: Pure project management
 - Resizable panels with persistence
 - Multi-monitor friendly
 
@@ -98,17 +103,11 @@ Perfect for project management with AI assistance:
 - Claude terminal for AI-powered insights
 - Clean, focused interface
 
-### Kanban Only Mode
-Pure task management experience:
-- Full-screen Kanban board
-- Ideal for project managers
-- Works alongside external IDEs
-
 ## 🛠️ Installation
 
 ### Prerequisites
 
-- **Node.js 20+** (LTS recommended)
+- **Node.js 22+** (LTS recommended)
 - **Claude Code CLI** installed and configured
 - **Git** for cloning the repository
 - **Ripgrep** (optional, for faster search)
@@ -117,8 +116,8 @@ Pure task management experience:
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/claude-code-ide-vue.git
-   cd claude-code-ide-vue
+   git clone https://github.com/yourusername/clode-studio.git
+   cd clode-studio
    ```
 
 2. **Install dependencies**
@@ -126,42 +125,22 @@ Pure task management experience:
    npm install
    ```
 
-3. **Set up environment variables**
-   ```bash
-   cp .env.example .env
-   # Edit .env with your configuration
-   ```
-
-4. **Compile Electron TypeScript files**
+3. **Compile Electron TypeScript files**
    ```bash
    npm run electron:compile
    ```
 
-5. **Start the application**
+4. **Start the application**
    ```bash
    npm run electron:dev
    ```
 
-6. **Build for production**
+5. **Build for production**
    ```bash
    npm run dist
    ```
 
 ## ⚙️ Configuration
-
-### Environment Variables
-
-Create a `.env` file:
-
-```env
-# Application
-APP_NAME=Claude Code IDE
-DEFAULT_WORKSPACE_PATH=/path/to/default/workspace
-
-# Development
-NUXT_PUBLIC_API_BASE=http://localhost:3000
-CLAUDE_DEBUG=false
-```
 
 ### Claude Code CLI Setup
 
@@ -181,7 +160,7 @@ claude --version
 
 1. **Launch the application**
 2. **Select workspace** using the folder button
-3. **Choose layout mode** (Full IDE, Kanban+Claude, Kanban Only)
+3. **Choose layout mode** (Full IDE or Kanban+Claude)
 4. **Start coding** with Claude assistance!
 
 ### Multi-Instance Claude
@@ -206,6 +185,14 @@ claude --version
 3. Create new with visual editor
 4. Test commands before saving
 5. Use in any Claude instance
+
+### Prompt Engineering
+
+1. Open **Prompt Studio** tab
+2. Build complex prompts with templates
+3. Design sub-agents for specialized tasks
+4. Manage prompt resources
+5. Save to template library
 
 ### Hooks Automation
 
@@ -283,6 +270,7 @@ Comprehensive guides available in `/docs`:
 
 ```bash
 # Development
+npm run electron:compile. # Compile Electron app
 npm run electron:dev      # Start Electron app in dev mode
 npm run dev              # Start Nuxt dev server only
 
@@ -334,7 +322,6 @@ npm run lint:fix       # Auto-fix linting issues
 - No external API calls (except MCP)
 - Secure IPC communication
 - Sandboxed file operations
-- Environment variable protection
 
 ## 📝 License
 
@@ -364,4 +351,4 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 **Built with ❤️ for the Claude Code community**
 
-For questions, issues, or contributions, please visit our [GitHub repository](https://github.com/yourusername/claude-code-ide-vue).
+For questions, issues, or contributions, please visit our [GitHub repository](https://github.com/yourusername/clode-studio).

@@ -1,6 +1,6 @@
-# Popular MCP Servers for Claude Code IDE
+# Popular MCP Servers for Clode Studio
 
-This document lists the popular MCP servers integrated into the Claude Code IDE's quick-add feature. The IDE now includes 50+ popular MCP servers across 7 categories, including both local (stdio) and remote (SSE/HTTP) servers.
+This document lists the popular MCP servers integrated into the Clode Studio's quick-add feature. The IDE now includes 50+ popular MCP servers across 7 categories, including both local (stdio) and remote (SSE/HTTP) servers.
 
 ## Development Tools
 
@@ -327,6 +327,6 @@ These servers are hosted remotely and don't require local installation. They use
 2. Local servers (stdio) require Node.js/npm installed (v18.x or higher)
 3. Remote servers (SSE/HTTP) work immediately without installation
 4. For workspace-specific installations, consider using npx instead of global installs
-5. The Claude Code IDE automatically handles the configuration when you add servers through the Quick Add interface
+5. The Clode Studio automatically handles the configuration when you add servers through the Quick Add interface
 6. SSE transport is being deprecated in favor of streamable HTTP as of late 2024
 7. Remote servers may require authentication headers in their configuration

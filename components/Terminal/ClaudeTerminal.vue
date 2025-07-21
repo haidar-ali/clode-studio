@@ -176,7 +176,7 @@ const initTerminal = () => {
   resizeObserver.observe(terminalElement.value);
   
   // Show welcome message
-  terminal.writeln('Welcome to Claude Code IDE Terminal');
+  terminal.writeln('Welcome to Clode Studio Terminal');
   terminal.writeln('Click the \x1b[32mStart\x1b[0m button above to launch Claude CLI');
   terminal.writeln('');
   terminal.scrollToBottom();

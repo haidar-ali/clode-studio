@@ -224,7 +224,7 @@ const initTerminal = () => {
 const showWelcomeMessage = () => {
   if (!terminal) return;
   
-  terminal.writeln('Welcome to Claude Code IDE Terminal');
+  terminal.writeln('Welcome to Clode Studio Terminal');
   terminal.writeln(`Instance: ${props.instance.name}`);
   if (personality.value && personality.value.name) {
     const desc = personality.value.description || '';

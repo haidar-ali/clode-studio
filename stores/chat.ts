@@ -13,11 +13,12 @@ export const useChatStore = defineStore('chat', {
   actions: {
     async init() {
       // Get the current working directory from stored workspace
-      const storedWorkspace = await window.electronAPI?.store?.get('workspacePath');
+      const storedWorkspace = await window.electronAPI?.store?.get('workspace.lastPath');
       if (storedWorkspace && typeof storedWorkspace === 'string') {
         this.workingDirectory = storedWorkspace;
       } else {
-        this.workingDirectory = process.env.DEFAULT_WORKSPACE_PATH || process.cwd();
+        // If no stored workspace, will be set by app initialization
+        this.workingDirectory = '';
       }
     },
 

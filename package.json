@@ -1,5 +1,5 @@
 {
-  "name": "claude-code-ide-vue",
+  "name": "clode-studio",
   "version": "0.1.0",
   "private": true,
   "main": "electron/main.js",
@@ -81,8 +81,8 @@
     "xterm-addon-fit": "^0.8.0"
   },
   "build": {
-    "appId": "com.anthropic.claude-code-ide",
-    "productName": "Claude Code IDE",
+    "appId": "com.anthropic.clode-studio",
+    "productName": "Clode Studio",
     "directories": {
       "output": "dist"
     },

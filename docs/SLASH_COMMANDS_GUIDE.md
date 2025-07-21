@@ -2,7 +2,7 @@
 
 ## Overview
 
-Claude Code IDE provides both built-in slash commands and a visual Command Studio for creating custom commands. Commands enhance your workflow by providing quick access to common actions and custom prompts.
+Clode Studio provides both built-in slash commands and a visual Command Studio for creating custom commands. Commands enhance your workflow by providing quick access to common actions and custom prompts.
 
 ## Built-in Commands
 

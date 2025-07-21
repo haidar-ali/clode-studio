@@ -300,7 +300,7 @@ export const useTasksStore = defineStore('tasks', {
       
       const markdown = `# Project Tasks
 
-*This file is synced with Claude Code IDE and Claude's native TodoWrite system.*  
+*This file is synced with Clode Studio and Claude's native TodoWrite system.*  
 *Last updated: ${new Date().toISOString()}*
 
 ## Backlog (${this.backlogTasks.length})
@@ -320,7 +320,7 @@ ${this.inProgressTasks.map(task => formatTask(task)).join('\n')}
 ${this.completedTasks.map(task => formatTask(task, true)).join('\n')}
 
 ---
-*To update tasks, use the Kanban board in Claude Code IDE, ask Claude to modify this file, or use Claude's native TodoWrite system.*
+*To update tasks, use the Kanban board in Clode Studio, ask Claude to modify this file, or use Claude's native TodoWrite system.*
 `;
       
       try {

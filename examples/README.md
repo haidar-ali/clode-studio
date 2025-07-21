@@ -1,6 +1,6 @@
 # MCP Server Configuration Examples
 
-This directory contains example configurations for MCP (Model Context Protocol) servers in the Claude Code IDE.
+This directory contains example configurations for MCP (Model Context Protocol) servers in the Clode Studio.
 
 ## Files
 

@@ -32,7 +32,7 @@
                   </template>
                 </ClientOnly>
                 <div v-if="!activeTab" class="welcome-screen">
-                  <h2>Claude Code IDE</h2>
+                  <h2>Clode Studio</h2>
                   <p>Open a file to start editing</p>
                 </div>
               </div>
