@@ -40,13 +40,8 @@
 
             <!-- Right Panel: Claude Terminal -->
             <Pane :size="30" :min-size="20" :max-size="40">
-              <div class="panel terminal-panel">
-                <ClientOnly>
-                  <ClaudeTerminalTabs />
-                  <template #fallback>
-                    <div class="loading-terminal">Loading Claude terminals...</div>
-                  </template>
-                </ClientOnly>
+              <div class="panel terminal-panel" id="claude-terminal-full-ide">
+                <!-- Claude terminals will be teleported here -->
               </div>
             </Pane>
           </Splitpanes>
@@ -136,13 +131,8 @@
 
             <!-- Right Panel: Claude Terminal -->
             <Pane :size="100 - layoutStore.kanbanClaudeSplit" :min-size="15" :max-size="40">
-              <div class="panel terminal-panel">
-                <ClientOnly>
-                  <ClaudeTerminalTabs />
-                  <template #fallback>
-                    <div class="loading-terminal">Loading Claude terminals...</div>
-                  </template>
-                </ClientOnly>
+              <div class="panel terminal-panel" id="claude-terminal-kanban-claude">
+                <!-- Claude terminals will be teleported here -->
               </div>
             </Pane>
           </Splitpanes>
@@ -324,6 +314,13 @@
     <!-- Settings Modal -->
     <SettingsModal />
     
+    <!-- Persistent Claude Terminals (rendered once, teleported to appropriate location) -->
+    <ClientOnly>
+      <Teleport :to="claudeTerminalTarget" :disabled="!claudeTerminalTarget">
+        <ClaudeTerminalTabs v-if="shouldShowClaude" />
+      </Teleport>
+    </ClientOnly>
+    
   </div>
 </template>
 
@@ -362,6 +359,20 @@ const activeTab = computed(() => editorStore.activeTab);
 const taskCount = computed(() => tasksStore.taskCount);
 const projectPath = computed(() => tasksStore.projectPath);
 const contextFilesCount = computed(() => contextManager.statistics.value?.totalFiles || 0);
+
+// Computed properties for Claude Terminal persistence
+const shouldShowClaude = computed(() => {
+  return layoutStore.isFullIdeMode || layoutStore.isKanbanClaudeMode;
+});
+
+const claudeTerminalTarget = computed(() => {
+  if (layoutStore.isFullIdeMode) {
+    return '#claude-terminal-full-ide';
+  } else if (layoutStore.isKanbanClaudeMode) {
+    return '#claude-terminal-kanban-claude';
+  }
+  return null;
+});
 
 // Set up file watching
 useFileWatcher();
@@ -696,5 +707,12 @@ onUnmounted(() => {
   height: 100%;
   color: #858585;
   font-style: italic;
+}
+
+/* Claude Terminal Container */
+#claude-terminal-full-ide,
+#claude-terminal-kanban-claude {
+  height: 100%;
+  overflow: hidden;
 }
 </style>

@@ -63,7 +63,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, watch } from 'vue';
+import { ref, computed, nextTick, watch, onMounted, onUnmounted } from 'vue';
 
 interface QuickPrompt {
   id: string;
@@ -137,6 +137,21 @@ watch(() => props.isVisible, async (isVisible) => {
     await nextTick();
     textareaRef.value?.focus();
   }
+});
+
+// Listen for input transfer from terminal
+const handleTerminalInput = (event: CustomEvent) => {
+  if (event.detail.instanceId === props.instanceId && event.detail.input) {
+    message.value = event.detail.input;
+  }
+};
+
+onMounted(() => {
+  window.addEventListener('claude-terminal-input', handleTerminalInput as EventListener);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('claude-terminal-input', handleTerminalInput as EventListener);
 });
 
 function handleKeydown(event: KeyboardEvent) {

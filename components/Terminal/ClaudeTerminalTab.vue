@@ -81,9 +81,7 @@ const commandsStore = useCommandsStore();
 const terminalElement = ref<HTMLElement>();
 const showChatInput = ref(false);
 
-// Command handling state
-const currentInputLine = ref('');
-const inputStartCol = ref(0);
+// Terminal state
 
 
 
@@ -189,10 +187,7 @@ const initTerminal = () => {
     isAtBottom = scrollOffset >= scrollbackSize - 5;
   });
   
-  // Track current input line for slash commands
-  let currentLineBuffer = '';
-  let lineStartCol = 0;
-  
+  // Send terminal input to Claude
   terminal.onData(async (data: string) => {
     if (props.instance.status === 'connected') {
       // Send all data to Claude immediately for proper terminal handling
@@ -454,9 +449,49 @@ const clearTerminal = () => {
 
 const toggleChatInput = () => {
   showChatInput.value = !showChatInput.value;
+  
+  // If opening chat input, get the current line from terminal buffer
+  if (showChatInput.value && terminal) {
+    try {
+      // Get the current line from the terminal buffer
+      const currentLine = terminal.buffer.active.getLine(terminal.buffer.active.cursorY);
+      if (currentLine) {
+        // Convert the line to string, trimming trailing spaces
+        const currentText = currentLine.translateToString(true).trimEnd();
+        
+        // Find the prompt end (usually after "> " or similar)
+        let promptEndIndex = currentText.lastIndexOf('> ');
+        if (promptEndIndex === -1) {
+          promptEndIndex = currentText.lastIndexOf('$ ');
+        }
+        if (promptEndIndex === -1) {
+          promptEndIndex = currentText.lastIndexOf('# ');
+        }
+        
+        // Extract just the user input after the prompt
+        const userInput = promptEndIndex !== -1 
+          ? currentText.substring(promptEndIndex + 2)
+          : currentText;
+        
+        if (userInput) {
+          // Emit event to transfer current input to chat
+          window.dispatchEvent(new CustomEvent('claude-terminal-input', {
+            detail: {
+              instanceId: props.instance.id,
+              input: userInput
+            }
+          }));
+        }
+      }
+    } catch (error) {
+      console.error('Failed to get current line from terminal:', error);
+    }
+  }
 };
 
 
+
+// Handle chat sent event (no longer needed for input tracking)
 
 onMounted(async () => {
   // Initialize command store if not already done
@@ -465,6 +500,8 @@ onMounted(async () => {
   }
   
   initTerminal();
+  
+  // Set up event listeners
   
   // Set up emergency cleanup listener
   emergencyCleanupListener = () => {
@@ -491,6 +528,7 @@ onUnmounted(() => {
     terminal.dispose();
   }
   
+  // Remove event listeners
   
   // Remove emergency cleanup listener
   if (emergencyCleanupListener) {
