@@ -116,7 +116,7 @@ Perfect for project management with AI assistance:
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/clode-studio.git
+   git clone https://github.com/haidar-ali/clode-studio.git
    cd clode-studio
    ```
 
@@ -323,6 +323,10 @@ npm run lint:fix       # Auto-fix linting issues
 - Secure IPC communication
 - Sandboxed file operations
 
+## Contributing
+
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
 ## 📝 License
 
 MIT License - see [LICENSE](LICENSE) file for details.
@@ -351,4 +355,4 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 **Built with ❤️ for the Claude Code community**
 
-For questions, issues, or contributions, please visit our [GitHub repository](https://github.com/yourusername/clode-studio).
+For questions, issues, or contributions, please visit our [GitHub repository](https://github.com/haidar-ali/clode-studio).
