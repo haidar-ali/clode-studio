@@ -37,7 +37,7 @@
         <button
           @click="clearTerminal"
           class="icon-button"
-          title="Clear terminal"
+          :title="instance.status === 'connected' ? 'Clear screen (Ctrl+L)' : 'Clear terminal'"
         >
           <Icon name="mdi:delete" size="16" />
         </button>
@@ -254,7 +254,7 @@ const setupClaudeListeners = () => {
       
       terminal.write(data);
       
-      
+      // Check if Claude is showing a prompt - this means it's ready for input
       const hasPromptIndicators = data.includes('Do you want to') || 
                                  data.includes('❯') ||
                                  data.includes('Yes, and don\'t ask again') ||
@@ -262,6 +262,7 @@ const setupClaudeListeners = () => {
       
       const hasBoxDrawing = data.includes('╭') || data.includes('╰') || 
                            (data.includes('│') && data.includes('─'));
+      
       
       if (hasPromptIndicators || (hasBoxDrawing && timeSinceLastData > 100)) {
         pendingPromptScroll = true;
@@ -440,53 +441,19 @@ const stopClaude = async () => {
 
 const clearTerminal = () => {
   console.log('clearTerminal called for instance:', props.instance.name, 'status:', props.instance.status);
-  if (terminal) {
+  if (terminal && props.instance.status === 'connected') {
+    // In Claude interactive mode, send Ctrl+L to clear the screen
+    // This clears the visible terminal but keeps history in scrollback
+    window.electronAPI.claude.send(props.instance.id, '\x0C'); // Ctrl+L
+  } else if (terminal) {
+    // If not connected, clear the entire terminal
     terminal.clear();
-    // Don't auto-show welcome message, let user decide when to start
     terminal.writeln('\x1b[90mTerminal cleared. Click Start to launch Claude CLI.\x1b[0m\r\n');
   }
 };
 
 const toggleChatInput = () => {
   showChatInput.value = !showChatInput.value;
-  
-  // If opening chat input, get the current line from terminal buffer
-  if (showChatInput.value && terminal) {
-    try {
-      // Get the current line from the terminal buffer
-      const currentLine = terminal.buffer.active.getLine(terminal.buffer.active.cursorY);
-      if (currentLine) {
-        // Convert the line to string, trimming trailing spaces
-        const currentText = currentLine.translateToString(true).trimEnd();
-        
-        // Find the prompt end (usually after "> " or similar)
-        let promptEndIndex = currentText.lastIndexOf('> ');
-        if (promptEndIndex === -1) {
-          promptEndIndex = currentText.lastIndexOf('$ ');
-        }
-        if (promptEndIndex === -1) {
-          promptEndIndex = currentText.lastIndexOf('# ');
-        }
-        
-        // Extract just the user input after the prompt
-        const userInput = promptEndIndex !== -1 
-          ? currentText.substring(promptEndIndex + 2)
-          : currentText;
-        
-        if (userInput) {
-          // Emit event to transfer current input to chat
-          window.dispatchEvent(new CustomEvent('claude-terminal-input', {
-            detail: {
-              instanceId: props.instance.id,
-              input: userInput
-            }
-          }));
-        }
-      }
-    } catch (error) {
-      console.error('Failed to get current line from terminal:', error);
-    }
-  }
 };
 
 
@@ -500,6 +467,16 @@ onMounted(async () => {
   }
   
   initTerminal();
+  
+  // Set up event listeners for chat control
+  openChatHandler = (event: Event) => {
+    const customEvent = event as CustomEvent;
+    if (customEvent.detail.instanceId === props.instance.id) {
+      showChatInput.value = true;
+    }
+  };
+  
+  window.addEventListener('open-claude-chat', openChatHandler);
   
   // Set up event listeners
   
@@ -521,11 +498,19 @@ onMounted(async () => {
   window.addEventListener('emergency-cleanup', emergencyCleanupListener);
 });
 
+// Store event handler references for cleanup
+let openChatHandler: ((event: Event) => void) | null = null;
+
 onUnmounted(() => {
   removeClaudeListeners();
   
   if (terminal) {
     terminal.dispose();
+  }
+  
+  // Remove chat event listener
+  if (openChatHandler) {
+    window.removeEventListener('open-claude-chat', openChatHandler);
   }
   
   // Remove event listeners

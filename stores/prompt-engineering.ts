@@ -19,11 +19,12 @@ export interface SubAgentDefinition {
   id: string;
   name: string;
   role: string;
-  personality: ClaudePersonality;
+  personality: string; // personality ID
   tasks: string[];
   tools: string[];
   constraints: string[];
   outputFormat: string;
+  resources?: ResourceReference[]; // Add resources for subagent
 }
 
 export interface ResourceReference {
@@ -222,11 +223,12 @@ export const usePromptEngineeringStore = defineStore('prompt-engineering', () =>
       id: `agent-${Date.now()}`,
       name: subagent.name || 'New Agent',
       role: subagent.role || 'Assistant',
-      personality: subagent.personality || 'full-stack',
+      personality: subagent.personality || 'developer', // Use a valid default personality ID
       tasks: subagent.tasks || [],
       tools: subagent.tools || [],
       constraints: subagent.constraints || [],
-      outputFormat: subagent.outputFormat || 'markdown'
+      outputFormat: subagent.outputFormat || 'markdown',
+      resources: subagent.resources || []
     };
     
     currentPrompt.value.structure.subagents.push(newAgent);
@@ -298,12 +300,15 @@ export const usePromptEngineeringStore = defineStore('prompt-engineering', () =>
     if (currentPrompt.value.structure.subagents.length > 0) {
       const subagentDefs = currentPrompt.value.structure.subagents
         .map(agent => {
+          const personalityName = claudeInstancesStore.personalities.get(agent.personality)?.name || agent.personality;
+          const resourcesList = agent.resources?.map(r => `${r.type}:${r.name}`).join(', ') || 'None';
           return `<subagent id="${agent.id}" name="${agent.name}">
 Role: ${agent.role}
-Personality: ${agent.personality}
+Personality: ${personalityName}
 Tasks: ${agent.tasks.join(', ')}
 Tools: ${agent.tools.join(', ')}
 Constraints: ${agent.constraints.join(', ')}
+Resources: ${resourcesList}
 Output Format: ${agent.outputFormat}
 </subagent>`;
         })

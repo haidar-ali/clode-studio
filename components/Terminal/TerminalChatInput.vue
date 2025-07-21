@@ -146,12 +146,34 @@ const handleTerminalInput = (event: CustomEvent) => {
   }
 };
 
+// Listen for append-to-chat event
+const handleAppendToChat = (event: CustomEvent) => {
+  if (event.detail.instanceId === props.instanceId && event.detail.text) {
+    // If there's existing text, add a newline separator
+    if (message.value.trim()) {
+      message.value += '\n\n';
+    }
+    message.value += event.detail.text;
+    
+    // Focus the textarea
+    nextTick(() => {
+      textareaRef.value?.focus();
+      // Move cursor to end
+      if (textareaRef.value) {
+        textareaRef.value.selectionStart = textareaRef.value.selectionEnd = message.value.length;
+      }
+    });
+  }
+};
+
 onMounted(() => {
   window.addEventListener('claude-terminal-input', handleTerminalInput as EventListener);
+  window.addEventListener('append-to-claude-chat', handleAppendToChat as EventListener);
 });
 
 onUnmounted(() => {
   window.removeEventListener('claude-terminal-input', handleTerminalInput as EventListener);
+  window.removeEventListener('append-to-claude-chat', handleAppendToChat as EventListener);
 });
 
 function handleKeydown(event: KeyboardEvent) {

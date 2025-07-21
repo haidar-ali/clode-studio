@@ -143,13 +143,6 @@
           <div class="panel bottom-panel">
             <div class="tabs">
               <button
-                :class="{ active: bottomTab === 'tasks' }"
-                @click="bottomTab = 'tasks'"
-              >
-                Tasks
-                <span v-if="taskCount.todo > 0" class="task-badge">{{ taskCount.todo }}</span>
-              </button>
-              <button
                 :class="{ active: bottomTab === 'terminal' }"
                 @click="bottomTab = 'terminal'"
               >
@@ -430,6 +423,15 @@ watch(projectPath, async (newPath) => {
 watch(projectPath, (newPath, oldPath) => {
   if (newPath !== oldPath && oldPath) {
     contextInitialized = false;
+  }
+});
+
+// Watch for layout mode changes to adjust bottomTab
+watch(() => layoutStore.isKanbanClaudeMode, (isKanbanClaude) => {
+  if (isKanbanClaude && bottomTab.value === 'tasks') {
+    // In Kanban + Claude mode, Tasks tab is not available
+    // Switch to terminal tab instead
+    bottomTab.value = 'context';
   }
 });
 

@@ -40,13 +40,14 @@ const modes = [
     label: 'Kanban + Claude',
     icon: 'mdi:view-column',
     description: 'Kanban board with Claude assistant (75/25 split)'
-  },
-  {
-    value: 'kanban-only' as LayoutMode,
-    label: 'Kanban Only',
-    icon: 'mdi:view-agenda',
-    description: 'Full screen kanban board for task management'
   }
+  // Kanban Only mode is temporarily hidden
+  // {
+  //   value: 'kanban-only' as LayoutMode,
+  //   label: 'Kanban Only',
+  //   icon: 'mdi:view-agenda',
+  //   description: 'Full screen kanban board for task management'
+  // }
 ];
 
 const setMode = (mode: LayoutMode) => {

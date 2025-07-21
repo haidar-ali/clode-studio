@@ -4,6 +4,10 @@
     <div class="builder-header">
       <h2>Prompt Builder</h2>
       <div class="header-actions">
+        <button class="action-btn" @click="$emit('open-resources')">
+          <Icon name="heroicons:folder-plus" />
+          Add Resources
+        </button>
         <button class="action-btn" @click="clearPrompt">
           <Icon name="heroicons:trash" />
           Clear
@@ -15,6 +19,10 @@
         <button class="action-btn success" @click="executePrompt">
           <Icon name="heroicons:play" />
           Execute
+        </button>
+        <button class="action-btn chat" @click="sendToChat">
+          <Icon name="heroicons:chat-bubble-left-right" />
+          Send to Chat
         </button>
       </div>
     </div>
@@ -216,6 +224,41 @@ async function executePrompt() {
     alert(error.message || 'Failed to send prompt to Claude terminal');
   }
 }
+
+async function sendToChat() {
+  const prompt = promptStore.buildPrompt();
+  if (!prompt) {
+    alert('Please build a prompt first');
+    return;
+  }
+
+  // Get the active Claude instance
+  const { useClaudeInstancesStore } = await import('~/stores/claude-instances');
+  const claudeInstancesStore = useClaudeInstancesStore();
+  const activeInstanceId = claudeInstancesStore.activeInstanceId;
+  
+  if (!activeInstanceId) {
+    alert('Please start a Claude instance first');
+    return;
+  }
+
+  // First, dispatch event to open chat modal
+  window.dispatchEvent(new CustomEvent('open-claude-chat', {
+    detail: {
+      instanceId: activeInstanceId
+    }
+  }));
+
+  // Then, after a small delay to ensure chat is open, send the prompt text
+  setTimeout(() => {
+    window.dispatchEvent(new CustomEvent('append-to-claude-chat', {
+      detail: {
+        instanceId: activeInstanceId,
+        text: prompt
+      }
+    }));
+  }, 100);
+}
 </script>
 
 <style scoped>
@@ -273,6 +316,20 @@ async function executePrompt() {
   background-color: #10b981;
   color: white;
   border-color: #10b981;
+}
+
+.action-btn.success:hover {
+  background-color: #059669;
+}
+
+.action-btn.chat {
+  background-color: #8b5cf6;
+  color: white;
+  border-color: #8b5cf6;
+}
+
+.action-btn.chat:hover {
+  background-color: #7c3aed;
 }
 
 .token-counter {

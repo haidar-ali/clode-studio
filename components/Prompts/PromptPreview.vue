@@ -145,14 +145,14 @@ async function runTest() {
   justify-content: space-between;
   align-items: center;
   padding: 16px;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid #2d2d30;
 }
 
 .preview-header h3 {
   margin: 0;
   font-size: 14px;
   font-weight: 600;
-  color: var(--color-text);
+  color: #cccccc;
 }
 
 .preview-actions {
@@ -166,10 +166,10 @@ async function runTest() {
   align-items: center;
   gap: 4px;
   padding: 6px 12px;
-  border: 1px solid var(--color-border);
+  border: 1px solid #3c3c3c;
   border-radius: 6px;
-  background-color: var(--color-background);
-  color: var(--color-text);
+  background-color: #252526;
+  color: #cccccc;
   cursor: pointer;
   font-size: 12px;
   transition: all 0.2s;
@@ -177,15 +177,15 @@ async function runTest() {
 
 .copy-btn:hover,
 .test-btn:hover {
-  background-color: var(--color-background-soft);
+  background-color: #3e3e42;
 }
 
 .preview-stats {
   display: flex;
   gap: 16px;
   padding: 12px 16px;
-  background-color: var(--color-background-soft);
-  border-bottom: 1px solid var(--color-border);
+  background-color: #2d2d30;
+  border-bottom: 1px solid #181818;
 }
 
 .stat {
@@ -193,7 +193,7 @@ async function runTest() {
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  color: var(--color-text-secondary);
+  color: #858585;
 }
 
 .stat svg {
@@ -214,13 +214,13 @@ async function runTest() {
 .prompt-text {
   margin: 0;
   padding: 16px;
-  background-color: var(--color-background-mute);
-  border: 1px solid var(--color-border);
+  background-color: #3c3c3c;
+  border: 1px solid #2d2d30;
   border-radius: 8px;
   font-family: 'Monaco', 'Consolas', monospace;
   font-size: 13px;
   line-height: 1.6;
-  color: var(--color-text);
+  color: #cccccc;
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -232,7 +232,7 @@ async function runTest() {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -240,19 +240,20 @@ async function runTest() {
 }
 
 .modal-content {
-  background-color: var(--color-background);
-  border: 1px solid var(--color-border);
+  background: #1e1e1e;
+  border: 1px solid #454545;
   border-radius: 8px;
   padding: 24px;
   width: 90%;
   max-width: 500px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 }
 
 .modal-content h3 {
   margin: 0 0 20px 0;
   font-size: 18px;
   font-weight: 600;
-  color: var(--color-text);
+  color: #cccccc;
 }
 
 .test-options {
@@ -268,24 +269,24 @@ async function runTest() {
   margin-bottom: 6px;
   font-size: 13px;
   font-weight: 500;
-  color: var(--color-text);
+  color: #cccccc;
 }
 
 .form-group select,
 .form-group textarea {
   width: 100%;
   padding: 8px 12px;
-  border: 1px solid var(--color-border);
+  border: 1px solid #3c3c3c;
   border-radius: 6px;
-  background-color: var(--color-background-soft);
-  color: var(--color-text);
+  background-color: #3c3c3c;
+  color: #cccccc;
   font-size: 14px;
 }
 
 .form-group select:focus,
 .form-group textarea:focus {
   outline: none;
-  border-color: var(--color-primary);
+  border-color: #007acc;
 }
 
 .modal-actions {
@@ -305,23 +306,23 @@ async function runTest() {
 }
 
 .btn-secondary {
-  border: 1px solid var(--color-border);
-  background-color: var(--color-background);
-  color: var(--color-text);
+  border: 1px solid #3c3c3c;
+  background-color: #252526;
+  color: #cccccc;
 }
 
 .btn-secondary:hover {
-  background-color: var(--color-background-soft);
+  background-color: #3e3e42;
 }
 
 .btn-primary {
-  border: 1px solid var(--color-primary);
-  background-color: var(--color-primary);
+  border: 1px solid #007acc;
+  background-color: #007acc;
   color: white;
 }
 
 .btn-primary:hover {
-  background-color: var(--color-primary-hover);
+  background-color: #005a9e;
 }
 
 /* Scrollbar styling */
@@ -330,15 +331,15 @@ async function runTest() {
 }
 
 .preview-content::-webkit-scrollbar-track {
-  background: var(--color-background);
+  background: #1e1e1e;
 }
 
 .preview-content::-webkit-scrollbar-thumb {
-  background: var(--color-border);
+  background: #424242;
   border-radius: 4px;
 }
 
 .preview-content::-webkit-scrollbar-thumb:hover {
-  background: var(--color-text-secondary);
+  background: #4f4f4f;
 }
 </style>

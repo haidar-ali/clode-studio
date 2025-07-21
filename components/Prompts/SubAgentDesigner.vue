@@ -123,6 +123,30 @@
               @change="updateConstraints(agent.id)"
             ></textarea>
           </div>
+
+          <!-- Resources -->
+          <div class="form-group">
+            <label>Resources</label>
+            <div class="resources-section">
+              <div v-if="agent.resources && agent.resources.length > 0" class="resource-list">
+                <div 
+                  v-for="(resource, index) in agent.resources" 
+                  :key="`${resource.type}-${resource.id}`"
+                  class="resource-item"
+                >
+                  <Icon :name="getResourceIcon(resource.type)" />
+                  <span>{{ resource.name }}</span>
+                  <button class="remove-btn" @click="removeAgentResource(agent.id, index)">
+                    <Icon name="heroicons:x-mark" />
+                  </button>
+                </div>
+              </div>
+              <button class="add-resource-btn" @click="$emit('open-resources', agent.id)">
+                <Icon name="heroicons:plus" />
+                Add Resource
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -137,8 +161,15 @@ import { useMCPStore } from '~/stores/mcp';
 const promptStore = usePromptEngineeringStore();
 const mcpStore = useMCPStore();
 
+const emit = defineEmits<{
+  'open-resources': [subagentId: string];
+}>();
+
 const subagents = computed(() => promptStore.currentPrompt.structure?.subagents || []);
-const personalities = computed(() => promptStore.availablePersonalities);
+const personalities = computed(() => {
+  // Convert Map to array for v-for
+  return Array.from(promptStore.availablePersonalities.values());
+});
 
 const constraintsText = ref<Record<string, string>>({});
 
@@ -229,6 +260,25 @@ function updateConstraints(agentId: string) {
   }
 }
 
+function removeAgentResource(agentId: string, index: number) {
+  const agent = subagents.value.find(a => a.id === agentId);
+  if (agent && agent.resources) {
+    agent.resources.splice(index, 1);
+    updateAgent(agentId);
+  }
+}
+
+function getResourceIcon(type: string): string {
+  const icons: Record<string, string> = {
+    file: 'heroicons:document',
+    knowledge: 'heroicons:book-open',
+    hook: 'heroicons:bolt',
+    mcp: 'heroicons:server',
+    command: 'heroicons:command-line'
+  };
+  return icons[type] || 'heroicons:document';
+}
+
 // Load MCP servers on mount
 onMounted(async () => {
   if (mcpStore.servers.length === 0) {
@@ -249,14 +299,14 @@ onMounted(async () => {
   justify-content: space-between;
   align-items: center;
   padding: 16px;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid #2d2d30;
 }
 
 .designer-header h3 {
   margin: 0;
   font-size: 14px;
   font-weight: 600;
-  color: var(--color-text);
+  color: #cccccc;
 }
 
 .add-btn {
@@ -264,9 +314,9 @@ onMounted(async () => {
   align-items: center;
   gap: 4px;
   padding: 6px 12px;
-  border: 1px solid var(--color-primary);
+  border: 1px solid #007acc;
   border-radius: 6px;
-  background-color: var(--color-primary);
+  background-color: #007acc;
   color: white;
   cursor: pointer;
   font-size: 12px;
@@ -274,7 +324,7 @@ onMounted(async () => {
 }
 
 .add-btn:hover {
-  background-color: var(--color-primary-hover);
+  background-color: #005a9e;
 }
 
 .empty-state {
@@ -285,7 +335,7 @@ onMounted(async () => {
   justify-content: center;
   gap: 8px;
   padding: 20px;
-  color: var(--color-text-secondary);
+  color: #858585;
   text-align: center;
 }
 
@@ -313,7 +363,7 @@ onMounted(async () => {
 
 .subagent-card {
   margin-bottom: 16px;
-  border: 1px solid var(--color-border);
+  border: 1px solid #2d2d30;
   border-radius: 8px;
   overflow: hidden;
 }
@@ -323,24 +373,24 @@ onMounted(async () => {
   align-items: center;
   gap: 8px;
   padding: 12px;
-  background-color: var(--color-background-soft);
-  border-bottom: 1px solid var(--color-border);
+  background-color: #2d2d30;
+  border-bottom: 1px solid #181818;
 }
 
 .agent-name {
   flex: 1;
   padding: 6px 8px;
-  border: 1px solid var(--color-border);
+  border: 1px solid #3c3c3c;
   border-radius: 4px;
-  background-color: var(--color-background);
-  color: var(--color-text);
+  background-color: #1e1e1e;
+  color: #cccccc;
   font-size: 14px;
   font-weight: 500;
 }
 
 .agent-name:focus {
   outline: none;
-  border-color: var(--color-primary);
+  border-color: #007acc;
 }
 
 .remove-btn {
@@ -351,15 +401,15 @@ onMounted(async () => {
   height: 28px;
   border: none;
   background: none;
-  color: var(--color-text-secondary);
+  color: #858585;
   cursor: pointer;
   border-radius: 4px;
   transition: all 0.2s;
 }
 
 .remove-btn:hover {
-  background-color: var(--color-background-mute);
-  color: var(--color-danger);
+  background-color: #3e3e42;
+  color: #cd3131;
 }
 
 .agent-body {
@@ -375,7 +425,7 @@ onMounted(async () => {
   margin-bottom: 6px;
   font-size: 12px;
   font-weight: 500;
-  color: var(--color-text);
+  color: #cccccc;
 }
 
 .form-group input,
@@ -383,10 +433,10 @@ onMounted(async () => {
 .form-group textarea {
   width: 100%;
   padding: 6px 8px;
-  border: 1px solid var(--color-border);
+  border: 1px solid #3c3c3c;
   border-radius: 4px;
-  background-color: var(--color-background-mute);
-  color: var(--color-text);
+  background-color: #3c3c3c;
+  color: #cccccc;
   font-size: 13px;
 }
 
@@ -394,7 +444,7 @@ onMounted(async () => {
 .form-group select:focus,
 .form-group textarea:focus {
   outline: none;
-  border-color: var(--color-primary);
+  border-color: #007acc;
 }
 
 .task-list {
@@ -418,18 +468,18 @@ onMounted(async () => {
   align-items: center;
   gap: 4px;
   padding: 4px 8px;
-  border: 1px dashed var(--color-border);
+  border: 1px dashed #3c3c3c;
   border-radius: 4px;
   background: none;
-  color: var(--color-text-secondary);
+  color: #858585;
   cursor: pointer;
   font-size: 12px;
   transition: all 0.2s;
 }
 
 .add-task-btn:hover {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
+  border-color: #007acc;
+  color: #007acc;
 }
 
 .tool-selector {
@@ -453,7 +503,62 @@ onMounted(async () => {
 .tool-checkbox label {
   margin: 0;
   font-weight: normal;
-  color: var(--color-text);
+  color: #cccccc;
   cursor: pointer;
+}
+
+/* Resources section */
+.resources-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.resource-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.resource-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background-color: #2d2d30;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.resource-item svg {
+  width: 14px;
+  height: 14px;
+  color: #858585;
+}
+
+.resource-item span {
+  flex: 1;
+  color: #cccccc;
+}
+
+.add-resource-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px dashed #3c3c3c;
+  border-radius: 4px;
+  background: none;
+  color: #858585;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+
+.add-resource-btn:hover {
+  border-color: #007acc;
+  color: #007acc;
+  background-color: rgba(0, 122, 204, 0.1);
 }
 </style>

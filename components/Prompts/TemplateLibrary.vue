@@ -319,22 +319,22 @@ async function deleteTemplate(templateId: string) {
   justify-content: space-between;
   align-items: center;
   padding: 16px;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid #2d2d30;
 }
 
 .library-header h3 {
   margin: 0;
   font-size: 14px;
   font-weight: 600;
-  color: var(--color-text);
+  color: #cccccc;
 }
 
 .category-filter {
   padding: 6px 8px;
-  border: 1px solid var(--color-border);
+  border: 1px solid #3c3c3c;
   border-radius: 4px;
-  background-color: var(--color-background-soft);
-  color: var(--color-text);
+  background-color: #2d2d30;
+  color: #cccccc;
   font-size: 12px;
 }
 
@@ -343,23 +343,23 @@ async function deleteTemplate(templateId: string) {
   align-items: center;
   gap: 8px;
   padding: 8px 16px;
-  background-color: var(--color-background-soft);
-  border-bottom: 1px solid var(--color-border);
+  background-color: #2d2d30;
+  border-bottom: 1px solid #181818;
 }
 
 .search-box input {
   flex: 1;
   padding: 6px 8px;
-  border: 1px solid var(--color-border);
+  border: 1px solid #3c3c3c;
   border-radius: 4px;
-  background-color: var(--color-background);
-  color: var(--color-text);
+  background-color: #1e1e1e;
+  color: #cccccc;
   font-size: 13px;
 }
 
 .search-box input:focus {
   outline: none;
-  border-color: var(--color-primary);
+  border-color: #007acc;
 }
 
 .template-list {
@@ -376,7 +376,7 @@ async function deleteTemplate(templateId: string) {
   margin: 0 0 12px 0;
   font-size: 12px;
   font-weight: 600;
-  color: var(--color-text-secondary);
+  color: #858585;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -384,15 +384,15 @@ async function deleteTemplate(templateId: string) {
 .template-card {
   margin-bottom: 12px;
   padding: 12px;
-  border: 1px solid var(--color-border);
+  border: 1px solid #2d2d30;
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .template-card:hover {
-  background-color: var(--color-background-soft);
-  border-color: var(--color-primary);
+  background-color: #3e3e42;
+  border-color: #007acc;
 }
 
 .template-header {
@@ -406,7 +406,7 @@ async function deleteTemplate(templateId: string) {
   flex: 1;
   font-size: 14px;
   font-weight: 500;
-  color: var(--color-text);
+  color: #cccccc;
 }
 
 .delete-btn {
@@ -417,7 +417,7 @@ async function deleteTemplate(templateId: string) {
   height: 24px;
   border: none;
   background: none;
-  color: var(--color-text-secondary);
+  color: #858585;
   cursor: pointer;
   border-radius: 4px;
   opacity: 0;
@@ -429,14 +429,14 @@ async function deleteTemplate(templateId: string) {
 }
 
 .delete-btn:hover {
-  background-color: var(--color-background-mute);
-  color: var(--color-danger);
+  background-color: #3e3e42;
+  color: #cd3131;
 }
 
 .template-description {
   margin: 0 0 8px 0;
   font-size: 12px;
-  color: var(--color-text-secondary);
+  color: #858585;
   line-height: 1.4;
 }
 
@@ -451,7 +451,7 @@ async function deleteTemplate(templateId: string) {
   align-items: center;
   gap: 4px;
   font-size: 11px;
-  color: var(--color-text-secondary);
+  color: #858585;
 }
 
 .meta-item svg {
@@ -470,7 +470,7 @@ async function deleteTemplate(templateId: string) {
   justify-content: center;
   gap: 8px;
   padding: 40px 20px;
-  color: var(--color-text-secondary);
+  color: #858585;
   text-align: center;
 }
 
@@ -496,15 +496,15 @@ async function deleteTemplate(templateId: string) {
 }
 
 .template-list::-webkit-scrollbar-track {
-  background: var(--color-background);
+  background: #1e1e1e;
 }
 
 .template-list::-webkit-scrollbar-thumb {
-  background: var(--color-border);
+  background: #424242;
   border-radius: 4px;
 }
 
 .template-list::-webkit-scrollbar-thumb:hover {
-  background: var(--color-text-secondary);
+  background: #4f4f4f;
 }
 </style>
