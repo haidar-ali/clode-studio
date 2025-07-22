@@ -11,6 +11,7 @@ const joinPath = (...parts: string[]) => {
 // Simple task type that mirrors Claude's native TodoWrite
 interface SimpleTask {
   id: string;
+  identifier?: string; // Optional custom identifier for referencing
   content: string;
   status: 'backlog' | 'pending' | 'in_progress' | 'completed';
   priority: 'high' | 'medium' | 'low';
@@ -19,7 +20,17 @@ interface SimpleTask {
   assignee?: 'claude' | 'user' | 'both';
   type?: 'feature' | 'bugfix' | 'refactor' | 'documentation' | 'research';
   description?: string;
-  filesModified?: string[];
+  filesModified?: string[]; // Deprecated - kept for backward compatibility
+  resources?: ResourceReference[]; // New field for linked resources
+}
+
+// Import type from prompt-engineering store
+interface ResourceReference {
+  type: 'file' | 'knowledge' | 'hook' | 'mcp' | 'command' | 'task';
+  id: string;
+  path?: string;
+  name: string;
+  metadata?: Record<string, any>;
 }
 
 export const useTasksStore = defineStore('tasks', {
@@ -86,9 +97,10 @@ export const useTasksStore = defineStore('tasks', {
     },
 
     // Add task from user input
-    addTask(content: string, priority: SimpleTask['priority'] = 'medium', type: SimpleTask['type'] = 'feature') {
+    addTask(content: string, priority: SimpleTask['priority'] = 'medium', type: SimpleTask['type'] = 'feature', identifier?: string) {
       const task: SimpleTask = {
         id: `task-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+        identifier,
         content,
         status: 'pending',
         priority,
@@ -97,7 +109,8 @@ export const useTasksStore = defineStore('tasks', {
         assignee: 'claude',
         type,
         description: '',
-        filesModified: []
+        filesModified: [],
+        resources: []
       };
       
       this.tasks.push(task);
@@ -185,7 +198,8 @@ export const useTasksStore = defineStore('tasks', {
             assignee: 'claude',
             type: 'feature',
             description: '',
-            filesModified: []
+            filesModified: [],
+            resources: []
           };
           this.tasks.push(task);
         }
@@ -275,6 +289,12 @@ export const useTasksStore = defineStore('tasks', {
         
         let text = `- ${checkbox} ${title}${emoji}`;
         
+        // Add identifier if present
+        if (task.identifier) {
+          const id = isCompleted ? `~~ID: ${task.identifier}~~` : `ID: ${task.identifier}`;
+          text += `\n  - ${id}`;
+        }
+        
         // Add structured metadata
         const assignee = isCompleted ? `~~Assignee: ${task.assignee || 'Claude'}~~` : `Assignee: ${task.assignee || 'Claude'}`;
         const type = isCompleted ? `~~Type: ${task.type || 'feature'}~~` : `Type: ${task.type || 'feature'}`;
@@ -289,7 +309,24 @@ export const useTasksStore = defineStore('tasks', {
           text += `\n  - ${desc}`;
         }
         
-        if (task.filesModified && task.filesModified.length > 0) {
+        // Format resources if present
+        if (task.resources && task.resources.length > 0) {
+          const resourceTexts = task.resources.map(r => {
+            if (r.type === 'task') {
+              return `Task: ${r.name}`;
+            } else if (r.type === 'file') {
+              return `File: ${r.name}`;
+            } else {
+              return `${r.type}: ${r.name}`;
+            }
+          });
+          const resourcesStr = resourceTexts.slice(0, 3).join(', ') + (resourceTexts.length > 3 ? '...' : '');
+          const resourcesText = isCompleted ? `~~Resources: ${resourcesStr}~~` : `Resources: ${resourcesStr}`;
+          text += `\n  - ${resourcesText}`;
+        }
+        
+        // Keep filesModified for backward compatibility but show only if no resources
+        if (!task.resources?.length && task.filesModified && task.filesModified.length > 0) {
           const files = task.filesModified.slice(0, 3).join(', ') + (task.filesModified.length > 3 ? '...' : '');
           const filesText = isCompleted ? `~~Files: ${files}~~` : `Files: ${files}`;
           text += `\n  - ${filesText}`;
@@ -374,7 +411,9 @@ ${this.completedTasks.map(task => formatTask(task, true)).join('\n')}
         else if (currentTask && line.match(/^\s*-\s*/)) {
           const metaLine = line.replace(/^\s*-\s*/, '').replace(/~~/g, '').trim();
           
-          if (metaLine.startsWith('Assignee:')) {
+          if (metaLine.startsWith('ID:')) {
+            currentTask.identifier = metaLine.replace('ID:', '').trim();
+          } else if (metaLine.startsWith('Assignee:')) {
             const assignee = metaLine.replace('Assignee:', '').trim().toLowerCase();
             if (assignee === 'user' || assignee === 'claude' || assignee === 'both') {
               currentTask.assignee = assignee as SimpleTask['assignee'];
@@ -391,6 +430,40 @@ ${this.completedTasks.map(task => formatTask(task, true)).join('\n')}
             }
           } else if (metaLine.startsWith('Description:')) {
             currentTask.description = metaLine.replace('Description:', '').trim();
+          } else if (metaLine.startsWith('Resources:')) {
+            // Parse resources string back to array
+            const resourcesStr = metaLine.replace('Resources:', '').trim();
+            currentTask.resources = [];
+            
+            // Split by comma and parse each resource
+            const resourceParts = resourcesStr.split(',').map(r => r.trim()).filter(r => r);
+            for (const part of resourceParts) {
+              // Format is "Type: Name" e.g., "File: src/api.ts" or "Task: AUTH-01"
+              const colonIndex = part.indexOf(':');
+              if (colonIndex > -1) {
+                const type = part.substring(0, colonIndex).trim().toLowerCase();
+                const name = part.substring(colonIndex + 1).trim();
+                
+                // Map to our resource types
+                const typeMap: Record<string, string> = {
+                  'file': 'file',
+                  'task': 'task',
+                  'knowledge': 'knowledge',
+                  'hook': 'hook',
+                  'mcp': 'mcp',
+                  'command': 'command'
+                };
+                
+                if (typeMap[type]) {
+                  currentTask.resources.push({
+                    type: typeMap[type] as any,
+                    id: `${type}-${name}`, // Generate a simple ID
+                    name: name,
+                    metadata: {}
+                  });
+                }
+              }
+            }
           } else if (metaLine.startsWith('Files:')) {
             const files = metaLine.replace('Files:', '').trim();
             currentTask.filesModified = files.split(',').map(f => f.trim()).filter(f => f);
@@ -409,6 +482,7 @@ ${this.completedTasks.map(task => formatTask(task, true)).join('\n')}
         if (task.content) {
           const newTask: SimpleTask = {
             id: `task-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+            identifier: task.identifier,
             content: task.content,
             status: task.status || 'pending',
             priority: task.priority || 'medium',
@@ -417,7 +491,8 @@ ${this.completedTasks.map(task => formatTask(task, true)).join('\n')}
             assignee: task.assignee || 'claude',
             type: task.type || 'feature',
             description: task.description || '',
-            filesModified: task.filesModified || []
+            filesModified: task.filesModified || [],
+            resources: task.resources || []
           };
           
           this.tasks.push(newTask);

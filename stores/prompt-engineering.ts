@@ -28,7 +28,7 @@ export interface SubAgentDefinition {
 }
 
 export interface ResourceReference {
-  type: 'file' | 'knowledge' | 'hook' | 'mcp' | 'command';
+  type: 'file' | 'knowledge' | 'hook' | 'mcp' | 'command' | 'task';
   id: string;
   path?: string;
   name: string;

@@ -8,7 +8,10 @@
     @click="$emit('click')"
   >
     <div class="task-header">
-      <h5 class="task-title">{{ task.content }}</h5>
+      <h5 class="task-title">
+        <span v-if="task.identifier" class="task-id">[{{ task.identifier }}]</span>
+        {{ task.content }}
+      </h5>
       <div class="task-actions">
         <button @click="$emit('edit')" class="action-button" title="Edit">
           <Icon name="mdi:pencil" size="14" />
@@ -41,15 +44,26 @@
       </span>
     </div>
     
-    <div v-if="task.filesModified && task.filesModified.length > 0" class="task-files" @click.stop>
-      <div class="files-indicator">
-        <Icon name="mdi:file-multiple" size="12" />
-        <span>{{ task.filesModified.length }} files</span>
+    <div v-if="(task.resources && task.resources.length > 0) || (task.filesModified && task.filesModified.length > 0)" class="task-resources" @click.stop>
+      <div class="resources-indicator">
+        <Icon name="mdi:link-variant" size="12" />
+        <span>{{ task.resources?.length || task.filesModified?.length || 0 }} resources</span>
       </div>
-      <div class="files-tooltip">
-        <div class="tooltip-header">Files Modified:</div>
-        <div v-for="(file, index) in task.filesModified" :key="index" class="tooltip-file">
-          {{ file }}
+      <div class="resources-tooltip">
+        <div class="tooltip-header">Linked Resources:</div>
+        <div v-if="task.resources && task.resources.length > 0">
+          <div v-for="(resource, index) in task.resources" :key="`resource-${index}`" class="tooltip-resource">
+            <Icon :name="getResourceIcon(resource.type)" size="12" />
+            <span class="resource-type-label">{{ resource.type }}:</span>
+            <span class="resource-name">{{ resource.name }}</span>
+          </div>
+        </div>
+        <div v-else-if="task.filesModified && task.filesModified.length > 0">
+          <div v-for="(file, index) in task.filesModified" :key="`file-${index}`" class="tooltip-resource">
+            <Icon name="mdi:file" size="12" />
+            <span class="resource-type-label">file:</span>
+            <span class="resource-name">{{ file }}</span>
+          </div>
         </div>
       </div>
     </div>
@@ -61,13 +75,19 @@ import { ref } from 'vue';
 // Simple task interface
 interface SimpleTask {
   id: string;
+  identifier?: string;
   content: string;
-  status: 'pending' | 'in_progress' | 'completed';
+  status: 'backlog' | 'pending' | 'in_progress' | 'completed';
   priority: 'high' | 'medium' | 'low';
   type?: 'feature' | 'bugfix' | 'refactor' | 'documentation' | 'research';
   assignee?: 'claude' | 'user' | 'both';
   description?: string;
   filesModified?: string[];
+  resources?: Array<{
+    type: 'file' | 'knowledge' | 'hook' | 'mcp' | 'command' | 'task';
+    id: string;
+    name: string;
+  }>;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -121,6 +141,18 @@ const getTypeIcon = (type: SimpleTask['type']) => {
     case 'research': return 'mdi:magnify';
     default: return 'mdi:checkbox-marked-circle';
   }
+};
+
+const getResourceIcon = (type: string): string => {
+  const icons: Record<string, string> = {
+    file: 'mdi:file',
+    knowledge: 'mdi:book-open-variant',
+    task: 'mdi:checkbox-marked-circle',
+    hook: 'mdi:hook',
+    mcp: 'mdi:server',
+    command: 'mdi:console'
+  };
+  return icons[type] || 'mdi:file';
 };
 </script>
 
@@ -303,7 +335,14 @@ const getTypeIcon = (type: SimpleTask['type']) => {
   font-size: 10px;
 }
 
-.task-files {
+.task-id {
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 12px;
+  color: #858585;
+  margin-right: 6px;
+}
+
+.task-resources {
   position: relative;
   margin-top: 6px;
   padding-top: 6px;
@@ -311,7 +350,7 @@ const getTypeIcon = (type: SimpleTask['type']) => {
   width: 100%;
 }
 
-.files-indicator {
+.resources-indicator {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -321,11 +360,11 @@ const getTypeIcon = (type: SimpleTask['type']) => {
   transition: color 0.2s;
 }
 
-.task-files:hover .files-indicator {
+.task-resources:hover .resources-indicator {
   color: #cccccc;
 }
 
-.files-tooltip {
+.resources-tooltip {
   position: absolute;
   bottom: 100%;
   left: 0;
@@ -345,7 +384,7 @@ const getTypeIcon = (type: SimpleTask['type']) => {
   margin-bottom: 4px;
 }
 
-.task-files:hover .files-tooltip {
+.task-resources:hover .resources-tooltip {
   opacity: 1;
   visibility: visible;
   transform: translateY(0);
@@ -360,15 +399,27 @@ const getTypeIcon = (type: SimpleTask['type']) => {
   letter-spacing: 0.5px;
 }
 
-.tooltip-file {
+.tooltip-resource {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 12px;
   color: #d4d4d4;
   padding: 3px 0;
-  word-break: break-all;
-  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
 }
 
-.tooltip-file:hover {
+.tooltip-resource:hover {
   color: #ffffff;
+}
+
+.resource-type-label {
+  color: #858585;
+  font-size: 11px;
+  text-transform: lowercase;
+}
+
+.resource-name {
+  word-break: break-all;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
 }
 </style>

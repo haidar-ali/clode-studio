@@ -89,15 +89,27 @@
         </div>
         
         <form @submit.prevent="saveTask" class="modal-form">
-          <div class="form-group">
-            <label for="task-content">Task Content</label>
-            <input
-              id="task-content"
-              v-model="taskForm.content"
-              type="text"
-              required
-              placeholder="Task content..."
-            />
+          <div class="form-row">
+            <div class="form-group">
+              <label for="task-identifier">Identifier (Optional)</label>
+              <input
+                id="task-identifier"
+                v-model="taskForm.identifier"
+                type="text"
+                placeholder="e.g., TASK-001"
+              />
+            </div>
+            
+            <div class="form-group flex-2">
+              <label for="task-content">Task Content *</label>
+              <input
+                id="task-content"
+                v-model="taskForm.content"
+                type="text"
+                required
+                placeholder="Task content..."
+              />
+            </div>
           </div>
           
           <div class="form-group">
@@ -141,7 +153,27 @@
                 <option value="both">Both</option>
               </select>
             </div>
-            
+          </div>
+          
+          <div class="form-group">
+            <label>Resources</label>
+            <div class="resources-section">
+              <button type="button" @click="openResourceModal" class="add-resource-button">
+                <Icon name="mdi:plus" />
+                Add Resource
+              </button>
+              
+              <div v-if="taskForm.resources.length > 0" class="resource-list">
+                <div v-for="(resource, index) in taskForm.resources" :key="`${resource.type}-${resource.id}`" class="resource-item">
+                  <Icon :name="getResourceIcon(resource.type)" />
+                  <span class="resource-name">{{ resource.name }}</span>
+                  <span class="resource-type">{{ resource.type }}</span>
+                  <button type="button" @click="removeResource(index)" class="remove-resource">
+                    <Icon name="mdi:close" size="16" />
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
           
           <div class="form-actions">
@@ -155,6 +187,14 @@
         </form>
       </div>
     </div>
+    
+    <!-- Resource Modal -->
+    <ResourceModal 
+      :is-open="showResourceModal" 
+      context="task"
+      @close="closeResourceModal"
+      @add="handleAddResource"
+    />
   </div>
 </template>
 
@@ -162,27 +202,35 @@
 import { ref, computed, onMounted } from 'vue';
 import { useTasksStore } from '~/stores/tasks';
 import { useEditorStore } from '~/stores/editor';
+import ResourceModal from '~/components/Prompts/ResourceModal.vue';
+import type { ResourceReference } from '~/stores/prompt-engineering';
+
 // Using simplified task structure
 interface SimpleTask {
   id: string;
+  identifier?: string;
   content: string;
   status: 'backlog' | 'pending' | 'in_progress' | 'completed';
   priority: 'high' | 'medium' | 'low';
   type?: 'feature' | 'bugfix' | 'refactor' | 'documentation' | 'research';
   assignee?: 'claude' | 'user' | 'both';
   description?: string;
+  resources?: ResourceReference[];
 }
 
 const tasksStore = useTasksStore();
 
 const showModal = ref(false);
+const showResourceModal = ref(false);
 const editingTask = ref<SimpleTask | null>(null);
 const taskForm = ref({
+  identifier: '',
   content: '',
   description: '',
   priority: 'medium' as 'low' | 'medium' | 'high',
   type: 'feature' as SimpleTask['type'],
-  assignee: 'claude' as SimpleTask['assignee']
+  assignee: 'claude' as SimpleTask['assignee'],
+  resources: [] as ResourceReference[]
 });
 
 const backlogTasks = computed(() => tasksStore.backlogTasks);
@@ -201,11 +249,13 @@ const onTaskDrop = async (taskId: string, newStatus: SimpleTask['status']) => {
 const addNewTask = () => {
   editingTask.value = null;
   taskForm.value = {
+    identifier: '',
     content: '',
     description: '',
     priority: 'medium',
     type: 'feature',
-    assignee: 'claude'
+    assignee: 'claude',
+    resources: []
   };
   showModal.value = true;
 };
@@ -213,11 +263,13 @@ const addNewTask = () => {
 const editTask = (task: SimpleTask) => {
   editingTask.value = task;
   taskForm.value = {
+    identifier: task.identifier || '',
     content: task.content,
     description: task.description || '',
     priority: task.priority || 'medium',
     type: task.type || 'feature',
-    assignee: task.assignee || 'claude'
+    assignee: task.assignee || 'claude',
+    resources: task.resources || []
   };
   showModal.value = true;
 };
@@ -233,18 +285,27 @@ const saveTask = () => {
   
   if (editingTask.value) {
     tasksStore.updateTask(editingTask.value.id, {
+      identifier: taskForm.value.identifier,
       content: taskForm.value.content,
       description: taskForm.value.description,
       priority: taskForm.value.priority,
       type: taskForm.value.type,
-      assignee: taskForm.value.assignee
+      assignee: taskForm.value.assignee,
+      resources: taskForm.value.resources
     });
   } else {
     tasksStore.addTask(
       taskForm.value.content,
       taskForm.value.priority,
-      taskForm.value.type
+      taskForm.value.type,
+      taskForm.value.identifier
     );
+    // Update the task with resources after creation
+    const tasks = tasksStore.tasks;
+    const newTask = tasks[tasks.length - 1];
+    if (newTask && taskForm.value.resources.length > 0) {
+      tasksStore.updateTask(newTask.id, { resources: taskForm.value.resources });
+    }
   }
   
   closeModal();
@@ -253,6 +314,41 @@ const saveTask = () => {
 const closeModal = () => {
   showModal.value = false;
   editingTask.value = null;
+};
+
+const openResourceModal = () => {
+  showResourceModal.value = true;
+};
+
+const closeResourceModal = () => {
+  showResourceModal.value = false;
+};
+
+const handleAddResource = (resource: ResourceReference) => {
+  // Check if resource already exists
+  const exists = taskForm.value.resources.some(r => 
+    r.type === resource.type && r.id === resource.id
+  );
+  
+  if (!exists) {
+    taskForm.value.resources.push(resource);
+  }
+};
+
+const removeResource = (index: number) => {
+  taskForm.value.resources.splice(index, 1);
+};
+
+const getResourceIcon = (type: string): string => {
+  const icons: Record<string, string> = {
+    file: 'heroicons:document',
+    knowledge: 'heroicons:book-open',
+    task: 'heroicons:check-circle',
+    hook: 'heroicons:bolt',
+    mcp: 'heroicons:server',
+    command: 'heroicons:command-line'
+  };
+  return icons[type] || 'heroicons:document';
 };
 
 const createNewProject = async () => {
@@ -370,15 +466,21 @@ Each task in TASKS.md should include the following metadata:
 
 ### Required Fields:
 - **Content**: The task description
-- **Status**: pending | in_progress | completed
+- **Status**: backlog | pending | in_progress | completed
 - **Priority**: high | medium | low
 - **Assignee**: Claude | User | Both
 - **Type**: feature | bugfix | refactor | documentation | research
 
 ### Optional Fields:
+- **ID**: A custom identifier for easy reference (e.g., TASK-001, AUTH-42)
 - **Description**: Additional context or details about the task
-- **Files Modified**: List of files that will be or were modified
-- **Dependencies**: Other tasks that must be completed first
+- **Resources**: Linked resources including:
+  - Files: Source files relevant to the task
+  - Tasks: Related or dependent tasks (by ID)
+  - Knowledge: Documentation or reference materials
+  - Hooks: Relevant automation scripts
+  - MCP: Tools or servers needed
+  - Commands: CLI commands or scripts
 
 ## TASKS.md Format
 
@@ -391,38 +493,42 @@ Each task in TASKS.md should include the following metadata:
 ## Backlog ([count])
 
 - [ ] **[Task Content]**
+  - ID: FEAT-001
   - Assignee: Claude
   - Type: feature
   - Priority: low
   - Description: Future enhancement to consider
-  - Files: TBD
+  - Resources: Task: AUTH-01, File: src/config.ts
 
 ## To Do ([count])
 
 - [ ] **[Task Content]**
+  - ID: API-003
   - Assignee: Claude
   - Type: feature
   - Priority: high
   - Description: Brief description of what needs to be done
-  - Files: src/component.ts, src/types.ts
+  - Resources: File: src/api/users.ts, Task: AUTH-01, knowledge: API Guidelines
 
 ## In Progress ([count])
 
 - [ ] **[Task Content]** ⏳
+  - ID: BUG-007
   - Assignee: Claude
   - Type: bugfix
   - Priority: high
   - Description: Currently working on fixing the login validation
-  - Files: src/auth/login.ts
+  - Resources: File: src/auth/login.ts, File: src/utils/validator.ts
 
 ## Completed ([count])
 
 - [x] ~~[Task Content]~~
+  - ~~ID: AUTH-01~~
   - ~~Assignee: Claude~~
   - ~~Type: feature~~
   - ~~Priority: medium~~
   - ~~Description: Implemented user authentication~~
-  - ~~Files: src/auth/*, src/middleware/auth.ts~~
+  - ~~Resources: File: src/auth/*, File: src/middleware/auth.ts~~
 \`\`\`
 
 ## Important Rules for Claude
@@ -430,8 +536,9 @@ Each task in TASKS.md should include the following metadata:
 ### 1. Task Creation
 - **ALWAYS** create tasks in TASKS.md when you use TodoWrite
 - Include all required metadata (assignee, type, priority)
+- Consider adding an ID for easy reference in resources
 - Add helpful descriptions for future reference
-- List files that will be modified
+- Link relevant resources (files, other tasks, knowledge, etc.)
 
 ### 2. Task Updates
 - Move tasks between sections as you work on them:
@@ -459,6 +566,13 @@ Each task in TASKS.md should include the following metadata:
 - **User**: Tasks requiring user input or decisions
 - **Both**: Collaborative tasks needing both parties
 
+### 6. Resource Linking
+- **Files**: Use relative paths from project root
+- **Tasks**: Reference by ID (e.g., Task: AUTH-01)
+- **Knowledge**: Reference by title or category
+- **MCP/Commands**: Reference by name
+- Tasks can link to other tasks as dependencies or related work
+
 ## Best Practices
 
 1. **Be Specific**: Write clear, actionable task descriptions
@@ -483,11 +597,12 @@ User: "Add a search functionality to the user list"
 
 Claude should create in TASKS.md:
 - [ ] **Add search functionality to user list**
+  - ID: FEAT-023
   - Assignee: Claude
   - Type: feature
   - Priority: medium
   - Description: Implement real-time search filtering for the user list component
-  - Files: src/components/UserList.tsx, src/hooks/useSearch.ts
+  - Resources: File: src/components/UserList.tsx, File: src/hooks/useSearch.ts, Task: UI-001
 \`\`\`
 
 Remember: Good task management helps maintain project clarity and progress visibility!`;
@@ -548,15 +663,21 @@ Each task in TASKS.md should include the following metadata:
 
 ### Required Fields:
 - **Content**: The task description
-- **Status**: pending | in_progress | completed
+- **Status**: backlog | pending | in_progress | completed
 - **Priority**: high | medium | low
 - **Assignee**: Claude | User | Both
 - **Type**: feature | bugfix | refactor | documentation | research
 
 ### Optional Fields:
+- **ID**: A custom identifier for easy reference (e.g., TASK-001, AUTH-42)
 - **Description**: Additional context or details about the task
-- **Files Modified**: List of files that will be or were modified
-- **Dependencies**: Other tasks that must be completed first
+- **Resources**: Linked resources including:
+  - Files: Source files relevant to the task
+  - Tasks: Related or dependent tasks (by ID)
+  - Knowledge: Documentation or reference materials
+  - Hooks: Relevant automation scripts
+  - MCP: Tools or servers needed
+  - Commands: CLI commands or scripts
 
 ## TASKS.md Format
 
@@ -569,38 +690,42 @@ Each task in TASKS.md should include the following metadata:
 ## Backlog ([count])
 
 - [ ] **[Task Content]**
+  - ID: FEAT-001
   - Assignee: Claude
   - Type: feature
   - Priority: low
   - Description: Future enhancement to consider
-  - Files: TBD
+  - Resources: Task: AUTH-01, File: src/config.ts
 
 ## To Do ([count])
 
 - [ ] **[Task Content]**
+  - ID: API-003
   - Assignee: Claude
   - Type: feature
   - Priority: high
   - Description: Brief description of what needs to be done
-  - Files: src/component.ts, src/types.ts
+  - Resources: File: src/api/users.ts, Task: AUTH-01, knowledge: API Guidelines
 
 ## In Progress ([count])
 
 - [ ] **[Task Content]** ⏳
+  - ID: BUG-007
   - Assignee: Claude
   - Type: bugfix
   - Priority: high
   - Description: Currently working on fixing the login validation
-  - Files: src/auth/login.ts
+  - Resources: File: src/auth/login.ts, File: src/utils/validator.ts
 
 ## Completed ([count])
 
 - [x] ~~[Task Content]~~
+  - ~~ID: AUTH-01~~
   - ~~Assignee: Claude~~
   - ~~Type: feature~~
   - ~~Priority: medium~~
   - ~~Description: Implemented user authentication~~
-  - ~~Files: src/auth/*, src/middleware/auth.ts~~
+  - ~~Resources: File: src/auth/*, File: src/middleware/auth.ts~~
 \`\`\`
 
 ## Important Rules for Claude
@@ -608,8 +733,9 @@ Each task in TASKS.md should include the following metadata:
 ### 1. Task Creation
 - **ALWAYS** create tasks in TASKS.md when you use TodoWrite
 - Include all required metadata (assignee, type, priority)
+- Consider adding an ID for easy reference in resources
 - Add helpful descriptions for future reference
-- List files that will be modified
+- Link relevant resources (files, other tasks, knowledge, etc.)
 
 ### 2. Task Updates
 - Move tasks between sections as you work on them:
@@ -637,6 +763,13 @@ Each task in TASKS.md should include the following metadata:
 - **User**: Tasks requiring user input or decisions
 - **Both**: Collaborative tasks needing both parties
 
+### 6. Resource Linking
+- **Files**: Use relative paths from project root
+- **Tasks**: Reference by ID (e.g., Task: AUTH-01)
+- **Knowledge**: Reference by title or category
+- **MCP/Commands**: Reference by name
+- Tasks can link to other tasks as dependencies or related work
+
 ## Best Practices
 
 1. **Be Specific**: Write clear, actionable task descriptions
@@ -661,11 +794,12 @@ User: "Add a search functionality to the user list"
 
 Claude should create in TASKS.md:
 - [ ] **Add search functionality to user list**
+  - ID: FEAT-023
   - Assignee: Claude
   - Type: feature
   - Priority: medium
   - Description: Implement real-time search filtering for the user list component
-  - Files: src/components/UserList.tsx, src/hooks/useSearch.ts
+  - Resources: File: src/components/UserList.tsx, File: src/hooks/useSearch.ts, Task: UI-001
 \`\`\`
 
 Remember: Good task management helps maintain project clarity and progress visibility!`;
@@ -960,5 +1094,81 @@ onMounted(async () => {
 
 .save-button:hover {
   background: #005a9e;
+}
+
+.flex-2 {
+  flex: 2;
+}
+
+.resources-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.add-resource-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: #3e3e42;
+  border: 1px dashed #6c6c6c;
+  border-radius: 4px;
+  color: #cccccc;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s;
+}
+
+.add-resource-button:hover {
+  background: #4e4e52;
+  border-style: solid;
+}
+
+.resource-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.resource-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #3c3c3c;
+  border: 1px solid #6c6c6c;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.resource-name {
+  flex: 1;
+  color: #d4d4d4;
+}
+
+.resource-type {
+  font-size: 11px;
+  color: #858585;
+  text-transform: capitalize;
+  padding: 2px 6px;
+  background: #2d2d30;
+  border-radius: 3px;
+}
+
+.remove-resource {
+  background: none;
+  border: none;
+  color: #858585;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 3px;
+  transition: all 0.2s;
+}
+
+.remove-resource:hover {
+  background: #f14c4c33;
+  color: #f14c4c;
 }
 </style>

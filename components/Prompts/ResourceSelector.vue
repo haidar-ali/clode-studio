@@ -164,6 +164,51 @@
           </div>
         </div>
       </div>
+
+      <!-- Tasks -->
+      <div v-else-if="activeTab === 'task'" class="task-list">
+        <div class="search-box">
+          <Icon name="heroicons:magnifying-glass" />
+          <input 
+            v-model="taskSearch" 
+            type="text" 
+            placeholder="Search tasks..."
+          >
+        </div>
+        <div v-if="tasksStore.isInitialized === false" class="loading-state">
+          <Icon name="mdi:loading" class="animate-spin" />
+          <span>Loading tasks...</span>
+        </div>
+        <div v-else-if="filteredTasks.length === 0" class="empty-state">
+          <Icon name="heroicons:check-circle" />
+          <span>No tasks found</span>
+          <span class="hint">Create tasks in the Kanban board</span>
+        </div>
+        <div v-else class="task-sections">
+          <div v-for="section in taskSections" :key="section.status" class="task-section">
+            <div v-if="section.tasks.length > 0" class="section-header">
+              <span class="section-title">{{ section.title }}</span>
+              <span class="section-count">({{ section.tasks.length }})</span>
+            </div>
+            <div 
+              v-for="task in section.tasks" 
+              :key="task.id"
+              class="resource-item task-item"
+              @click="selectTask(task)"
+            >
+              <Icon :name="getTaskIcon(task)" />
+              <div class="task-info">
+                <span class="task-title">{{ task.content }}</span>
+                <div class="task-meta">
+                  <span v-if="task.identifier" class="task-id">{{ task.identifier }}</span>
+                  <span class="task-priority" :class="`priority-${task.priority}`">{{ task.priority }}</span>
+                  <span class="task-type">{{ task.type || 'feature' }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -191,9 +236,10 @@ const hooksStore = useHooksStore();
 const contextStore = useProjectContextStore();
 const tasksStore = useTasksStore();
 
-const activeTab = ref<'file' | 'knowledge' | 'hook' | 'mcp' | 'command'>('file');
+const activeTab = ref<'file' | 'knowledge' | 'hook' | 'mcp' | 'command' | 'task'>('file');
 const fileSearch = ref('');
 const knowledgeSearch = ref('');
+const taskSearch = ref('');
 
 const allFiles = ref<Array<{name: string; path: string; relativePath: string}>>([]);
 const isLoadingFiles = ref(false);
@@ -264,6 +310,7 @@ const loadWorkspaceFiles = async (workspacePath: string) => {
 const resourceTabs = [
   { type: 'file', label: 'Files', icon: 'heroicons:document' },
   { type: 'knowledge', label: 'Knowledge', icon: 'heroicons:book-open' },
+  { type: 'task', label: 'Tasks', icon: 'heroicons:check-circle' },
   { type: 'hook', label: 'Hooks', icon: 'heroicons:bolt' },
   { type: 'mcp', label: 'MCP Tools', icon: 'heroicons:server' },
   { type: 'command', label: 'Commands', icon: 'heroicons:command-line' }
@@ -321,6 +368,43 @@ const connectedServers = computed(() => {
 
 const availableCommands = computed(() => {
   return commandsStore.allCommands || [];
+});
+
+const filteredTasks = computed(() => {
+  if (!taskSearch.value) return tasksStore.tasks || [];
+  
+  const search = taskSearch.value.toLowerCase();
+  return (tasksStore.tasks || []).filter(task => 
+    task.content.toLowerCase().includes(search) ||
+    task.identifier?.toLowerCase().includes(search) ||
+    task.description?.toLowerCase().includes(search) ||
+    task.type?.toLowerCase().includes(search)
+  );
+});
+
+const taskSections = computed(() => {
+  return [
+    {
+      status: 'in_progress',
+      title: 'In Progress',
+      tasks: filteredTasks.value.filter(t => t.status === 'in_progress')
+    },
+    {
+      status: 'pending',
+      title: 'To Do',
+      tasks: filteredTasks.value.filter(t => t.status === 'pending')
+    },
+    {
+      status: 'backlog',
+      title: 'Backlog',
+      tasks: filteredTasks.value.filter(t => t.status === 'backlog')
+    },
+    {
+      status: 'completed',
+      title: 'Completed',
+      tasks: filteredTasks.value.filter(t => t.status === 'completed').slice(0, 10) // Limit completed tasks
+    }
+  ];
 });
 
 function selectFile(file: any) {
@@ -410,6 +494,27 @@ function getCategoryIcon(category: string): string {
     reference: 'heroicons:book-open'
   };
   return icons[category] || 'heroicons:document';
+}
+
+function selectTask(task: any) {
+  emit('add', {
+    type: 'task',
+    id: task.id,
+    name: task.identifier ? `[${task.identifier}] ${task.content}` : task.content,
+    metadata: {
+      status: task.status,
+      priority: task.priority,
+      type: task.type,
+      identifier: task.identifier
+    }
+  });
+}
+
+function getTaskIcon(task: any): string {
+  if (task.status === 'completed') return 'heroicons:check-circle';
+  if (task.status === 'in_progress') return 'heroicons:clock';
+  if (task.priority === 'high') return 'heroicons:exclamation-circle';
+  return 'heroicons:circle';
 }
 
 // Function to initialize and load data
@@ -799,5 +904,84 @@ watch(() => allFiles.value.length, (newLength) => {
 
 .resource-content::-webkit-scrollbar-thumb:hover {
   background: #4f4f4f;
+}
+
+/* Task specific styles */
+.task-sections {
+  padding: 8px 0;
+}
+
+.task-section {
+  margin-bottom: 16px;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #858585;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.section-count {
+  color: #6e6e6e;
+}
+
+.task-item {
+  padding: 10px 12px;
+}
+
+.task-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.task-title {
+  font-weight: 500;
+  color: #cccccc;
+}
+
+.task-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.task-id {
+  color: #858585;
+  font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.task-priority {
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.task-priority.priority-high {
+  background: #f14c4c33;
+  color: #f14c4c;
+}
+
+.task-priority.priority-medium {
+  background: #d4af3733;
+  color: #d4af37;
+}
+
+.task-priority.priority-low {
+  background: #4ec9b033;
+  color: #4ec9b0;
+}
+
+.task-type {
+  color: #858585;
 }
 </style>
