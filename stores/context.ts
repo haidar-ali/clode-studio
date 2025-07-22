@@ -208,5 +208,12 @@ export const useContextStore = defineStore('context', () => {
     provideFeedback,
     getContextAnalytics,
     loadPersistedCheckpoints,
+    
+    // Method for checkpoint system
+    restoreMessages(messages: any[]) {
+      // This would need to integrate with the chat store
+      // For now, just log
+      console.log('Context messages restored:', messages.length);
+    }
   };
 });

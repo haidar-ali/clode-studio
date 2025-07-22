@@ -47,14 +47,18 @@
     "dotenv": "^16.4.7",
     "gray-matter": "^4.0.3",
     "highlight.js": "^11.11.1",
+    "isomorphic-git": "^1.32.1",
     "lunr": "^2.3.9",
     "marked": "^16.1.1",
     "monaco-editor": "^0.52.2",
     "node-pty": "^1.0.0",
     "nuxt": "^3.17.6",
+    "simple-git": "^3.28.0",
     "typescript": "^5.8.3",
     "vue": "^3.5.17",
-    "vue-router": "^4.5.1"
+    "vue-router": "^4.5.1",
+    "archiver": "^7.0.1",
+    "tar": "^7.4.0"
   },
   "devDependencies": {
     "@formkit/drag-and-drop": "^0.5.3",

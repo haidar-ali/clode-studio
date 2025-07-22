@@ -543,6 +543,57 @@ ${this.completedTasks.map(task => formatTask(task, true)).join('\n')}
         // Always reset the flag
         this.isImportingFromFile = false;
       }
+    },
+    
+    // Method for checkpoint system
+    restoreState(state: { columns: any[]; taskOrder: Record<string, string[]> }) {
+      // Note: This store seems to use a simpler task structure
+      // The checkpoint system expects columns and taskOrder, but this store uses a flat task list
+      // We'll need to adapt the restoration logic
+      
+      if (state.columns && Array.isArray(state.columns)) {
+        // Convert columns format to flat task list
+        const allTasks: SimpleTask[] = [];
+        
+        state.columns.forEach(column => {
+          if (column.tasks && Array.isArray(column.tasks)) {
+            column.tasks.forEach((task: any) => {
+              // Map task from column format to SimpleTask format
+              const simpleTask: SimpleTask = {
+                id: task.id,
+                title: task.title || task.content || '',
+                status: this.mapColumnToStatus(column.id || column.title),
+                assignee: task.assignee,
+                priority: task.priority,
+                type: task.type,
+                createdAt: task.createdAt || new Date().toISOString(),
+                updatedAt: task.updatedAt || new Date().toISOString(),
+                description: task.description,
+                filesModified: task.filesModified || [],
+                resources: task.resources || []
+              };
+              allTasks.push(simpleTask);
+            });
+          }
+        });
+        
+        this.tasks = allTasks;
+        this.saveToTasksFile();
+      }
+    },
+    
+    mapColumnToStatus(columnId: string): TaskStatus {
+      const columnMap: Record<string, TaskStatus> = {
+        'backlog': 'backlog',
+        'todo': 'todo',
+        'to-do': 'todo',
+        'in-progress': 'in_progress',
+        'in_progress': 'in_progress',
+        'completed': 'completed',
+        'done': 'completed'
+      };
+      
+      return columnMap[columnId.toLowerCase()] || 'todo';
     }
   }
 });

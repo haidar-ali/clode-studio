@@ -153,6 +153,26 @@ export const useEditorStore = defineStore('editor', {
         bash: 'shell'
       };
       return languageMap[ext || ''] || 'plaintext';
+    },
+    
+    // Methods for checkpoint system
+    getCursorPositions(): Record<string, { line: number; column: number }> {
+      const positions: Record<string, { line: number; column: number }> = {};
+      // This would need to be implemented based on your editor integration
+      // For now, return empty object
+      return positions;
+    },
+    
+    getScrollPositions(): Record<string, number> {
+      const positions: Record<string, number> = {};
+      // This would need to be implemented based on your editor integration
+      // For now, return empty object
+      return positions;
+    },
+    
+    restoreCursorPositions(positions: Record<string, { line: number; column: number }>) {
+      // This would need to be implemented based on your editor integration
+      console.log('Restoring cursor positions:', positions);
     }
   }
 });

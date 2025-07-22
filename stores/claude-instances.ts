@@ -429,6 +429,39 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
       // Clear instances map
       this.instances.clear();
       this.activeInstanceId = null;
+    },
+    
+    // Methods for checkpoint system
+    restoreInstances(instances: Array<{ id: string; personality: string; messages: any[] }>) {
+      // Clear existing instances
+      this.instances.clear();
+      
+      // Restore instances from checkpoint
+      instances.forEach(inst => {
+        const personality = this.personalities.get(inst.personality);
+        if (personality) {
+          const newInstance: ClaudeInstance = {
+            id: inst.id,
+            name: `${personality.name} Instance`,
+            personalityId: inst.personality,
+            messages: inst.messages || [],
+            createdAt: new Date().toISOString(),
+            lastActiveAt: new Date().toISOString()
+          };
+          this.instances.set(inst.id, newInstance);
+        }
+      });
+      
+      // Set first instance as active if none selected
+      if (!this.activeInstanceId && instances.length > 0) {
+        this.activeInstanceId = instances[0].id;
+      }
+    },
+    
+    setActiveInstance(instanceId: string) {
+      if (this.instances.has(instanceId)) {
+        this.activeInstanceId = instanceId;
+      }
     }
   }
 });

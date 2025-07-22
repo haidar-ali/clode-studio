@@ -15,6 +15,10 @@ import { claudeSettingsManager } from './claude-settings-manager.js';
 import { ClaudeDetector } from './claude-detector.js';
 import { fileWatcherService } from './file-watcher.js';
 import { createKnowledgeCache } from './knowledge-cache.js';
+import { GitService } from './git-service.js';
+import { CheckpointService } from './checkpoint-service.js';
+import { WorktreeManager } from './worktree-manager.js';
+import { GitHooksManager } from './git-hooks.js';
 
 // Load environment variables from .env file
 import { config } from 'dotenv';
@@ -33,6 +37,18 @@ const claudeInstances: Map<string, pty.IPty> = new Map();
 
 // Knowledge cache instances per workspace
 const knowledgeCaches: Map<string, any> = new Map();
+
+// Git service instances per workspace
+const gitServices: Map<string, GitService> = new Map();
+
+// Checkpoint service instances per workspace
+const checkpointServices: Map<string, CheckpointService> = new Map();
+
+// Worktree manager instances per workspace
+const worktreeManagers: Map<string, WorktreeManager> = new Map();
+
+// Git hooks manager instances per workspace
+const gitHooksManagers: Map<string, GitHooksManager> = new Map();
 
 const isDev = process.env.NODE_ENV !== 'production';
 const nuxtURL = isDev ? 'http://localhost:3000' : `file://${join(__dirname, '../.output/public/index.html')}`;
@@ -636,6 +652,15 @@ ipcMain.handle('dialog:showOpenDialog', async (event, options) => {
     return result;
   } catch (error) {
     return { canceled: true, filePaths: [] };
+  }
+});
+
+ipcMain.handle('dialog:showSaveDialog', async (event, options) => {
+  try {
+    const result = await dialog.showSaveDialog(mainWindow!, options);
+    return result;
+  } catch (error) {
+    return { canceled: true, filePath: undefined };
   }
 });
 
@@ -1660,4 +1685,58 @@ ipcMain.handle('workspace:importContext', async (event, workspacePath: string, j
       error: error instanceof Error ? error.message : 'Failed to import workspace context' 
     };
   }
+});
+
+// Git service initialization when workspace changes
+ipcMain.handle('workspace:setPath', async (event, workspacePath: string) => {
+  try {
+    // Store the workspace path
+    (store as any).set('workspacePath', workspacePath);
+    
+    // Initialize or update git service for this workspace
+    let gitService = gitServices.get(workspacePath);
+    if (!gitService) {
+      gitService = new GitService(workspacePath);
+      gitServices.set(workspacePath, gitService);
+    }
+    
+    // Initialize or update checkpoint service for this workspace
+    let checkpointService = checkpointServices.get(workspacePath);
+    if (!checkpointService) {
+      checkpointService = new CheckpointService(workspacePath);
+      checkpointServices.set(workspacePath, checkpointService);
+      
+      // Initialize shadow repository
+      await checkpointService.initialize();
+    }
+    
+    // Initialize or update worktree manager for this workspace
+    let worktreeManager = worktreeManagers.get(workspacePath);
+    if (!worktreeManager) {
+      worktreeManager = new WorktreeManager(workspacePath);
+      worktreeManagers.set(workspacePath, worktreeManager);
+    }
+    
+    // Initialize or update git hooks manager for this workspace
+    let gitHooksManager = gitHooksManagers.get(workspacePath);
+    if (!gitHooksManager) {
+      gitHooksManager = new GitHooksManager(workspacePath);
+      gitHooksManagers.set(workspacePath, gitHooksManager);
+    }
+    
+    return { success: true };
+  } catch (error) {
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to set workspace path' 
+    };
+  }
+});
+
+// Clean up git services on app quit
+app.on('before-quit', () => {
+  for (const [path, service] of gitServices) {
+    service.cleanup();
+  }
+  gitServices.clear();
 });

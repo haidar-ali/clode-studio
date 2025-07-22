@@ -113,7 +113,8 @@ const electronAPI = {
   dialog: {
     selectFolder: () => ipcRenderer.invoke('dialog:selectFolder'),
     selectFile: () => ipcRenderer.invoke('dialog:selectFile'),
-    showOpenDialog: (options: any) => ipcRenderer.invoke('dialog:showOpenDialog', options)
+    showOpenDialog: (options: any) => ipcRenderer.invoke('dialog:showOpenDialog', options),
+    showSaveDialog: (options: any) => ipcRenderer.invoke('dialog:showSaveDialog', options)
   },
   getHomeDir: () => ipcRenderer.invoke('getHomeDir'),
   
@@ -249,7 +250,70 @@ const electronAPI = {
     exportContext: (workspacePath: string) =>
       ipcRenderer.invoke('workspace:exportContext', workspacePath),
     importContext: (workspacePath: string, jsonData: string) =>
-      ipcRenderer.invoke('workspace:importContext', workspacePath, jsonData)
+      ipcRenderer.invoke('workspace:importContext', workspacePath, jsonData),
+    setPath: (workspacePath: string) =>
+      ipcRenderer.invoke('workspace:setPath', workspacePath)
+  },
+  git: {
+    status: () => ipcRenderer.invoke('git:status'),
+    add: (files: string[]) => ipcRenderer.invoke('git:add', files),
+    reset: (files: string[]) => ipcRenderer.invoke('git:reset', files),
+    commit: (message: string) => ipcRenderer.invoke('git:commit', message),
+    push: (remote?: string, branch?: string) => ipcRenderer.invoke('git:push', remote, branch),
+    pull: (remote?: string, branch?: string) => ipcRenderer.invoke('git:pull', remote, branch),
+    getCurrentBranch: () => ipcRenderer.invoke('git:getCurrentBranch'),
+    getBranches: () => ipcRenderer.invoke('git:getBranches'),
+    createBranch: (name: string) => ipcRenderer.invoke('git:createBranch', name),
+    switchBranch: (name: string) => ipcRenderer.invoke('git:switchBranch', name),
+    getLog: (limit?: number) => ipcRenderer.invoke('git:getLog', limit),
+    diff: (file?: string) => ipcRenderer.invoke('git:diff', file),
+    diffStaged: (file?: string) => ipcRenderer.invoke('git:diffStaged', file),
+    discardChanges: (files: string[]) => ipcRenderer.invoke('git:discardChanges', files),
+    init: () => ipcRenderer.invoke('git:init'),
+    clone: (url: string, localPath?: string) => ipcRenderer.invoke('git:clone', url, localPath),
+    checkIsRepo: () => ipcRenderer.invoke('git:checkIsRepo')
+  },
+  checkpoint: {
+    init: () => ipcRenderer.invoke('checkpoint:init'),
+    create: (metadata: any) => ipcRenderer.invoke('checkpoint:create', metadata),
+    list: () => ipcRenderer.invoke('checkpoint:list'),
+    get: (checkpointId: string) => ipcRenderer.invoke('checkpoint:get', checkpointId),
+    restore: (checkpointId: string, options?: any) => 
+      ipcRenderer.invoke('checkpoint:restore', checkpointId, options),
+    delete: (checkpointId: string) => ipcRenderer.invoke('checkpoint:delete', checkpointId),
+    compare: (id1: string, id2: string) => ipcRenderer.invoke('checkpoint:compare', id1, id2),
+    export: (checkpointId: string, exportPath: string) => 
+      ipcRenderer.invoke('checkpoint:export', checkpointId, exportPath),
+    import: (importPath: string) => ipcRenderer.invoke('checkpoint:import', importPath),
+    stats: () => ipcRenderer.invoke('checkpoint:stats'),
+    clean: (options?: any) => ipcRenderer.invoke('checkpoint:clean', options)
+  },
+  worktree: {
+    list: () => ipcRenderer.invoke('worktree:list'),
+    create: (branchName: string, sessionName?: string) => 
+      ipcRenderer.invoke('worktree:create', branchName, sessionName),
+    remove: (worktreePath: string, force?: boolean) => 
+      ipcRenderer.invoke('worktree:remove', worktreePath, force),
+    switch: (worktreePath: string) => 
+      ipcRenderer.invoke('worktree:switch', worktreePath),
+    compare: (path1: string, path2: string) => 
+      ipcRenderer.invoke('worktree:compare', path1, path2),
+    sessions: () => ipcRenderer.invoke('worktree:sessions'),
+    createSession: (sessionData: any) => 
+      ipcRenderer.invoke('worktree:createSession', sessionData),
+    deleteSession: (sessionId: string) => 
+      ipcRenderer.invoke('worktree:deleteSession', sessionId),
+    lock: (worktreePath: string, lock: boolean) => 
+      ipcRenderer.invoke('worktree:lock', worktreePath, lock),
+    prune: () => ipcRenderer.invoke('worktree:prune')
+  },
+  gitHooks: {
+    install: (options?: any) => ipcRenderer.invoke('git-hooks:install', options),
+    uninstall: () => ipcRenderer.invoke('git-hooks:uninstall'),
+    status: () => ipcRenderer.invoke('git-hooks:status'),
+    update: (hookName: string, options: any) => 
+      ipcRenderer.invoke('git-hooks:update', hookName, options),
+    test: (hookName: string) => ipcRenderer.invoke('git-hooks:test', hookName)
   }
 };
 
