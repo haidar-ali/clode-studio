@@ -959,7 +959,7 @@ const serverTemplates: MCPServerTemplate[] = [
   // Remote Services (SSE/HTTP)
   {
     id: 'context7-sse',
-    name: 'Context7 (SSE)',
+    name: 'Context7 SSE',
     description: 'Real-time library documentation',
     detailedDescription: 'Provides up-to-date, version-specific documentation and code examples for any library directly in your prompt. No local installation required.',
     icon: 'mdi:book-open-variant',
@@ -974,7 +974,7 @@ const serverTemplates: MCPServerTemplate[] = [
   },
   {
     id: 'context7-http',
-    name: 'Context7 (HTTP)',
+    name: 'Context7 HTTP',
     description: 'Library docs via streamable HTTP',
     detailedDescription: 'Modern streamable HTTP version of Context7. Provides the same documentation capabilities with better performance and compatibility.',
     icon: 'mdi:book-open-page-variant',
