@@ -71,7 +71,7 @@
         </div>
 
         <div class="search-actions">
-          <button @click="performSearch" class="primary-button" :disabled="!searchQuery">
+          <button @click="performSearch" class="primary-button" :disabled="!canSearch">
             <Icon name="mdi:magnify" />
             Search
           </button>
@@ -79,6 +79,10 @@
             <Icon name="mdi:find-replace" />
             Replace All
           </button>
+        </div>
+        
+        <div v-if="searchQuery.length > 0 && searchQuery.length < 3" class="search-hint">
+          Please enter at least 3 characters to search
         </div>
       </div>
 
@@ -165,7 +169,7 @@ const caseSensitive = ref(false);
 const wholeWord = ref(false);
 const useRegex = ref(false);
 const includePattern = ref('');
-const excludePattern = ref('node_modules/**, dist/**, .git/**, .nuxt/**');
+const excludePattern = ref('node_modules/**, dist/**, .git/**, .nuxt/**, .claude/**, .claude-checkpoints/**, .worktrees/**, build/**, .output/**, coverage/**, .nyc_output/**, tmp/**, temp/**, .cache/**, .parcel-cache/**, .vscode/**, .idea/**, __pycache__/**, *.pyc, .DS_Store, *.log, *.min.js, *.map, package-lock.json, yarn.lock, *.bundle.js, vendor/**, .next/**, out/**');
 
 const searchResults = ref<FileResult[]>([]);
 const expandedFiles = ref(new Set<string>());
@@ -178,6 +182,10 @@ const workspaceName = computed(() => {
   if (!tasksStore.projectPath) return '';
   const parts = tasksStore.projectPath.split('/');
   return parts[parts.length - 1];
+});
+
+const canSearch = computed(() => {
+  return searchQuery.value.length >= 3;
 });
 
 watch(() => props.isOpen, async (newVal) => {
@@ -201,7 +209,9 @@ const toggleFile = (path: string) => {
 };
 
 const performSearch = async () => {
-  if (!searchQuery.value) return;
+  if (!searchQuery.value || searchQuery.value.length < 3) return;
+
+  console.log('[GlobalSearch] Starting search with query:', searchQuery.value);
 
   // Check if search API is available
   if (!window.electronAPI?.search) {
@@ -219,8 +229,7 @@ const performSearch = async () => {
       return;
     }
 
-    // Just await the search without a timeout - the backend already has a 2s timeout
-    const results = await window.electronAPI.search.findInFiles({
+    const searchParams = {
       query: searchQuery.value,
       caseSensitive: caseSensitive.value,
       wholeWord: wholeWord.value,
@@ -228,8 +237,26 @@ const performSearch = async () => {
       includePattern: includePattern.value,
       excludePattern: excludePattern.value,
       workspacePath: workspacePath
-    });
+    };
 
+    console.log('[GlobalSearch] Search params:', searchParams);
+    console.log('[GlobalSearch] Calling electronAPI.search.findInFiles...');
+    
+    const startTime = Date.now();
+    
+    let results;
+    try {
+      // Just await the search without a timeout - the backend already has a 2s timeout
+      results = await window.electronAPI.search.findInFiles(searchParams);
+      
+      const searchTime = Date.now() - startTime;
+      console.log(`[GlobalSearch] Search completed in ${searchTime}ms with ${results?.length || 0} results`);
+    } catch (ipcError) {
+      console.error('[GlobalSearch] IPC call failed:', ipcError);
+      throw ipcError;
+    }
+
+    console.log('[GlobalSearch] Received results:', results);
     searchResults.value = results || [];
     expandedFiles.value.clear();
 
@@ -239,10 +266,12 @@ const performSearch = async () => {
         expandedFiles.value.add(file.path);
       });
     }
+    console.log('[GlobalSearch] Search complete, UI should update');
   } catch (error: any) {
-    console.error('Search failed:', error);
+    console.error('[GlobalSearch] Search failed:', error);
     alert('Search failed: ' + (error?.message || 'Unknown error'));
   } finally {
+    console.log('[GlobalSearch] Setting isSearching to false');
     isSearching.value = false;
   }
 };
@@ -578,5 +607,12 @@ const replaceAll = async () => {
   padding: 40px;
   text-align: center;
   color: #858585;
+}
+
+.search-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #f14c4c;
+  text-align: center;
 }
 </style>

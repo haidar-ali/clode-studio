@@ -196,7 +196,6 @@ const initTerminal = () => {
 
     return true;
   });
-  console.log('Custom key handler attached for Shift+Enter');
   
   terminal.onScroll(() => {
     const buffer = terminal.buffer.active;

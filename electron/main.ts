@@ -11,6 +11,7 @@ import { claudeCodeService } from './claude-sdk-service.js';
 import { lightweightContext } from './lightweight-context.js';
 import { contextOptimizer } from './context-optimizer.js';
 import { workspacePersistence } from './workspace-persistence.js';
+import { searchWithRipgrep } from './search-ripgrep.js';
 import { claudeSettingsManager } from './claude-settings-manager.js';
 import { ClaudeDetector } from './claude-detector.js';
 import { fileWatcherService } from './file-watcher.js';
@@ -840,6 +841,12 @@ ipcMain.handle('claude:sdk:updateTodo', async (event, todoId: string, newStatus:
 
 // Search operations
 ipcMain.handle('search:findInFiles', async (event, options) => {
+  
+  // Add a response wrapper to ensure clean IPC communication
+  const sendResponse = (data: any) => {
+    return data;
+  };
+  
   const { promisify } = await import('util');
   const { exec } = await import('child_process');
   const execAsync = promisify(exec);
@@ -851,84 +858,73 @@ ipcMain.handle('search:findInFiles', async (event, options) => {
 
     // Use workspace path if provided, otherwise fall back to current directory
     const workingDir = workspacePath || process.cwd();
+    console.log('[Main] Working directory:', workingDir);
 
     // Validate that the workspace path exists
     try {
       await fs.access(workingDir);
+      console.log('[Main] Workspace directory exists');
     } catch (error) {
+      console.error('[Main] Workspace directory not found:', workingDir);
       throw new Error(`Workspace directory not found: ${workingDir}`);
     }
 
     try {
       // Try ripgrep first
-      let cmd = `rg "${query}"`;
-      if (!caseSensitive) cmd += ' -i'; // Case-insensitive by default
-      if (wholeWord) cmd += ' -w';
-      if (!useRegex) cmd += ' -F';
-
-      // Use ripgrep's built-in ignore functionality
-      cmd += ' --max-filesize 5M'; // Skip files larger than 5MB
-      cmd += ' --no-follow'; // Don't follow symlinks
-      cmd += ' --no-ignore'; // Don't respect .gitignore files (search everything)
-      cmd += ' --hidden'; // Search hidden files and directories
-
-      if (includePattern) cmd += ` -g "${includePattern}"`;
-      if (excludePattern) {
-        const patterns = excludePattern.split(',').map((p: string) => p.trim());
-        patterns.forEach((p: string) => cmd += ` -g "!${p}"`);
-      }
-      cmd += ' --json .'; // Add explicit path to search in current directory
-
-      const { stdout, stderr } = await execAsync(cmd, {
-        cwd: workingDir,
-        maxBuffer: 10 * 1024 * 1024,
-        timeout: 2000 // 2 second timeout for ripgrep
-      });
-
-
-      // Parse ripgrep JSON output
-      const results = new Map<string, any>();
-      const lines = stdout.split('\n').filter(line => line.trim());
-
-      for (const line of lines) {
-        try {
-          const data = JSON.parse(line);
-          if (data.type === 'match') {
-            const filePath = data.data.path.text;
-            const relativePath = path.relative(workingDir, filePath);
-
-            if (!results.has(filePath)) {
-              results.set(filePath, {
-                path: filePath,
-                relativePath: relativePath,
-                matches: []
-              });
-            }
-
-            results.get(filePath)!.matches.push({
-              line: data.data.line_number,
-              column: data.data.submatches[0].start,
-              text: data.data.lines.text,
-              length: data.data.submatches[0].end - data.data.submatches[0].start
-            });
-          }
-        } catch (e) {
-          // Skip invalid JSON lines
+      console.log('[Main] Attempting to use ripgrep...');
+      
+      // Check for bundled ripgrep first
+      const platform = process.platform;
+      const arch = process.arch;
+      const platformKey = platform === 'darwin' 
+        ? (arch === 'arm64' ? 'darwin-arm64' : 'darwin-x64')
+        : platform === 'linux' ? 'linux-x64' 
+        : platform === 'win32' ? 'win32-x64' 
+        : null;
+      
+      let rgPath = 'rg'; // Default to system rg
+      
+      if (platformKey) {
+        const rgBinary = platform === 'win32' ? 'rg.exe' : 'rg';
+        const bundledRgPath = path.join(__dirname, '..', 'vendor', 'ripgrep', platformKey, rgBinary);
+        
+        if (existsSync(bundledRgPath)) {
+          rgPath = bundledRgPath;
+          console.log('[Main] Using bundled ripgrep from:', rgPath);
+        } else {
+          console.log('[Main] Bundled ripgrep not found at:', bundledRgPath);
         }
       }
 
-      return Array.from(results.values());
+      // Use streaming ripgrep search
+      const results = await searchWithRipgrep(rgPath, query, workingDir, {
+        caseSensitive,
+        wholeWord,
+        useRegex,
+        includePattern,
+        excludePattern
+      });
+      
+      return sendResponse(results);
     } catch (error: any) {
       // Ripgrep failed (likely timeout), fallback to Node.js implementation
-      return await fallbackSearch(workingDir, options);
+      console.log('[Main] Ripgrep failed, falling back to Node.js search. Error:', error.message);
+      const fallbackResults = await fallbackSearch(workingDir, options);
+      return sendResponse(fallbackResults);
     }
   } catch (error) {
+    console.error('[Main] search:findInFiles error:', error);
+    if (error instanceof Error) {
+      console.error('[Main] Error stack:', error.stack);
+    }
     throw error;
   }
 });
 
 // Fallback search implementation using Node.js
 async function fallbackSearch(workingDir: string, options: any) {
+  const startTime = Date.now();
+  
   const { query, caseSensitive, wholeWord, useRegex, includePattern, excludePattern } = options;
   const path = await import('path');
   const fs = await import('fs/promises');
@@ -947,13 +943,15 @@ async function fallbackSearch(workingDir: string, options: any) {
   const regex = new RegExp(pattern, caseSensitive ? 'g' : 'gi');
 
   // Default exclude patterns
-  const defaultExcludes = ['node_modules', 'dist', '.git', '.next', 'build', 'out'];
+  const defaultExcludes = ['node_modules', 'dist', '.git', '.next', 'build', 'out', '.claude', '.claude-checkpoints', '.worktrees', '.output', 'coverage', '.nyc_output', 'tmp', 'temp', '.cache', '.parcel-cache', '.vscode', '.idea', '__pycache__', '.DS_Store', '.nuxt'];
   const excludes = excludePattern
     ? [...defaultExcludes, ...excludePattern.split(',').map((p: string) => p.trim().replace('**/', '').replace('/**', ''))]
     : defaultExcludes;
 
+
   const searchInDirectory = async (dir: string) => {
     try {
+      
       const entries = await fs.readdir(dir, { withFileTypes: true });
 
       for (const entry of entries) {
@@ -986,6 +984,12 @@ async function fallbackSearch(workingDir: string, options: any) {
           if (!textExtensions.includes(ext)) continue;
 
           try {
+            // Skip files larger than 5MB to prevent hanging
+            const stats = await fs.stat(fullPath);
+            if (stats.size > 5 * 1024 * 1024) {
+              continue;
+            }
+            
             const content = await fs.readFile(fullPath, 'utf-8');
             const lines = content.split('\n');
             const matches: any[] = [];
@@ -1023,7 +1027,11 @@ async function fallbackSearch(workingDir: string, options: any) {
   };
 
   await searchInDirectory(workingDir);
-  return Array.from(results.values());
+  
+  
+  const resultsArray = Array.from(results.values());
+  
+  return resultsArray;
 }
 
 ipcMain.handle('search:replaceInFile', async (event, options) => {
