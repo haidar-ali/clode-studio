@@ -181,7 +181,6 @@ const initTerminal = () => {
   fitAddon.fit();
 
   terminal.attachCustomKeyEventHandler((event: KeyboardEvent) => {
-    console.log('Custom key handler attached for Shift+Enter');
     
     // Block Option+Enter (Alt+Enter) - prevent xterm's default behavior
     if (event.type === 'keydown' && event.key === 'Enter' && event.altKey) {
@@ -197,6 +196,7 @@ const initTerminal = () => {
 
     return true;
   });
+  console.log('Custom key handler attached for Shift+Enter');
   
   terminal.onScroll(() => {
     const buffer = terminal.buffer.active;
