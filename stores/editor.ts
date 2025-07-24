@@ -31,7 +31,7 @@ export const useEditorStore = defineStore('editor', {
         throw new Error(result.error);
       }
 
-      console.log('File read result:', { path, contentLength: result.content?.length, content: result.content?.substring(0, 100) + '...' });
+      
 
       const name = path.split('/').pop() || 'untitled';
       const newTab: EditorTab = {
@@ -43,7 +43,7 @@ export const useEditorStore = defineStore('editor', {
         isDirty: false
       };
 
-      console.log('Created tab:', newTab);
+      
 
       this.tabs.push(newTab);
       this.activeTabId = newTab.id;
@@ -118,14 +118,12 @@ export const useEditorStore = defineStore('editor', {
       // Clear all tabs and reset active tab
       this.tabs = [];
       this.activeTabId = null;
-
-      console.log('Closed all editor tabs for workspace switch');
     },
 
     updateFileContent(path: string, content: string) {
       const tab = this.tabs.find(t => t.path === path);
       if (tab) {
-        console.log('Updating file content from external change:', path);
+        
         // Only update if content is different and tab is not dirty
         if (tab.content !== content && !tab.isDirty) {
           tab.content = content;
@@ -165,6 +163,26 @@ export const useEditorStore = defineStore('editor', {
         bash: 'shell'
       };
       return languageMap[ext || ''] || 'plaintext';
+    },
+    
+    // Methods for checkpoint system
+    getCursorPositions(): Record<string, { line: number; column: number }> {
+      const positions: Record<string, { line: number; column: number }> = {};
+      // This would need to be implemented based on your editor integration
+      // For now, return empty object
+      return positions;
+    },
+    
+    getScrollPositions(): Record<string, number> {
+      const positions: Record<string, number> = {};
+      // This would need to be implemented based on your editor integration
+      // For now, return empty object
+      return positions;
+    },
+    
+    restoreCursorPositions(positions: Record<string, { line: number; column: number }>) {
+      // This would need to be implemented based on your editor integration
+      
     }
   }
 });

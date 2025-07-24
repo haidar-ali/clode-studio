@@ -317,7 +317,7 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
     },
 
     async updateAllInstancesWorkingDirectory(newPath: string) {
-      console.log('Updating working directory for all instances to:', newPath);
+      
       
       // Update all instances with the new working directory
       this.instances.forEach((instance) => {
@@ -357,7 +357,7 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
       if (typeof window !== 'undefined' && window.electronAPI?.store?.set) {
         try {
           await window.electronAPI.store.set(key, workspaceConfig);
-          console.log('Saved workspace configuration for:', workspacePath);
+          
         } catch (error) {
           console.error('Failed to save workspace configuration:', error);
         }
@@ -374,7 +374,7 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
           const config = await window.electronAPI.store.get(key);
           
           if (config && config.instances) {
-            console.log('Loading workspace configuration for:', workspacePath);
+            
             
             // Clear current instances
             await this.clearAllInstances();
@@ -400,9 +400,9 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
               this.activeInstanceId = this.instances.keys().next().value;
             }
             
-            console.log('Restored', this.instances.size, 'Claude instances for workspace');
+            
           } else {
-            console.log('No saved configuration found for workspace:', workspacePath);
+            
             // Create default instance if none exist
             if (this.instances.size === 0) {
               await this.createInstance('Claude 1', undefined, workspacePath);
@@ -429,6 +429,33 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
       // Clear instances map
       this.instances.clear();
       this.activeInstanceId = null;
+    },
+    
+    // Methods for checkpoint system
+    restoreInstances(instances: Array<{ id: string; personality: string; messages: any[] }>) {
+      // Clear existing instances
+      this.instances.clear();
+      
+      // Restore instances from checkpoint
+      instances.forEach(inst => {
+        const personality = this.personalities.get(inst.personality);
+        if (personality) {
+          const newInstance: ClaudeInstance = {
+            id: inst.id,
+            name: `${personality.name} Instance`,
+            personalityId: inst.personality,
+            messages: inst.messages || [],
+            createdAt: new Date().toISOString(),
+            lastActiveAt: new Date().toISOString()
+          };
+          this.instances.set(inst.id, newInstance);
+        }
+      });
+      
+      // Set first instance as active if none selected
+      if (!this.activeInstanceId && instances.length > 0) {
+        this.activeInstanceId = instances[0].id;
+      }
     }
   }
 });

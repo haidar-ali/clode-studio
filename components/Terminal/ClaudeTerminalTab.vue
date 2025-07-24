@@ -307,7 +307,7 @@ const setupClaudeListeners = () => {
   
   // Setup exit listener
   cleanupExitListener = window.electronAPI.claude.onExit(props.instance.id, (code: number | null) => {
-    console.log('Claude process exited for instance:', props.instance.id, 'code:', code);
+    
     if (terminal) {
       terminal.writeln(`\r\n\x1b[33mClaude process exited with code ${code}\x1b[0m`);
       autoScrollIfNeeded();
@@ -458,7 +458,7 @@ const stopClaude = async () => {
 };
 
 const clearTerminal = () => {
-  console.log('clearTerminal called for instance:', props.instance.name, 'status:', props.instance.status);
+  
   if (terminal && props.instance.status === 'connected') {
     // In Claude interactive mode, send Ctrl+L to clear the screen
     // This clears the visible terminal but keeps history in scrollback
@@ -500,7 +500,7 @@ onMounted(async () => {
   
   // Set up emergency cleanup listener
   emergencyCleanupListener = () => {
-    console.log('Emergency cleanup triggered for Claude terminal');
+    
     
     
     // Clear terminal if it exists

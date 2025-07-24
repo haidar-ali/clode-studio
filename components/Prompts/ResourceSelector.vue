@@ -254,7 +254,7 @@ const loadWorkspaceFiles = async (workspacePath: string) => {
     
     try {
       if (depth === 0) {
-        console.log('ResourceSelector: Starting directory walk at:', dir);
+        
       }
       
       const result = await window.electronAPI.fs.readDir(dir);
@@ -266,7 +266,7 @@ const loadWorkspaceFiles = async (workspacePath: string) => {
       
       const entries = result.files;
       if (depth === 0) {
-        console.log('ResourceSelector: Found', entries.length, 'entries in root directory');
+        
       }
       
       for (const entry of entries) {
@@ -529,11 +529,11 @@ const initializeData = async () => {
   
   // If no workspace found, try to get it from storage
   if (!workspace) {
-    console.log('ResourceSelector: No workspace in stores, checking storage...');
+    
     try {
       workspace = await window.electronAPI.store.get('workspacePath') || '';
       if (workspace) {
-        console.log('ResourceSelector: Found workspace in storage:', workspace);
+        
         // Initialize the tasks store with this path
         await tasksStore.initialize(workspace);
       }
@@ -542,23 +542,23 @@ const initializeData = async () => {
     }
   }
   
-  console.log('ResourceSelector: Loading files from workspace:', workspace);
-  console.log('ResourceSelector: tasksStore.projectPath:', tasksStore.projectPath);
-  console.log('ResourceSelector: contextStore.currentWorkspace:', contextStore.currentWorkspace);
-  console.log('ResourceSelector: contextStore.isInitialized:', contextStore.isInitialized);
+  
+  
+  
+  
   
   // Check if the workspace exists
   if (workspace) {
     const exists = await window.electronAPI.fs.exists(workspace);
-    console.log('ResourceSelector: Workspace exists:', exists);
+    
     
     if (exists) {
       // Load all workspace files
       isLoadingFiles.value = true;
       try {
         const files = await loadWorkspaceFiles(workspace);
-        console.log('ResourceSelector: Loaded', files.length, 'files');
-        console.log('ResourceSelector: Sample files:', files.slice(0, 5).map(f => f.relativePath));
+        
+        
         allFiles.value = files;
       } catch (error) {
         console.error('Failed to load workspace files:', error);
@@ -580,12 +580,12 @@ onMounted(async () => {
     const workspace = tasksStore.projectPath || contextStore.currentWorkspace || '';
     
     // Load hooks if not already loaded (hooks are global, not project-specific)
-    console.log('ResourceSelector: Loading hooks...');
+    
     if (!hooksStore.hooks || hooksStore.hooks.length === 0) {
       await hooksStore.loadHooks();
-      console.log('ResourceSelector: Loaded hooks:', hooksStore.hooks.length);
+      
     } else {
-      console.log('ResourceSelector: Hooks already loaded:', hooksStore.hooks.length);
+      
     }
     
     // Initialize context search to get files
@@ -594,39 +594,39 @@ onMounted(async () => {
     }
     
     // Load knowledge entries if not already loaded
-    console.log('ResourceSelector: Loading knowledge entries...');
+    
     if (!knowledgeStore.entries || knowledgeStore.entries.length === 0) {
       if (workspace) {
         await knowledgeStore.initialize(workspace);
         await knowledgeStore.loadEntries();
-        console.log('ResourceSelector: Loaded knowledge entries:', knowledgeStore.entries.length);
+        
       } else {
-        console.log('ResourceSelector: No workspace for knowledge entries');
+        
       }
     } else {
-      console.log('ResourceSelector: Knowledge entries already loaded:', knowledgeStore.entries.length);
+      
     }
     
     // Load MCP servers if needed (MCP is global, not project-specific)
-    console.log('ResourceSelector: Loading MCP servers...');
+    
     if (!mcpStore.servers || mcpStore.servers.length === 0) {
       await mcpStore.loadServers();
-      console.log('ResourceSelector: Loaded MCP servers:', mcpStore.servers.length);
+      
     } else {
-      console.log('ResourceSelector: MCP servers already loaded:', mcpStore.servers.length);
+      
     }
     
     // Load commands if not already loaded
-    console.log('ResourceSelector: Loading commands...');
+    
     if (!commandsStore.allCommands || commandsStore.allCommands.length === 0) {
       if (workspace) {
         await commandsStore.initialize(workspace);
-        console.log('ResourceSelector: Loaded commands:', commandsStore.allCommands?.length || 0);
+        
       } else {
-        console.log('ResourceSelector: No workspace for commands');
+        
       }
     } else {
-      console.log('ResourceSelector: Commands already loaded:', commandsStore.allCommands.length);
+      
     }
   } catch (error) {
     console.error('Error loading resource data:', error);
@@ -638,14 +638,14 @@ watch([() => tasksStore.projectPath, () => contextStore.currentWorkspace], async
   const workspace = newTasksPath || newContextPath || '';
   
   if (workspace && workspace !== loadedWorkspacePath.value) {
-    console.log('ResourceSelector: Workspace changed, reloading files:', workspace);
+    
     loadedWorkspacePath.value = workspace;
     
     // Reload files
     isLoadingFiles.value = true;
     try {
       const files = await loadWorkspaceFiles(workspace);
-      console.log('ResourceSelector: Reloaded', files.length, 'files for new workspace');
+      
       allFiles.value = files;
     } catch (error) {
       console.error('Failed to reload workspace files:', error);

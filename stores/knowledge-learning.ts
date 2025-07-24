@@ -311,7 +311,7 @@ export const useKnowledgeLearningStore = defineStore('knowledge-learning', () =>
     for (const pattern of patterns) {
       // Pre-execute common queries
       // This would need to be implemented based on your query execution logic
-      console.log('Pre-caching:', pattern.pattern);
+      
     }
   }
 
@@ -320,7 +320,7 @@ export const useKnowledgeLearningStore = defineStore('knowledge-learning', () =>
       .filter(q => !q.success)
       .slice(-10);
     
-    console.log('Failed queries:', failed);
+    
     // Could open a modal or panel to review these
   }
 

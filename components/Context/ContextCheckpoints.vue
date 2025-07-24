@@ -162,7 +162,7 @@ const restoreCheckpoint = async (checkpointId: string) => {
   try {
     const checkpoint = contextStore.restoreCheckpoint(checkpointId);
     if (checkpoint) {
-      console.log('Checkpoint restored:', checkpoint.name);
+      
       // TODO: Also restore messages to chat
     }
   } catch (error) {

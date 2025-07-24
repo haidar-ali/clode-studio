@@ -121,12 +121,6 @@ async function runTest() {
     ? `${builtPrompt.value}\n\n${testInput.value}`
     : builtPrompt.value;
 
-  // TODO: Send to Claude instance
-  console.log('Testing prompt:', {
-    instanceId: testInstanceId.value,
-    prompt: finalPrompt
-  });
-
   showTestDialog.value = false;
   testInstanceId.value = '';
   testInput.value = '';
