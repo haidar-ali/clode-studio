@@ -2,6 +2,9 @@
   <div class="ide-container" :class="layoutStore.layoutClasses">
     <!-- Mode Selector -->
     <ModeSelector />
+    
+    <!-- Worktree Tab Bar -->
+    <WorktreeTabBar />
 
     <!-- Full IDE Mode -->
     <div v-if="layoutStore.isFullIdeMode" class="layout-full-ide">
@@ -413,6 +416,7 @@ import PromptStudio from '~/components/Prompts/PromptStudio.vue';
 import SourceControlPanel from '~/components/SourceControl/SourceControlPanel.vue';
 import CheckpointPanel from '~/components/Checkpoint/CheckpointPanel.vue';
 import WorktreePanel from '~/components/Worktree/WorktreePanel.vue';
+import WorktreeTabBar from '~/components/Layout/WorktreeTabBar.vue';
 
 const editorStore = useEditorStore();
 const tasksStore = useTasksStore();

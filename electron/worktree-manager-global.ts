@@ -82,6 +82,12 @@ export class WorktreeManagerGlobal {
       console.log('[WorktreeManagerGlobal] currentWorkspacePath:', this.currentWorkspacePath);
       console.log('[WorktreeManagerGlobal] currentManager exists:', !!this.currentManager);
       
+      // If no manager, try to create one if we have a workspace path
+      if (!this.currentManager && this.currentWorkspacePath) {
+        console.log('[WorktreeManagerGlobal] No manager but have workspace, attempting to create one');
+        this.setWorkspace(this.currentWorkspacePath);
+      }
+      
       if (!this.currentManager) {
         if (this.currentWorkspacePath) {
           return { success: false, error: 'Not a git repository or git worktree feature not available', worktrees: [] };

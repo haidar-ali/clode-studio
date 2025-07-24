@@ -19,6 +19,7 @@
           @click="showCreateDialog = true" 
           class="icon-button"
           title="Create worktree"
+          :disabled="!isGitRepository"
         >
           <Icon name="mdi:plus" />
         </button>
@@ -33,14 +34,14 @@
     </div>
 
     <!-- Not a git repository message -->
-    <div v-if="!isGitRepository && initialized" class="no-repo-message">
+    <div v-if="(!isGitRepository || worktrees.length === 0) && initialized && !isLoading" class="no-repo-message">
       <Icon name="mdi:git" class="no-repo-icon" />
-      <p>This folder is not a Git repository</p>
-      <p class="hint">Git worktrees require an initialized Git repository</p>
+      <p>{{ !isGitRepository ? 'This folder is not a Git repository' : 'No worktrees found' }}</p>
+      <p class="hint">{{ !isGitRepository ? 'Git worktrees require an initialized Git repository' : 'Create a worktree to get started' }}</p>
     </div>
 
     <!-- Loading state -->
-    <div v-else-if="!initialized" class="loading-state">
+    <div v-else-if="isLoading || !initialized" class="loading-state">
       <Icon name="mdi:loading" class="animate-spin" />
       <p>Loading worktrees...</p>
     </div>
@@ -172,7 +173,8 @@ interface WorktreeSession {
 }
 
 const workspaceStore = useWorkspaceStore();
-const { changeWorkspace } = useWorkspaceManager();
+const workspaceManager = useWorkspaceManager();
+const { changeWorkspace } = workspaceManager;
 const sourceControlStore = useSourceControlStore();
 
 // State
@@ -236,6 +238,12 @@ async function loadWorktrees() {
     console.log('[WorktreePanel] Worktree list result:', worktreeResult);
     if (worktreeResult.success && worktreeResult.worktrees) {
       worktrees.value = worktreeResult.worktrees;
+    } else if (worktreeResult.error && worktreeResult.error.includes('not a git repository')) {
+      // Clear worktrees if not a git repository
+      worktrees.value = [];
+      sessions.value = [];
+      console.log('[WorktreePanel] Not a git repository, clearing worktrees');
+      return;
     }
     
     // Load sessions
@@ -280,11 +288,9 @@ async function handleCreate(branchName: string, sessionName?: string) {
 async function handleSwitch(worktreePath: string) {
   const result = await window.electronAPI.worktree.switch(worktreePath);
   if (result.success) {
-    // Update workspace path in frontend
-    await changeWorkspace(worktreePath);
-    // Update backend services with new path
-    await window.electronAPI.workspace.setPath(worktreePath);
-    // Reload worktrees
+    // Use the new worktree switching logic that preserves workspace state
+    await workspaceManager.switchWorktreeWithinWorkspace(worktreePath);
+    // Reload worktrees to update UI
     await loadWorktrees();
   }
 }

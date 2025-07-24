@@ -112,17 +112,19 @@ export class WorktreeManager {
   
   async initialize(): Promise<void> {
     try {
+      // Verify git repository first
+      const isRepo = await this.git.checkIsRepo();
+      if (!isRepo) {
+        console.log('Not a git repository, worktree features unavailable');
+        return; // Don't throw error, just return
+      }
+      
+      // Only proceed if it's a git repository
       // Ensure worktrees directory exists
       await fs.ensureDir(this.worktreesPath);
       
       // Load saved sessions
       await this.loadSessions();
-      
-      // Verify git repository
-      const isRepo = await this.git.checkIsRepo();
-      if (!isRepo) {
-        throw new Error('Not a git repository');
-      }
     } catch (error) {
       console.error('Failed to initialize worktree manager:', error);
     }
@@ -130,6 +132,12 @@ export class WorktreeManager {
   
   async listWorktrees(): Promise<{ success: boolean; worktrees?: Worktree[]; error?: string }> {
     try {
+      // Check if git repository first
+      const isRepo = await this.git.checkIsRepo();
+      if (!isRepo) {
+        return { success: false, error: 'Not a git repository', worktrees: [] };
+      }
+      
       // Use git worktree list --porcelain for machine-readable output
       const result = await this.git.raw(['worktree', 'list', '--porcelain']);
       const worktrees = this.parseWorktreeList(result);
@@ -168,6 +176,16 @@ export class WorktreeManager {
     sessionName?: string
   ): Promise<{ success: boolean; worktree?: Worktree; error?: string }> {
     try {
+      // Check if repository has any commits
+      try {
+        await this.git.raw(['rev-parse', 'HEAD']);
+      } catch (error) {
+        return { 
+          success: false, 
+          error: 'Cannot create worktree: Repository has no commits. Please make an initial commit first.' 
+        };
+      }
+      
       // Generate worktree path
       const safeBranchName = branchName.replace(/[^a-zA-Z0-9-_]/g, '-');
       const worktreePath = path.join(this.worktreesPath, safeBranchName);

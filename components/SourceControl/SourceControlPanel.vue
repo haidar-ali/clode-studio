@@ -226,6 +226,7 @@
 import { ref, onMounted, onUnmounted } from 'vue';
 import { useSourceControlStore } from '~/stores/source-control';
 import { useWorkspaceStore } from '~/stores/workspace';
+import { useWorkspaceManager } from '~/composables/useWorkspaceManager';
 import BranchSelector from './BranchSelector.vue';
 import GitFileItem from './GitFileItem.vue';
 import GitHooksPanel from './GitHooksPanel.vue';
@@ -290,6 +291,13 @@ async function initializeRepository() {
   const result = await window.electronAPI.git.init();
   if (result.success) {
     await store.initialize(workspaceStore.currentPath);
+    
+    // Also initialize worktrees now that we have a git repository
+    const workspaceManager = useWorkspaceManager();
+    console.log('[SourceControlPanel] Git initialized, initializing worktrees');
+    setTimeout(async () => {
+      await workspaceManager.initializeWorktrees();
+    }, 500);
   }
 }
 
