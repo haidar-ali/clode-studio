@@ -260,6 +260,8 @@ async function handleCreate(branchName: string, sessionName?: string, descriptio
     const result = await window.electronAPI.worktree.create(branchName, finalSessionName, description);
     if (result.success) {
       await loadWorktrees();
+      // Also refresh the workspace manager's worktree list
+      await workspaceManager.initializeWorktrees();
       showCreateDialog.value = false;
     } else {
       console.error('Failed to create worktree:', result.error);
@@ -276,6 +278,8 @@ async function handleSwitch(worktreePath: string) {
     await workspaceManager.switchWorktreeWithinWorkspace(worktreePath);
     // Reload worktrees to update UI
     await loadWorktrees();
+    // Refresh workspace manager's worktree list
+    await workspaceManager.refreshWorktreeStatus();
   }
 }
 
@@ -287,6 +291,8 @@ async function handleRemove(worktree: Worktree, force: boolean = false) {
   const result = await window.electronAPI.worktree.remove(worktree.path, force);
   if (result.success) {
     await loadWorktrees();
+    // Also refresh the workspace manager's worktree list
+    await workspaceManager.initializeWorktrees();
   } else if (!force && result.error?.includes('locked')) {
     if (confirm('Worktree is locked. Force remove?')) {
       await handleRemove(worktree, true);

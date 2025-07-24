@@ -77,6 +77,8 @@ export class LightweightContext {
     'node_modules',
     '.git',
     '.claude',
+    '.claude-checkpoints',
+    '.worktrees',
     'dist',
     'build',
     '.output',
@@ -98,6 +100,9 @@ export class LightweightContext {
     this.stopWatching();
     
     this.workspacePath = workspacePath;
+    
+    // Load .gitignore patterns
+    await this.loadGitignorePatterns();
     
     // Try to load persisted context first
     const persistedData = await workspacePersistence.loadWorkspaceContext(workspacePath);
@@ -599,6 +604,31 @@ export class LightweightContext {
       } catch (error) {
         console.warn('Error in file watcher callback:', error);
       }
+    }
+  }
+
+  private async loadGitignorePatterns(): Promise<void> {
+    try {
+      const gitignorePath = join(this.workspacePath, '.gitignore');
+      if (existsSync(gitignorePath)) {
+        const gitignoreContent = await readFile(gitignorePath, 'utf-8');
+        const lines = gitignoreContent.split('\n');
+        
+        for (const line of lines) {
+          const trimmedLine = line.trim();
+          // Skip empty lines and comments
+          if (!trimmedLine || trimmedLine.startsWith('#')) continue;
+          
+          // Add pattern if not already in default patterns
+          if (!this.ignorePatterns.includes(trimmedLine)) {
+            this.ignorePatterns.push(trimmedLine);
+          }
+        }
+        
+        console.log('Loaded .gitignore patterns, total patterns:', this.ignorePatterns.length);
+      }
+    } catch (error) {
+      console.warn('Failed to load .gitignore patterns:', error);
     }
   }
 

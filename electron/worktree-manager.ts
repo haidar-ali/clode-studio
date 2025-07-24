@@ -525,11 +525,67 @@ export class WorktreeManager {
   private async getAllFiles(dirPath: string): Promise<string[]> {
     const files: string[] = [];
     
+    // Default ignore patterns
+    const ignorePatterns = [
+      '.git',
+      'node_modules',
+      '.claude',
+      '.claude-checkpoints',
+      '.worktrees',
+      'dist',
+      'build',
+      '.output',
+      'coverage',
+      '.nyc_output',
+      'tmp',
+      'temp',
+      '.cache',
+      '.parcel-cache',
+      '.vscode',
+      '.idea',
+      '__pycache__',
+      '*.pyc',
+      '.DS_Store'
+    ];
+    
+    // Load .gitignore patterns
+    const gitignorePath = path.join(dirPath, '.gitignore');
+    if (await fs.pathExists(gitignorePath)) {
+      try {
+        const gitignoreContent = await fs.readFile(gitignorePath, 'utf-8');
+        const lines = gitignoreContent.split('\n');
+        
+        for (const line of lines) {
+          const trimmedLine = line.trim();
+          // Skip empty lines and comments
+          if (!trimmedLine || trimmedLine.startsWith('#')) continue;
+          
+          // Add pattern if not already in list
+          if (!ignorePatterns.includes(trimmedLine)) {
+            ignorePatterns.push(trimmedLine);
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to load .gitignore for comparison:', error);
+      }
+    }
+    
+    const shouldIgnore = (name: string): boolean => {
+      return ignorePatterns.some(pattern => {
+        if (pattern.includes('*')) {
+          // Simple glob pattern matching
+          const regex = new RegExp(pattern.replace(/\*/g, '.*'));
+          return regex.test(name);
+        }
+        return name === pattern || name.startsWith(pattern + '/');
+      });
+    };
+    
     const walk = async (dir: string, base: string = '') => {
       const entries = await fs.readdir(dir, { withFileTypes: true });
       
       for (const entry of entries) {
-        if (entry.name === '.git' || entry.name === 'node_modules') continue;
+        if (shouldIgnore(entry.name)) continue;
         
         const fullPath = path.join(dir, entry.name);
         const relativePath = path.join(base, entry.name);
