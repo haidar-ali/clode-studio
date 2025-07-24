@@ -450,7 +450,7 @@ async function restoreCheckpoint(checkpoint: CheckpointV2) {
     const success = await store.restoreCheckpoint(checkpoint.id);
     if (success) {
       // Show success message
-      console.log('Checkpoint restored successfully');
+      
     }
   }
 }
@@ -497,7 +497,7 @@ async function cleanOldCheckpoints() {
   if (confirm(`Clean checkpoints older than ${options.maxAge} days and keep only the latest ${options.maxCount}?`)) {
     const result = await window.electronAPI.checkpoint.clean(options);
     if (result.success) {
-      console.log(`Cleaned ${result.removed} old checkpoints`);
+      
     }
   }
 }

@@ -126,7 +126,7 @@ let refreshInterval: NodeJS.Timeout;
 watch(() => sourceControlStore.isGitRepository, async (isGit) => {
   if (isGit && hasWorkspace.value) {
     // Git repository was just initialized, load worktrees
-    console.log('[WorktreeTabBar] Git repository detected, initializing worktrees');
+    
     setTimeout(async () => {
       await workspaceManager.initializeWorktrees();
     }, 500); // Give git some time to fully initialize
@@ -136,7 +136,7 @@ watch(() => sourceControlStore.isGitRepository, async (isGit) => {
 // Watch for workspace changes
 watch(hasWorkspace, async (hasWs) => {
   if (hasWs && sourceControlStore.isGitRepository) {
-    console.log('[WorktreeTabBar] Workspace changed and is git repo, initializing worktrees');
+    
     setTimeout(async () => {
       await workspaceManager.initializeWorktrees();
     }, 500);
@@ -144,17 +144,17 @@ watch(hasWorkspace, async (hasWs) => {
 });
 
 onMounted(async () => {
-  console.log('[WorktreeTabBar] onMounted - hasWorkspace:', hasWorkspace.value, 'isGitRepository:', sourceControlStore.isGitRepository);
+  
   
   // Initial load of worktrees with a small delay to ensure backend is ready
   if (hasWorkspace.value && sourceControlStore.isGitRepository) {
-    console.log('[WorktreeTabBar] Conditions met, initializing worktrees');
+    
     // Wait a bit for the backend to be fully initialized
     setTimeout(async () => {
       await workspaceManager.initializeWorktrees();
     }, 100);
   } else {
-    console.log('[WorktreeTabBar] Conditions not met, waiting for git status');
+    
   }
   
   // Refresh every 30 seconds

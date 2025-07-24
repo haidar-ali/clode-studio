@@ -97,7 +97,7 @@ export function useWorkspaceManager() {
       const { useContextStore } = await import('~/stores/context');
       const contextStore = useContextStore();
       await contextStore.loadPersistedCheckpoints();
-      console.log('Loaded persisted checkpoints for workspace');
+      
       
       // 9. Try to load existing TASKS.md from the new workspace
       const tasksPath = `${path}/TASKS.md`;
@@ -105,11 +105,11 @@ export function useWorkspaceManager() {
       
       if (tasksResult.success) {
         // TASKS.md exists - load it WITHOUT clearing first
-        console.log('Loading existing TASKS.md from new workspace');
+        
         await tasksStore.loadTasksFromProject();
       } else {
         // No TASKS.md exists - NOW we can safely clear and create new
-        console.log('No TASKS.md found, creating new one for workspace');
+        
         tasksStore.clearAll();
         await tasksStore.updateTasksMarkdown();
       }
@@ -125,7 +125,7 @@ export function useWorkspaceManager() {
       
       // Initialize source control to detect if it's a git repository
       const sourceControlStore = useSourceControlStore();
-      console.log('[WorkspaceManager] Initializing source control for workspace');
+      
       await sourceControlStore.initialize(path);
       
       // Small delay to ensure source control is fully initialized
@@ -134,7 +134,13 @@ export function useWorkspaceManager() {
       // NEW: Initialize worktrees for this workspace
       await initializeWorktrees();
       
-      console.log('Workspace changed successfully to:', path);
+      // Load MCP servers for the workspace
+      const { useMCPStore } = await import('~/stores/mcp');
+      const mcpStore = useMCPStore();
+      await mcpStore.loadServers();
+      
+      
+      
       
     } catch (error) {
       console.error('Failed to change workspace:', error);
@@ -240,7 +246,7 @@ export function useWorkspaceManager() {
 
   // NEW: Switch worktree within the same workspace
   const switchWorktreeWithinWorkspace = async (worktreePath: string) => {
-    console.log('[WorkspaceManager] Switching to worktree:', worktreePath);
+    
     
     // Save current worktree state if we have one
     if (activeWorktreePath.value && activeWorktreePath.value !== worktreePath) {
@@ -249,6 +255,9 @@ export function useWorkspaceManager() {
     
     // Update active worktree path
     activeWorktreePath.value = worktreePath;
+    
+    // Update the backend's active worktree path
+    await window.electronAPI.workspace.setPath(worktreePath);
     
     // Stop watching the old worktree directory
     if (currentWorkspacePath.value && currentWorkspacePath.value !== worktreePath) {
@@ -282,14 +291,20 @@ export function useWorkspaceManager() {
     const sourceControlStore = useSourceControlStore();
     await sourceControlStore.initialize(worktreePath);
     
-    console.log('[WorkspaceManager] Switched to worktree successfully');
+    // Reload MCP servers for the worktree context
+    const { useMCPStore } = await import('~/stores/mcp');
+    const mcpStore = useMCPStore();
+    await mcpStore.loadServers();
+    
+    
+    
   };
 
   // NEW: Initialize worktrees for the workspace
   const initializeWorktrees = async () => {
     if (!currentWorkspacePath.value) return;
     
-    console.log('[WorkspaceManager] Initializing worktrees for workspace:', currentWorkspacePath.value);
+    
     
     // Clear existing worktrees first
     activeWorktrees.value.clear();
@@ -300,7 +315,7 @@ export function useWorkspaceManager() {
     if (!result.success || !result.worktrees) {
       // Check if it's because this is not a git repository
       if (result.error && (result.error.includes('not a git repository') || result.error.includes('Not a git repository'))) {
-        console.log('[WorkspaceManager] Not a git repository, worktrees not available');
+        
         // Set the main workspace path as the active worktree for non-git repos
         activeWorktreePath.value = currentWorkspacePath.value;
         return;
@@ -349,6 +364,8 @@ export function useWorkspaceManager() {
     // Set active worktree if not set
     if (!activeWorktreePath.value) {
       activeWorktreePath.value = currentWorkspacePath.value;
+      // Update the backend's active worktree path
+      await window.electronAPI.workspace.setPath(activeWorktreePath.value);
     }
     
     // Refresh git status for all worktrees

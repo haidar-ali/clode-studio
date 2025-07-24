@@ -26,7 +26,6 @@ export class GitServiceManager {
     // Update current workspace path
     this.currentWorkspacePath = workspacePath;
     
-    console.log('[GitServiceManager] Setting workspace path to:', workspacePath);
     
     // Create a new git service for this workspace
     this.currentService = new GitService(workspacePath);
@@ -41,13 +40,9 @@ export class GitServiceManager {
         return { success: false, error: 'No workspace selected' };
       }
       
-      console.log('[GitServiceManager] git:status called for path:', this.currentWorkspacePath);
-      
       try {
         const git = simpleGit(this.currentWorkspacePath);
         const isRepo = await git.checkIsRepo();
-        
-        console.log('[GitServiceManager] Is git repo?', isRepo);
         
         if (!isRepo) {
           return { success: false, error: 'Not a git repository' };
@@ -301,15 +296,11 @@ export class GitServiceManager {
         return { success: false, error: 'No workspace selected' };
       }
       
-      console.log('[GitServiceManager] git:checkIsRepo called for path:', this.currentWorkspacePath);
-      
       try {
         const git = simpleGit(this.currentWorkspacePath);
         const isRepo = await git.checkIsRepo();
-        console.log('[GitServiceManager] checkIsRepo result:', isRepo);
         return { success: true, data: isRepo };
       } catch (error: any) {
-        console.error('[GitServiceManager] checkIsRepo error:', error);
         return { success: false, error: error.message };
       }
     });

@@ -427,7 +427,7 @@ export const useCheckpointV2Store = defineStore('checkpoint-v2', () => {
     }
     
     try {
-      console.log('Initializing shadow repo at:', shadowRepoPath.value);
+      
       
       // Create .claude-checkpoints directory
       await window.electronAPI.fs.ensureDir(shadowRepoPath.value);
@@ -573,7 +573,7 @@ ${claudeEntries.join('\n')}
       );
       
       // Commit to shadow repo
-      console.log('Committing checkpoint to shadow repo:', checkpoint.id);
+      
       const addResult = await window.electronAPI.git.add(['*'], shadowRepoPath.value);
       if (!addResult.success) {
         console.error('Failed to add files to git:', addResult.error);
@@ -594,7 +594,7 @@ ${claudeEntries.join('\n')}
       } else if (!verifyMetadata.content || verifyMetadata.content.trim() === '') {
         console.error('Metadata file is empty!');
       } else {
-        console.log('Checkpoint saved successfully:', checkpoint.id);
+        
       }
     } catch (error) {
       console.error('Failed to save checkpoint to shadow repo:', error);
@@ -626,14 +626,14 @@ ${claudeEntries.join('\n')}
     }
     
     try {
-      console.log('Loading checkpoints from:', shadowRepoPath.value);
+      
       const dirs = await window.electronAPI.fs.readDir(shadowRepoPath.value);
       if (!dirs.success) {
         console.warn('Failed to read shadow repo directory:', dirs.error);
         return;
       }
       
-      console.log('Found entries in shadow repo:', dirs.files.map(f => ({ name: f.name, isDirectory: f.isDirectory })));
+      
       const loadedCheckpoints: CheckpointV2[] = [];
       
       // Filter for directories only
@@ -643,7 +643,7 @@ ${claudeEntries.join('\n')}
         if (entry.name.startsWith('cp-v2-')) {
           try {
             const checkpointDir = `${shadowRepoPath.value}/${entry.name}`;
-            console.log('Loading checkpoint from:', checkpointDir);
+            
             
             // Load metadata
             const metadataContent = await window.electronAPI.fs.readFile(`${checkpointDir}/metadata.json`);
@@ -804,7 +804,7 @@ ${claudeEntries.join('\n')}
       async (newPath) => {
         if (newPath && newPath !== previousPath) {
           previousPath = newPath;
-          console.log('[CheckpointStore] Workspace changed to:', newPath);
+          
           // Stop auto checkpoint for old workspace
           stopAutoCheckpoint();
           // Update shadow repo path and initialize for new workspace
@@ -832,7 +832,7 @@ ${claudeEntries.join('\n')}
             !metadataContent.content || 
             metadataContent.content === 'undefined' ||
             metadataContent.content.trim() === 'undefined') {
-          console.log(`Removing corrupted checkpoint: ${entry.name}`);
+          
           await window.electronAPI.fs.delete(checkpointDir);
           cleanedCount++;
         }

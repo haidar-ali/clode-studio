@@ -46,7 +46,7 @@ export const useChatStore = defineStore('chat', {
     setupClaudeListeners() {
       window.electronAPI.claude.onOutput((data: string) => {
         // Don't log every character from the terminal
-        // console.log('Received Claude output:', data);
+        // 
         this.appendToLastAssistantMessage(data);
       });
 

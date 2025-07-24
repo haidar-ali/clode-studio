@@ -294,7 +294,7 @@ async function initializeRepository() {
     
     // Also initialize worktrees now that we have a git repository
     const workspaceManager = useWorkspaceManager();
-    console.log('[SourceControlPanel] Git initialized, initializing worktrees');
+    
     setTimeout(async () => {
       await workspaceManager.initializeWorktrees();
     }, 500);

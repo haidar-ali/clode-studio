@@ -98,7 +98,7 @@ export const useSourceControlStore = defineStore('source-control', () => {
     isLoading.value = true;
     lastError.value = null;
     
-    console.log('[SourceControl] Initializing with path:', repoPath);
+    
     
     try {
       // Set workspace path first
@@ -106,21 +106,21 @@ export const useSourceControlStore = defineStore('source-control', () => {
       
       // Check if it's a git repository
       const repoCheck = await window.electronAPI.git.checkIsRepo();
-      console.log('[SourceControl] checkIsRepo result:', repoCheck);
+      
       
       if (repoCheck.success && repoCheck.data) {
         isGitRepository.value = true;
-        console.log('[SourceControl] Starting refreshStatus...');
+        
         await refreshStatus();
-        console.log('[SourceControl] refreshStatus completed');
         
-        console.log('[SourceControl] Starting refreshBranches...');
+        
+        
         await refreshBranches();
-        console.log('[SourceControl] refreshBranches completed');
         
-        console.log('[SourceControl] Starting refreshHistory...');
+        
+        
         await refreshHistory();
-        console.log('[SourceControl] refreshHistory completed');
+        
       } else {
         isGitRepository.value = false;
         clearState();
@@ -136,9 +136,9 @@ export const useSourceControlStore = defineStore('source-control', () => {
   }
   
   async function refreshStatus() {
-    console.log('[SourceControl] Refreshing status...');
+    
     const result = await window.electronAPI.git.status();
-    console.log('[SourceControl] Status result:', result);
+    
     if (result.success && result.data) {
       updateFromStatus(result.data);
     } else if (!result.success && result.error) {
@@ -147,38 +147,38 @@ export const useSourceControlStore = defineStore('source-control', () => {
   }
   
   async function refreshBranches() {
-    console.log('[SourceControl] Getting branches...');
+    
     const result = await window.electronAPI.git.getBranches();
-    console.log('[SourceControl] Branches result:', result);
+    
     if (result.success && result.data) {
       branches.value = result.data;
-      console.log('[SourceControl] Branches updated:', branches.value.length);
+      
     }
   }
   
   async function refreshHistory(limit: number = 20) {
-    console.log('[SourceControl] Getting commit history...');
+    
     const result = await window.electronAPI.git.getLog(limit);
-    console.log('[SourceControl] History result:', result);
+    
     if (result.success && result.data) {
       commitHistory.value = result.data;
       if (result.data.length > 0) {
         lastCommit.value = result.data[0];
       }
-      console.log('[SourceControl] History updated:', commitHistory.value.length, 'commits');
+      
     }
   }
   
   function updateFromStatus(status: any) {
-    console.log('[SourceControl] Updating from status:', status);
+    
     try {
-      console.log('[SourceControl] Setting branch info...');
+      
       currentBranch.value = status.current || '';
       tracking.value = status.tracking || null;
       ahead.value = status.ahead || 0;
       behind.value = status.behind || 0;
       
-      console.log('[SourceControl] Clearing existing files...');
+      
       // Clear existing files
       stagedFiles.value = [];
       modifiedFiles.value = [];
@@ -186,7 +186,7 @@ export const useSourceControlStore = defineStore('source-control', () => {
       deletedFiles.value = [];
       renamedFiles.value = [];
       
-      console.log('[SourceControl] Processing staged files...');
+      
       // Process staged files
       if (status.staged && status.staged.length > 0) {
         status.staged.forEach((file: string) => {
@@ -201,9 +201,9 @@ export const useSourceControlStore = defineStore('source-control', () => {
           }
         });
       }
-      console.log('[SourceControl] Staged files processed:', stagedFiles.value.length);
+      
     
-      console.log('[SourceControl] Processing modified files...');
+      
       // Process modified files (not staged)
       if (status.modified && status.modified.length > 0) {
         status.modified.forEach((file: string) => {
@@ -212,9 +212,9 @@ export const useSourceControlStore = defineStore('source-control', () => {
           }
         });
       }
-      console.log('[SourceControl] Modified files processed:', modifiedFiles.value.length);
       
-      console.log('[SourceControl] Processing deleted files...');
+      
+      
       // Process deleted files (not staged)
       if (status.deleted && status.deleted.length > 0) {
         status.deleted.forEach((file: string) => {
@@ -223,9 +223,9 @@ export const useSourceControlStore = defineStore('source-control', () => {
           }
         });
       }
-      console.log('[SourceControl] Deleted files processed:', deletedFiles.value.length);
       
-      console.log('[SourceControl] Processing renamed files...');
+      
+      
       // Process renamed files
       if (status.renamed && status.renamed.length > 0) {
         status.renamed.forEach((rename: { from: string; to: string }) => {
@@ -238,13 +238,13 @@ export const useSourceControlStore = defineStore('source-control', () => {
           });
         });
       }
-      console.log('[SourceControl] Renamed files processed:', renamedFiles.value.length);
       
-      console.log('[SourceControl] Processing untracked files...');
+      
+      
       
       // Process untracked files
       if (status.untracked && Array.isArray(status.untracked) && status.untracked.length > 0) {
-        console.log('[SourceControl] Number of untracked files to process:', status.untracked.length);
+        
         
         // Limit the number of untracked files to prevent UI freezing
         const MAX_UNTRACKED_FILES = 1000;
@@ -281,10 +281,10 @@ export const useSourceControlStore = defineStore('source-control', () => {
           });
         }
       } else {
-        console.log('[SourceControl] No untracked files or invalid format');
+        
       }
-      console.log('[SourceControl] Untracked files processed:', untrackedFiles.value.length);
-      console.log('[SourceControl] updateFromStatus completed successfully');
+      
+      
     } catch (error) {
       console.error('[SourceControl] Error in updateFromStatus:', error);
       lastError.value = error instanceof Error ? error.message : 'Error updating status';

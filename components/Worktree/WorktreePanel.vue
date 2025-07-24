@@ -204,11 +204,19 @@ watch(() => workspaceStore.currentPath, async (newPath) => {
   }
 });
 
+// Watch for active worktree changes from the workspace manager
+watch(() => workspaceManager.activeWorktreePath.value, async (newPath, oldPath) => {
+  if (newPath !== oldPath && sourceControlStore.isGitRepository) {
+    
+    await loadWorktrees();
+  }
+});
+
 // Load worktrees and sessions
 async function loadWorktrees() {
   if (!workspaceStore.currentPath) return;
   
-  console.log('[WorktreePanel] Loading worktrees for path:', workspaceStore.currentPath);
+  
   
   isLoading.value = true;
   try {
@@ -217,14 +225,14 @@ async function loadWorktrees() {
     
     // Load worktrees
     const worktreeResult = await window.electronAPI.worktree.list();
-    console.log('[WorktreePanel] Worktree list result:', worktreeResult);
+    
     if (worktreeResult.success && worktreeResult.worktrees) {
       worktrees.value = worktreeResult.worktrees;
     } else if (worktreeResult.error && worktreeResult.error.includes('not a git repository')) {
       // Clear worktrees if not a git repository
       worktrees.value = [];
       sessions.value = [];
-      console.log('[WorktreePanel] Not a git repository, clearing worktrees');
+      
       return;
     }
     

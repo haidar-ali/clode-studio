@@ -232,10 +232,10 @@ export const useTasksStore = defineStore('tasks', {
             createdAt: new Date(task.createdAt),
             updatedAt: new Date(task.updatedAt)
           }));
-          console.log(`Loaded ${this.tasks.length} tasks from project`);
+          
         }
       } catch (error) {
-        console.log('No tasks file found, starting fresh');
+        
       }
     },
 

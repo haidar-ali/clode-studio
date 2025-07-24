@@ -209,13 +209,13 @@ async function generateDiff() {
 
 function viewFileDiff(file: string) {
   // This would open a detailed file diff viewer
-  console.log('View diff for file:', file);
+  
   // TODO: Implement file diff viewer
 }
 
 async function selectiveRestore() {
   // This would open a dialog to select specific files to restore
-  console.log('Selective restore');
+  
   // TODO: Implement selective restore dialog
 }
 

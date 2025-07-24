@@ -61,15 +61,7 @@
     </div>
     
     <div class="card-footer">
-      <button 
-        v-if="!worktree.isActive"
-        @click="$emit('switch', worktree.path)"
-        class="action-button primary"
-      >
-        <Icon name="mdi:folder-open" />
-        Switch to Worktree
-      </button>
-      <div v-else class="active-indicator">
+      <div v-if="worktree.isActive" class="active-indicator">
         <Icon name="mdi:check-circle" />
         Currently Active
       </div>

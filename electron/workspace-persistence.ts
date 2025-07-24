@@ -92,8 +92,6 @@ export class WorkspacePersistence {
       
       const json = JSON.stringify(data, null, 2);
       await writeFile(contextPath, json, 'utf-8');
-      
-      console.log('Saved workspace context to:', contextPath);
     } catch (error) {
       console.error('Failed to save workspace context:', error);
       throw error;

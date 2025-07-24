@@ -455,7 +455,7 @@ const loadSavedWorkspace = async () => {
 // Watch for active worktree changes
 watch(explorerPath, async (newPath, oldPath) => {
   if (newPath && newPath !== oldPath) {
-    console.log('[FileTree] Active worktree changed, reloading directory:', newPath);
+    
     isLoading.value = true;
     try {
       await loadDirectory(newPath);

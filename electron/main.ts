@@ -1704,55 +1704,41 @@ let currentWorktreeManager: WorktreeManager | null = null;
 
 // Git service initialization when workspace changes
 ipcMain.handle('workspace:setPath', async (event, workspacePath: string) => {
-  console.log('[Main] workspace:setPath called with:', workspacePath);
-  
   try {
     // Store the workspace path
     (store as any).set('workspacePath', workspacePath);
     
     try {
       // Update the Git Service Manager with the new workspace
-      console.log('[Main] Updating GitServiceManager...');
       const gitServiceManager = GitServiceManager.getInstance();
       gitServiceManager.setWorkspace(workspacePath);
-      console.log('[Main] GitServiceManager updated successfully');
     } catch (error) {
       console.error('[Main] Error updating GitServiceManager:', error);
     }
     
     try {
       // Update the Checkpoint Service Manager with the new workspace
-      console.log('[Main] Updating CheckpointServiceManager...');
       const checkpointServiceManager = CheckpointServiceManager.getInstance();
       checkpointServiceManager.setWorkspace(workspacePath);
-      console.log('[Main] CheckpointServiceManager updated successfully');
     } catch (error) {
       console.error('[Main] Error updating CheckpointServiceManager:', error);
     }
     
     try {
       // Update the Worktree Manager with the new workspace
-      console.log('[Main] Updating WorktreeManagerGlobal...');
       const worktreeManagerGlobal = WorktreeManagerGlobal.getInstance();
-      console.log('[Main] Got WorktreeManagerGlobal instance');
       const result = worktreeManagerGlobal.setWorkspace(workspacePath);
-      console.log('[Main] WorktreeManagerGlobal.setWorkspace returned:', result ? 'manager created' : 'null');
     } catch (error) {
       console.error('[Main] Error updating WorktreeManagerGlobal:', error);
     }
     
     try {
       // Update the Git Hooks Manager with the new workspace
-      console.log('[Main] Updating GitHooksManagerGlobal...');
       const gitHooksManagerGlobal = GitHooksManagerGlobal.getInstance();
-      console.log('[Main] Got GitHooksManagerGlobal instance');
       const result = gitHooksManagerGlobal.setWorkspace(workspacePath);
-      console.log('[Main] GitHooksManagerGlobal.setWorkspace returned:', result ? 'manager created' : 'null');
     } catch (error) {
       console.error('[Main] Error updating GitHooksManagerGlobal:', error);
     }
-    
-    console.log('[Main] All service managers updated with workspace:', workspacePath);
     
     return { success: true };
   } catch (error) {

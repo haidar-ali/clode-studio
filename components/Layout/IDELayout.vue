@@ -494,7 +494,7 @@ watch(projectPath, async (newPath) => {
     try {
       await contextManager.initialize(newPath);
       contextInitialized = true;
-      console.log('Context initialized for workspace:', newPath);
+      
     } catch (error) {
       console.error('Failed to initialize context:', error);
     }

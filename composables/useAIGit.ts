@@ -282,7 +282,7 @@ Respond with ONLY the branch name, no explanation.`;
   async function sendToClaudeInstance(instanceId: string, prompt: string): Promise<string> {
     // This would integrate with the Claude terminal
     // For now, return a placeholder
-    console.log('Sending to Claude instance:', instanceId, prompt);
+    
     
     // TODO: Implement actual Claude integration
     // This would send the prompt to the Claude terminal and wait for response

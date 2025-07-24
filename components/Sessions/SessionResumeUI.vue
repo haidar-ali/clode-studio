@@ -199,7 +199,7 @@ const deleteSession = async (session: Session) => {
     }
     
     // Note: Would need backend API to actually delete session
-    console.log('Delete session:', session.id);
+    
   } catch (error) {
     console.error('Failed to delete session:', error);
     // Reload on error

@@ -385,8 +385,8 @@ async function showFileDiff(file: string) {
 +++ b/${file}
 @@ -1,5 +1,6 @@
  function example() {
--  console.log('old version');
-+  console.log('new version');
+-  
++  
 +  // Added new functionality
    return true;
  }`;

@@ -44,9 +44,11 @@ export class WorktreeManager {
   private git: SimpleGit;
   private worktreesPath: string;
   private sessions: Map<string, WorktreeSession> = new Map();
+  private activeWorktreePath: string;
   
   constructor(mainRepoPath: string, setupHandlers: boolean = true) {
     this.mainRepoPath = mainRepoPath;
+    this.activeWorktreePath = mainRepoPath; // Initially set to main repo path
     this.git = simpleGit(mainRepoPath);
     this.worktreesPath = path.join(mainRepoPath, '.worktrees');
     
@@ -115,7 +117,6 @@ export class WorktreeManager {
       // Verify git repository first
       const isRepo = await this.git.checkIsRepo();
       if (!isRepo) {
-        console.log('Not a git repository, worktree features unavailable');
         return; // Don't throw error, just return
       }
       
@@ -144,6 +145,9 @@ export class WorktreeManager {
       
       // Enhance with additional info
       for (const worktree of worktrees) {
+        // Check if this is the active worktree by comparing paths
+        worktree.isActive = path.resolve(this.activeWorktreePath) === path.resolve(worktree.path);
+        
         // Check if locked
         const lockFile = path.join(worktree.path, '.git', 'locked');
         worktree.isLocked = await fs.pathExists(lockFile);
@@ -216,6 +220,9 @@ export class WorktreeManager {
         throw new Error('Failed to create worktree');
       }
       
+      // Copy or link .claude directory from main workspace to worktree
+      await this.setupWorktreeConfiguration(worktreePath);
+      
       // Always create a session - use branch name if no session name provided
       const finalSessionName = sessionName || branchName;
       await this.createSession({
@@ -274,6 +281,12 @@ export class WorktreeManager {
       if (!await fs.pathExists(worktreePath)) {
         return { success: false, error: 'Worktree path does not exist' };
       }
+      
+      // Update the active worktree path
+      this.activeWorktreePath = worktreePath;
+      
+      // Ensure worktree has up-to-date configuration
+      await this.setupWorktreeConfiguration(worktreePath);
       
       // Update session last accessed time
       const session = this.findSessionByPath(worktreePath);
@@ -477,6 +490,50 @@ export class WorktreeManager {
     }
   }
   
+  // Setup configuration for new worktree
+  private async setupWorktreeConfiguration(worktreePath: string): Promise<void> {
+    try {
+      const mainClaudeDir = path.join(this.mainRepoPath, '.claude');
+      const worktreeClaudeDir = path.join(worktreePath, '.claude');
+      
+      // Check if main workspace has .claude directory
+      if (await fs.pathExists(mainClaudeDir)) {
+        
+        // Create .claude directory in worktree if it doesn't exist
+        await fs.ensureDir(worktreeClaudeDir);
+        
+        // Copy configuration files (but not local settings)
+        const filesToCopy = ['settings.json', 'hooks.json', 'tools.json'];
+        
+        for (const file of filesToCopy) {
+          const sourcePath = path.join(mainClaudeDir, file);
+          if (await fs.pathExists(sourcePath)) {
+            const destPath = path.join(worktreeClaudeDir, file);
+            await fs.copy(sourcePath, destPath, { overwrite: false });
+          }
+        }
+        
+        // For settings.local.json, we might want to create a symlink or copy based on preference
+        const localSettingsSource = path.join(mainClaudeDir, 'settings.local.json');
+        if (await fs.pathExists(localSettingsSource)) {
+          const localSettingsDest = path.join(worktreeClaudeDir, 'settings.local.json');
+          // Copy local settings as well (user can modify per-worktree if needed)
+          await fs.copy(localSettingsSource, localSettingsDest, { overwrite: false });
+        }
+        
+        // Also check for .mcp.json in the project root
+        const mainMcpFile = path.join(this.mainRepoPath, '.mcp.json');
+        if (await fs.pathExists(mainMcpFile)) {
+          const worktreeMcpFile = path.join(worktreePath, '.mcp.json');
+          await fs.copy(mainMcpFile, worktreeMcpFile, { overwrite: false });
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to setup worktree configuration:', error);
+      // Don't fail the worktree creation if configuration setup fails
+    }
+  }
+  
   // Helper methods
   private parseWorktreeList(output: string): Worktree[] {
     const worktrees: Worktree[] = [];
@@ -642,5 +699,10 @@ export class WorktreeManager {
     } catch (error) {
       console.error('Failed to save sessions:', error);
     }
+  }
+  
+  // Method to set the active worktree path (useful when workspace changes)
+  setActiveWorktreePath(path: string): void {
+    this.activeWorktreePath = path;
   }
 }

@@ -55,7 +55,7 @@ export const useFileWatcherEnhanced = () => {
 
       if (result.success) {
         isWatching.value = true;
-        console.log('File watcher started for:', tasksStore.projectPath);
+        
       }
     } catch (error) {
       console.error('Failed to start file watcher:', error);
