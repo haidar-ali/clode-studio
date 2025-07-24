@@ -15,10 +15,14 @@ export const useEditorStore = defineStore('editor', {
   },
 
   actions: {
-    async openFile(path: string) {
+    async openFile(path: string, line?: number) {
       const existingTab = this.tabs.find(tab => tab.path === path);
       if (existingTab) {
         this.activeTabId = existingTab.id;
+        // Emit event to jump to line if provided
+        if (line) {
+          window.dispatchEvent(new CustomEvent('editor:goto-line', { detail: { line } }));
+        }
         return;
       }
 
@@ -43,9 +47,17 @@ export const useEditorStore = defineStore('editor', {
 
       this.tabs.push(newTab);
       this.activeTabId = newTab.id;
-      
+
       // Start watching this file for changes
       await window.electronAPI.fs.watchFile(path);
+
+      // Emit event to jump to line if provided
+      if (line) {
+        // Small delay to ensure editor is initialized
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('editor:goto-line', { detail: { line } }));
+        }, 100);
+      }
     },
 
     updateTabContent(tabId: string, content: string) {
@@ -63,7 +75,7 @@ export const useEditorStore = defineStore('editor', {
       const result = await window.electronAPI.fs.writeFile(tab.path, tab.content);
       if (result.success) {
         tab.isDirty = false;
-        
+
         // Add to working files for context
         try {
           const { useProjectContextStore } = await import('~/stores/project-context');
@@ -82,12 +94,12 @@ export const useEditorStore = defineStore('editor', {
       if (index === -1) return;
 
       const tab = this.tabs[index];
-      
+
       // Stop watching this file
       window.electronAPI.fs.unwatchFile(tab.path);
-      
+
       this.tabs.splice(index, 1);
-      
+
       if (this.activeTabId === tabId) {
         if (this.tabs.length > 0) {
           this.activeTabId = this.tabs[Math.max(0, index - 1)].id;
@@ -102,14 +114,14 @@ export const useEditorStore = defineStore('editor', {
       this.tabs.forEach(tab => {
         window.electronAPI.fs.unwatchFile(tab.path);
       });
-      
+
       // Clear all tabs and reset active tab
       this.tabs = [];
       this.activeTabId = null;
-      
+
       console.log('Closed all editor tabs for workspace switch');
     },
-    
+
     updateFileContent(path: string, content: string) {
       const tab = this.tabs.find(t => t.path === path);
       if (tab) {
