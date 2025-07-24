@@ -1,0 +1,21 @@
+# IDEs
+.idea/
+
+# Nuxt.js build output
+.nuxt/
+
+# Electron generated files
+electron/*.js
+!electron/claude-sdk-service.js
+
+# Dependencies
+node_modules/
+package-lock.json
+
+# Environment variables
+.env
+
+# Clode Studio related files and directories
+.claude-checkpoints/
+.worktrees/
+.claude/
