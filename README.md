@@ -59,6 +59,14 @@ A powerful, modern IDE specifically designed for developers using Claude Code CL
 - Memory management (CLAUDE.md)
 - Context-aware file operations
 
+### 🌳 Git Worktrees & Sessions
+- **Isolated Development Branches**: Create separate working directories for features
+- **Session Management**: Track work contexts with metadata and tags
+- **Quick Switching**: One-click switch between worktrees
+- **Session Comparison**: Compare changes across different sessions
+- **Automatic Setup**: Claude configuration copied to each worktree
+- **Checkpoint Integration**: Link worktrees with checkpoints
+
 ### 🎨 Flexible Layout System
 - **Full IDE Mode**: Complete development environment
 - **Kanban + Claude Mode**: Task-focused with AI assistance
@@ -87,6 +95,7 @@ A powerful, modern IDE specifically designed for developers using Claude Code CL
 - **Lunr.js** - Client-side search
 - **File System Watchers** - Real-time updates
 - **JSON-RPC** - MCP protocol communication
+- **Simple-git** - Git worktree management
 
 ## 📸 Screenshots
 
@@ -209,6 +218,32 @@ claude --version
 4. Configure custom servers
 5. Monitor connection status
 
+### Git Worktrees & Sessions
+
+1. **Creating a Worktree**
+   - Click the **+** button in the Worktree panel
+   - Enter branch name (new or existing)
+   - Optionally provide session name and description
+   - Claude settings automatically copied to new worktree
+
+2. **Managing Sessions**
+   - Each worktree creates an associated session
+   - Sessions track when created, last accessed
+   - Add metadata like task descriptions and tags
+   - Compare sessions to see differences
+
+3. **Switching Worktrees**
+   - Click on any worktree card to switch
+   - All IDE features update to new context
+   - Claude instances restart in new directory
+   - File explorer refreshes automatically
+
+4. **Session Comparison**
+   - Click compare button to see differences
+   - View files added/removed/modified
+   - See commit divergence from main branch
+   - Useful for reviewing changes before merge
+
 ## 🔧 Advanced Features
 
 ### Personality System
@@ -240,6 +275,15 @@ claude --version
 - Multi-file replace
 - Search history
 - Ripgrep integration
+- Minimum 3-character search requirement
+
+### Worktree Management
+- **Isolated Feature Development**: Each feature in its own directory
+- **Zero-Conflict Switching**: No stashing or committing required
+- **Session Tracking**: Remember why each worktree was created
+- **Automatic Configuration**: .claude settings copied to each worktree
+- **Branch Protection**: Lock worktrees to prevent accidental deletion
+- **Cleanup Tools**: Prune old worktrees when done
 
 ## 📚 Documentation
 
@@ -307,6 +351,13 @@ npm run lint:fix       # Auto-fix linting issues
 **Search not working**
 - Install ripgrep: `brew install ripgrep` (macOS)
 - Falls back to Node.js search if unavailable
+- Minimum 3 characters required to search
+
+**Worktree issues**
+- Ensure Git repository is initialized
+- Check Git version (2.17+ required for worktrees)
+- Verify branch names don't contain spaces
+- Remove locks with force option if needed
 
 ## 📈 Performance Tips
 
