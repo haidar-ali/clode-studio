@@ -11,6 +11,7 @@ import { claudeCodeService } from './claude-sdk-service.js';
 import { lightweightContext } from './lightweight-context.js';
 import { contextOptimizer } from './context-optimizer.js';
 import { workspacePersistence } from './workspace-persistence.js';
+import { searchWithRipgrep } from './search-ripgrep.js';
 import { claudeSettingsManager } from './claude-settings-manager.js';
 import { ClaudeDetector } from './claude-detector.js';
 import { fileWatcherService } from './file-watcher.js';
@@ -126,20 +127,20 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
   try {
     // Detect Claude installation
     const claudeInfo = await ClaudeDetector.detectClaude(workingDirectory);
-    
+
     // Get the command configuration
     const debugArgs = process.env.CLAUDE_DEBUG === 'true' ? ['--debug'] : [];
     const { command, args: commandArgs, useShell } = ClaudeDetector.getClaudeCommand(claudeInfo, debugArgs);
-    
+
     // Log settings file to verify it exists
     const settingsPath = join(homedir(), '.claude', 'settings.json');
     if (!existsSync(settingsPath)) {
       console.warn('Claude settings file not found!');
     }
-    
+
     // Get the user's default shell
     const userShell = process.env.SHELL || '/bin/bash';
-    
+
     const claudePty = pty.spawn(command, commandArgs, {
       name: 'xterm-color',
       cols: 80,
@@ -175,8 +176,8 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
       claudeInstances.delete(instanceId);
     });
 
-    return { 
-      success: true, 
+    return {
+      success: true,
       pid: claudePty.pid,
       claudeInfo: {
         path: claudeInfo.path,
@@ -199,7 +200,7 @@ ipcMain.handle('claude:send', async (event, instanceId: string, command: string)
   try {
     // Write raw data to PTY (xterm.js will handle line endings)
     claudePty.write(command);
-    
+
     return { success: true };
   } catch (error) {
     console.error(`Failed to send command to Claude PTY ${instanceId}:`, error);
@@ -240,20 +241,20 @@ ipcMain.handle('getHomeDir', () => {
 ipcMain.handle('fileWatcher:start', async (event, dirPath: string, options?: any) => {
   try {
     await fileWatcherService.watchDirectory(dirPath, options);
-    
+
     // Set up event forwarding to renderer
     fileWatcherService.on('file:change', (data) => {
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('file:change', data);
       }
     });
-    
+
     fileWatcherService.on('batch:change', (data) => {
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('batch:change', data);
       }
     });
-    
+
     return { success: true };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : String(error) };
@@ -295,14 +296,14 @@ ipcMain.handle('knowledgeCache:recordQuery', async (event, workspacePath: string
       cache = createKnowledgeCache(workspacePath);
       knowledgeCaches.set(workspacePath, cache);
     }
-    
+
     await cache.learnFromQuery(
       metrics.query,
       metrics.result || {},
       metrics.responseTime,
       metrics.success
     );
-    
+
     return { success: true };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : String(error) };
@@ -316,7 +317,7 @@ ipcMain.handle('knowledgeCache:getStats', async (event, workspacePath: string) =
       cache = createKnowledgeCache(workspacePath);
       knowledgeCaches.set(workspacePath, cache);
     }
-    
+
     const stats = cache.getStatistics();
     return { success: true, stats };
   } catch (error) {
@@ -331,7 +332,7 @@ ipcMain.handle('knowledgeCache:predict', async (event, workspacePath: string, co
       cache = createKnowledgeCache(workspacePath);
       knowledgeCaches.set(workspacePath, cache);
     }
-    
+
     const predictions = await cache.predictNextQueries(context);
     return { success: true, predictions };
   } catch (error) {
@@ -346,7 +347,7 @@ ipcMain.handle('knowledgeCache:clear', async (event, workspacePath: string) => {
       cache = createKnowledgeCache(workspacePath);
       knowledgeCaches.set(workspacePath, cache);
     }
-    
+
     await cache.clear();
     return { success: true };
   } catch (error) {
@@ -361,7 +362,7 @@ ipcMain.handle('knowledgeCache:invalidate', async (event, workspacePath: string,
       cache = createKnowledgeCache(workspacePath);
       knowledgeCaches.set(workspacePath, cache);
     }
-    
+
     const count = await cache.invalidate(pattern, tags);
     return { success: true, count };
   } catch (error) {
@@ -588,19 +589,19 @@ ipcMain.handle('claude:testHook', async (event, hook: any) => {
     const { exec } = await import('child_process');
     const { promisify } = await import('util');
     const execAsync = promisify(exec);
-    
+
     const testCommand = claudeSettingsManager.createTestCommand(hook);
     const { stdout, stderr } = await execAsync(testCommand, {
       timeout: 5000 // 5 second timeout
     });
-    
-    return { 
-      success: true, 
+
+    return {
+      success: true,
       output: stdout + (stderr ? '\n\nErrors:\n' + stderr : '')
     };
   } catch (error: any) {
-    return { 
-      success: false, 
+    return {
+      success: false,
       error: error.message || String(error),
       output: error.stdout || ''
     };
@@ -624,11 +625,11 @@ ipcMain.handle('dialog:selectFolder', async () => {
       properties: ['openDirectory'],
       title: 'Select Workspace Folder'
     });
-    
+
     if (result.canceled || result.filePaths.length === 0) {
       return { success: false, canceled: true };
     }
-    
+
     return { success: true, path: result.filePaths[0] };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : String(error) };
@@ -645,11 +646,11 @@ ipcMain.handle('dialog:selectFile', async () => {
         { name: 'Text Files', extensions: ['txt', 'md', 'json', 'js', 'ts', 'tsx', 'jsx', 'vue', 'css', 'scss', 'html'] }
       ]
     });
-    
+
     if (result.canceled || result.filePaths.length === 0) {
       return { success: false, canceled: true };
     }
-    
+
     return { success: true, path: result.filePaths[0] };
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : String(error) };
@@ -699,13 +700,13 @@ ipcMain.handle('fs:watchFile', async (event, filePath: string) => {
         if (existingTimer) {
           clearTimeout(existingTimer);
         }
-        
+
         // Set new timer with debounce
         const timer = setTimeout(async () => {
           try {
             // Read the new content
             const content = await readFile(filePath, 'utf-8');
-            
+
             // Send update to renderer
             mainWindow?.webContents.send('file:changed', {
               path: filePath,
@@ -714,17 +715,17 @@ ipcMain.handle('fs:watchFile', async (event, filePath: string) => {
           } catch (error) {
             console.error('Error reading changed file:', error);
           }
-          
+
           // Clean up timer
           fileDebounceTimers.delete(filePath);
         }, 300); // 300ms debounce
-        
+
         fileDebounceTimers.set(filePath, timer);
       }
     });
 
     fileWatchers.set(filePath, watcher);
-    
+
     return { success: true };
   } catch (error) {
     console.error('Failed to watch file:', error);
@@ -751,7 +752,7 @@ ipcMain.handle('fs:watchDirectory', async (event, dirPath: string) => {
     });
 
     fileWatchers.set(watchKey, watcher);
-    
+
     return { success: true };
   } catch (error) {
     console.error('Failed to watch directory:', error);
@@ -779,7 +780,7 @@ ipcMain.handle('fs:unwatchFile', async (event, filePath: string) => {
     if (watcher) {
       watcher.close();
       fileWatchers.delete(filePath);
-      
+
       // Clear any pending debounce timer
       const timer = fileDebounceTimers.get(filePath);
       if (timer) {
@@ -799,7 +800,7 @@ app.on('before-quit', () => {
     watcher.close();
   }
   fileWatchers.clear();
-  
+
   // Clean up any pending debounce timers
   for (const [path, timer] of fileDebounceTimers) {
     clearTimeout(timer);
@@ -840,87 +841,96 @@ ipcMain.handle('claude:sdk:updateTodo', async (event, todoId: string, newStatus:
 
 // Search operations
 ipcMain.handle('search:findInFiles', async (event, options) => {
-  const { query, caseSensitive, wholeWord, useRegex, includePattern, excludePattern, workspacePath } = options;
+  
+  // Add a response wrapper to ensure clean IPC communication
+  const sendResponse = (data: any) => {
+    return data;
+  };
+  
   const { promisify } = await import('util');
   const { exec } = await import('child_process');
   const execAsync = promisify(exec);
   const path = await import('path');
   const fs = await import('fs/promises');
-  
-  // Use workspace path if provided, otherwise fall back to current directory
-  const workingDir = workspacePath || process.cwd();
-  
-  // Validate that the workspace path exists
+
   try {
-    await fs.access(workingDir);
-  } catch (error) {
-    throw new Error(`Workspace directory not found: ${workingDir}`);
-  }
-  
-  try {
-    // Try ripgrep first
-    let cmd = `rg "${query}"`;
-    if (caseSensitive) cmd += ' -s';
-    if (wholeWord) cmd += ' -w';
-    if (!useRegex) cmd += ' -F';
-    if (includePattern) cmd += ` -g "${includePattern}"`;
-    if (excludePattern) {
-      const patterns = excludePattern.split(',').map((p: string) => p.trim());
-      patterns.forEach((p: string) => cmd += ` -g "!${p}"`);
+    const { query, caseSensitive, wholeWord, useRegex, includePattern, excludePattern, workspacePath } = options;
+
+    // Use workspace path if provided, otherwise fall back to current directory
+    const workingDir = workspacePath || process.cwd();
+    console.log('[Main] Working directory:', workingDir);
+
+    // Validate that the workspace path exists
+    try {
+      await fs.access(workingDir);
+      console.log('[Main] Workspace directory exists');
+    } catch (error) {
+      console.error('[Main] Workspace directory not found:', workingDir);
+      throw new Error(`Workspace directory not found: ${workingDir}`);
     }
-    cmd += ' --json';
-    
-    const { stdout } = await execAsync(cmd, { 
-      cwd: workingDir,
-      maxBuffer: 10 * 1024 * 1024
-    });
-    
-    // Parse ripgrep JSON output
-    const results = new Map<string, any>();
-    const lines = stdout.split('\n').filter(line => line.trim());
-    
-    for (const line of lines) {
-      try {
-        const data = JSON.parse(line);
-        if (data.type === 'match') {
-          const filePath = data.data.path.text;
-          const relativePath = path.relative(workingDir, filePath);
-          
-          if (!results.has(filePath)) {
-            results.set(filePath, {
-              path: filePath,
-              relativePath: relativePath,
-              matches: []
-            });
-          }
-          
-          results.get(filePath)!.matches.push({
-            line: data.data.line_number,
-            column: data.data.submatches[0].start,
-            text: data.data.lines.text,
-            length: data.data.submatches[0].end - data.data.submatches[0].start
-          });
+
+    try {
+      // Try ripgrep first
+      console.log('[Main] Attempting to use ripgrep...');
+      
+      // Check for bundled ripgrep first
+      const platform = process.platform;
+      const arch = process.arch;
+      const platformKey = platform === 'darwin' 
+        ? (arch === 'arm64' ? 'darwin-arm64' : 'darwin-x64')
+        : platform === 'linux' ? 'linux-x64' 
+        : platform === 'win32' ? 'win32-x64' 
+        : null;
+      
+      let rgPath = 'rg'; // Default to system rg
+      
+      if (platformKey) {
+        const rgBinary = platform === 'win32' ? 'rg.exe' : 'rg';
+        const bundledRgPath = path.join(__dirname, '..', 'vendor', 'ripgrep', platformKey, rgBinary);
+        
+        if (existsSync(bundledRgPath)) {
+          rgPath = bundledRgPath;
+          console.log('[Main] Using bundled ripgrep from:', rgPath);
+        } else {
+          console.log('[Main] Bundled ripgrep not found at:', bundledRgPath);
         }
-      } catch (e) {
-        // Skip invalid JSON lines
       }
+
+      // Use streaming ripgrep search
+      const results = await searchWithRipgrep(rgPath, query, workingDir, {
+        caseSensitive,
+        wholeWord,
+        useRegex,
+        includePattern,
+        excludePattern
+      });
+      
+      return sendResponse(results);
+    } catch (error: any) {
+      // Ripgrep failed (likely timeout), fallback to Node.js implementation
+      console.log('[Main] Ripgrep failed, falling back to Node.js search. Error:', error.message);
+      const fallbackResults = await fallbackSearch(workingDir, options);
+      return sendResponse(fallbackResults);
     }
-    
-    return Array.from(results.values());
   } catch (error) {
-    // Fallback to Node.js implementation
-    return await fallbackSearch(workingDir, options);
+    console.error('[Main] search:findInFiles error:', error);
+    if (error instanceof Error) {
+      console.error('[Main] Error stack:', error.stack);
+    }
+    throw error;
   }
 });
 
 // Fallback search implementation using Node.js
 async function fallbackSearch(workingDir: string, options: any) {
+  const startTime = Date.now();
+  
   const { query, caseSensitive, wholeWord, useRegex, includePattern, excludePattern } = options;
   const path = await import('path');
   const fs = await import('fs/promises');
-  
+
   const results = new Map<string, any>();
-  
+
   // Build regex pattern
   let pattern = query;
   if (!useRegex) {
@@ -929,27 +939,29 @@ async function fallbackSearch(workingDir: string, options: any) {
   if (wholeWord) {
     pattern = `\\b${pattern}\\b`;
   }
-  
+
   const regex = new RegExp(pattern, caseSensitive ? 'g' : 'gi');
-  
+
   // Default exclude patterns
-  const defaultExcludes = ['node_modules', 'dist', '.git', '.next', 'build', 'out'];
-  const excludes = excludePattern 
+  const defaultExcludes = ['node_modules', 'dist', '.git', '.next', 'build', 'out', '.claude', '.claude-checkpoints', '.worktrees', '.output', 'coverage', '.nyc_output', 'tmp', 'temp', '.cache', '.parcel-cache', '.vscode', '.idea', '__pycache__', '.DS_Store', '.nuxt'];
+  const excludes = excludePattern
     ? [...defaultExcludes, ...excludePattern.split(',').map((p: string) => p.trim().replace('**/', '').replace('/**', ''))]
     : defaultExcludes;
-  
+
+
   const searchInDirectory = async (dir: string) => {
     try {
-      const entries = await fs.readdir(dir, { withFileTypes: true });
       
+      const entries = await fs.readdir(dir, { withFileTypes: true });
+
       for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
-        
+
         // Skip excluded directories/files
         if (excludes.some(exclude => entry.name.includes(exclude) || fullPath.includes(exclude))) {
           continue;
         }
-        
+
         if (entry.isDirectory()) {
           await searchInDirectory(fullPath);
         } else if (entry.isFile()) {
@@ -964,18 +976,24 @@ async function fallbackSearch(workingDir: string, options: any) {
             });
             if (!matchesInclude) continue;
           }
-          
+
           // Search in text files only
           const ext = path.extname(entry.name).toLowerCase();
           const textExtensions = ['.js', '.ts', '.jsx', '.tsx', '.vue', '.json', '.md', '.txt', '.css', '.scss', '.html', '.xml', '.yaml', '.yml', '.py', '.go', '.rs', '.java', '.c', '.cpp', '.h'];
-          
+
           if (!textExtensions.includes(ext)) continue;
-          
+
           try {
+            // Skip files larger than 5MB to prevent hanging
+            const stats = await fs.stat(fullPath);
+            if (stats.size > 5 * 1024 * 1024) {
+              continue;
+            }
+            
             const content = await fs.readFile(fullPath, 'utf-8');
             const lines = content.split('\n');
             const matches: any[] = [];
-            
+
             lines.forEach((line, lineIndex) => {
               let match;
               regex.lastIndex = 0; // Reset regex
@@ -989,7 +1007,7 @@ async function fallbackSearch(workingDir: string, options: any) {
                 if (!regex.global) break;
               }
             });
-            
+
             if (matches.length > 0) {
               const relativePath = path.relative(workingDir, fullPath);
               results.set(fullPath, {
@@ -1007,36 +1025,40 @@ async function fallbackSearch(workingDir: string, options: any) {
       // Skip directories that can't be accessed
     }
   };
-  
+
   await searchInDirectory(workingDir);
-  return Array.from(results.values());
+  
+  
+  const resultsArray = Array.from(results.values());
+  
+  return resultsArray;
 }
 
 ipcMain.handle('search:replaceInFile', async (event, options) => {
   const fs = await import('fs/promises');
   const { filePath, searchQuery, replaceQuery, line, column, caseSensitive, wholeWord, useRegex } = options;
-  
+
   try {
     const content = await fs.readFile(filePath, 'utf-8');
     const lines = content.split('\n');
-    
+
     if (line > 0 && line <= lines.length) {
       const lineContent = lines[line - 1];
       let pattern = searchQuery;
-      
+
       if (!useRegex) {
         pattern = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       }
       if (wholeWord) {
         pattern = `\\b${pattern}\\b`;
       }
-      
+
       const regex = new RegExp(pattern, caseSensitive ? 'g' : 'gi');
       lines[line - 1] = lineContent.replace(regex, replaceQuery);
-      
+
       await fs.writeFile(filePath, lines.join('\n'), 'utf-8');
     }
-    
+
     return { success: true };
   } catch (error) {
     console.error('Replace failed:', error);
@@ -1047,21 +1069,21 @@ ipcMain.handle('search:replaceInFile', async (event, options) => {
 ipcMain.handle('search:replaceAllInFile', async (event, options) => {
   const fs = await import('fs/promises');
   const { filePath, searchQuery, replaceQuery, caseSensitive, wholeWord, useRegex } = options;
-  
+
   try {
     let content = await fs.readFile(filePath, 'utf-8');
     let pattern = searchQuery;
-    
+
     if (!useRegex) {
       pattern = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
     if (wholeWord) {
       pattern = `\\b${pattern}\\b`;
     }
-    
+
     const regex = new RegExp(pattern, caseSensitive ? 'g' : 'gi');
     content = content.replace(regex, replaceQuery);
-    
+
     await fs.writeFile(filePath, content, 'utf-8');
     return { success: true };
   } catch (error) {
@@ -1076,11 +1098,11 @@ const terminals = new Map<string, any>();
 ipcMain.handle('terminal:create', async (event, options) => {
   const pty = await import('node-pty');
   const { v4: uuidv4 } = await import('uuid');
-  
+
   try {
     const id = uuidv4();
     const shell = process.platform === 'win32' ? 'powershell.exe' : '/bin/bash';
-    
+
     const ptyProcess = pty.spawn(shell, [], {
       name: 'xterm-color',
       cols: options.cols || 80,
@@ -1088,18 +1110,18 @@ ipcMain.handle('terminal:create', async (event, options) => {
       cwd: options.cwd || process.cwd(),
       env: process.env as any
     });
-    
+
     terminals.set(id, ptyProcess);
-    
+
     ptyProcess.onData((data) => {
       mainWindow?.webContents.send(`terminal:data:${id}`, data);
     });
-    
+
     ptyProcess.onExit(({ exitCode, signal }) => {
       terminals.delete(id);
       mainWindow?.webContents.send(`terminal:exit:${id}`, { exitCode, signal });
     });
-    
+
     return { success: true, id };
   } catch (error) {
     console.error('Failed to create terminal:', error);
@@ -1148,43 +1170,43 @@ ipcMain.handle('mcp:list', async (event, workspacePath?: string) => {
   const { exec } = await import('child_process');
   const { promisify } = await import('util');
   const execAsync = promisify(exec);
-  
+
   try {
     // Get workspace path from store if not provided
     if (!workspacePath) {
       workspacePath = (store as any).get('workspacePath') || process.cwd();
     }
-    
+
     // Detect Claude to use the correct binary
     const claudeInfo = await ClaudeDetector.detectClaude(workspacePath);
     const claudeCommand = claudeInfo.path;
-    
+
     const { stdout } = await execAsync(`${claudeCommand} mcp list`, {
       cwd: workspacePath,
       env: process.env
     });
-    
+
     // Parse the text output
     const lines = stdout.trim().split('\n');
     const servers: any[] = [];
-    
+
     // Skip the "No MCP servers configured" message
     if (stdout.includes('No MCP servers configured')) {
       return { success: true, servers: [] };
     }
-    
+
     for (const line of lines) {
       if (line.includes(':')) {
         // Parse lines like "context7: https://mcp.context7.com/mcp" or "context7: https://mcp.context7.com/mcp (HTTP)"
         const colonIndex = line.indexOf(':');
         const name = line.substring(0, colonIndex).trim();
         const rest = line.substring(colonIndex + 1).trim();
-        
+
         // Check if transport type is specified in parentheses
         const parenIndex = rest.lastIndexOf('(');
         let url = rest;
         let transport = 'stdio'; // default
-        
+
         if (parenIndex > -1) {
           url = rest.substring(0, parenIndex).trim();
           transport = rest.substring(parenIndex + 1, rest.length - 1).trim().toLowerCase();
@@ -1194,7 +1216,7 @@ ipcMain.handle('mcp:list', async (event, workspacePath?: string) => {
             transport = 'http';
           }
         }
-        
+
         servers.push({
           name,
           url: url.trim(),
@@ -1202,13 +1224,13 @@ ipcMain.handle('mcp:list', async (event, workspacePath?: string) => {
         });
       }
     }
-    
+
     return { success: true, servers };
   } catch (error) {
     console.error('Failed to list MCP servers:', error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to list servers' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to list servers'
     };
   }
 });
@@ -1217,38 +1239,38 @@ ipcMain.handle('mcp:add', async (event, config) => {
   const { exec } = await import('child_process');
   const { promisify } = await import('util');
   const execAsync = promisify(exec);
-  
+
   try {
     // Get workspace path from store
     const workspacePath = (store as any).get('workspacePath') || process.cwd();
-    
+
     // Detect Claude to use the correct binary
     const claudeInfo = await ClaudeDetector.detectClaude(workspacePath);
     const claudeCommand = claudeInfo.path;
-    
+
     // Build the command with proper transport flag
     let command = `${claudeCommand} mcp add`;
-    
+
     // Add transport type
     command += ` --transport ${config.type}`;
-    
+
     // Add the name
     command += ` "${config.name}"`;
-    
+
     // Add environment variables BEFORE the command (they're options for claude mcp add)
     if (config.env) {
       for (const [key, value] of Object.entries(config.env)) {
         command += ` -e "${key}=${value}"`;
       }
     }
-    
+
     // Add headers for SSE/HTTP servers BEFORE the command
     if (config.headers && (config.type === 'sse' || config.type === 'http')) {
       for (const [key, value] of Object.entries(config.headers)) {
         command += ` -H "${key}: ${value}"`;
       }
     }
-    
+
     // Add -- to stop option parsing, then add the command/URL based on type
     if (config.type === 'stdio') {
       command += ` -- "${config.command}"`;
@@ -1260,22 +1282,22 @@ ipcMain.handle('mcp:add', async (event, config) => {
       // For HTTP/SSE servers, the URL is the command argument
       command += ` -- "${config.url}"`;
     }
-    
+
     const { stdout, stderr } = await execAsync(command, {
       cwd: workspacePath,
       env: process.env
     });
-    
+
     if (stderr && !stdout) {
       return { success: false, error: stderr };
     }
-    
+
     return { success: true };
   } catch (error) {
     console.error('Failed to add MCP server:', error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to add server' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to add server'
     };
   }
 });
@@ -1284,30 +1306,30 @@ ipcMain.handle('mcp:remove', async (event, name: string) => {
   const { exec } = await import('child_process');
   const { promisify } = await import('util');
   const execAsync = promisify(exec);
-  
+
   try {
     // Get workspace path from store
     const workspacePath = (store as any).get('workspacePath') || process.cwd();
-    
+
     // Detect Claude to use the correct binary
     const claudeInfo = await ClaudeDetector.detectClaude(workspacePath);
     const claudeCommand = claudeInfo.path;
-    
+
     const { stdout, stderr } = await execAsync(`${claudeCommand} mcp remove "${name}"`, {
       cwd: workspacePath,
       env: process.env
     });
-    
+
     if (stderr && !stdout) {
       return { success: false, error: stderr };
     }
-    
+
     return { success: true };
   } catch (error) {
     console.error('Failed to remove MCP server:', error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to remove server' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to remove server'
     };
   }
 });
@@ -1316,24 +1338,24 @@ ipcMain.handle('mcp:get', async (event, name: string) => {
   const { exec } = await import('child_process');
   const { promisify } = await import('util');
   const execAsync = promisify(exec);
-  
+
   try {
     // Get workspace path from store
     const workspacePath = (store as any).get('workspacePath') || process.cwd();
-    
+
     // Detect Claude to use the correct binary
     const claudeInfo = await ClaudeDetector.detectClaude(workspacePath);
     const claudeCommand = claudeInfo.path;
-    
+
     const { stdout } = await execAsync(`${claudeCommand} mcp get "${name}"`, {
       cwd: workspacePath,
       env: process.env
     });
-    
+
     // Parse the text output to extract server details
     const server: any = { name };
     const lines = stdout.trim().split('\n');
-    
+
     for (const line of lines) {
       if (line.includes('Type:')) {
         server.transport = line.split(':')[1].trim().toLowerCase();
@@ -1343,13 +1365,13 @@ ipcMain.handle('mcp:get', async (event, name: string) => {
         server.command = line.split('Command:')[1].trim();
       }
     }
-    
+
     return { success: true, server };
   } catch (error) {
     console.error('Failed to get MCP server details:', error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to get server details' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to get server details'
     };
   }
 });
@@ -1359,7 +1381,7 @@ ipcMain.handle('mcp:test', async (event, config) => {
   const { exec } = await import('child_process');
   const { promisify } = await import('util');
   const execAsync = promisify(exec);
-  
+
   try {
     // For HTTP/SSE servers, test the URL directly
     if (config.type === 'sse' || config.type === 'http') {
@@ -1374,9 +1396,9 @@ ipcMain.handle('mcp:test', async (event, config) => {
         });
 
         req.on('error', (error: Error) => {
-          resolve({ 
-            success: false, 
-            error: `Connection failed: ${error.message}` 
+          resolve({
+            success: false,
+            error: `Connection failed: ${error.message}`
           });
         });
 
@@ -1388,25 +1410,25 @@ ipcMain.handle('mcp:test', async (event, config) => {
         req.end();
       });
     }
-    
+
     // For stdio servers, test if command exists
     if (config.type === 'stdio') {
       const { stdout, stderr } = await execAsync(`which "${config.command}"`, {
         env: process.env
       });
-      
+
       if (stdout.trim()) {
         return { success: true };
       } else {
         return { success: false, error: 'Command not found' };
       }
     }
-    
+
     return { success: false, error: 'Unknown server type' };
   } catch (error) {
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Test failed' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Test failed'
     };
   }
 });
@@ -1417,9 +1439,9 @@ ipcMain.handle('context:initialize', async (event, workspacePath: string) => {
     await lightweightContext.initialize(workspacePath);
     return { success: true };
   } catch (error) {
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to initialize context' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to initialize context'
     };
   }
 });
@@ -1429,9 +1451,9 @@ ipcMain.handle('context:searchFiles', async (event, query: string, limit: number
     const results = await lightweightContext.searchFiles(query, limit);
     return { success: true, results };
   } catch (error) {
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to search files' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to search files'
     };
   }
 });
@@ -1441,9 +1463,9 @@ ipcMain.handle('context:buildContext', async (event, query: string, workingFiles
     const context = await lightweightContext.buildContext(query, workingFiles, maxTokens);
     return { success: true, context };
   } catch (error) {
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to build context' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to build context'
     };
   }
 });
@@ -1453,9 +1475,9 @@ ipcMain.handle('context:getStatistics', async (event) => {
     const statistics = lightweightContext.getStatistics();
     return { success: true, statistics };
   } catch (error) {
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to get statistics' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to get statistics'
     };
   }
 });
@@ -1465,9 +1487,9 @@ ipcMain.handle('context:getFileContent', async (event, filePath: string) => {
     const content = await lightweightContext.getFileContent(filePath);
     return { success: true, content };
   } catch (error) {
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to get file content' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to get file content'
     };
   }
 });
@@ -1477,9 +1499,9 @@ ipcMain.handle('context:getRecentFiles', async (event, hours: number = 24) => {
     const files = lightweightContext.getRecentFiles(hours);
     return { success: true, files };
   } catch (error) {
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to get recent files' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to get recent files'
     };
   }
 });
@@ -1489,9 +1511,9 @@ ipcMain.handle('context:rescan', async (event) => {
     await lightweightContext.scanWorkspace();
     return { success: true };
   } catch (error) {
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to rescan workspace' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to rescan workspace'
     };
   }
 });
@@ -1501,9 +1523,9 @@ ipcMain.handle('context:startWatching', async (event) => {
     lightweightContext.startWatching();
     return { success: true };
   } catch (error) {
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to start file watching' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to start file watching'
     };
   }
 });
@@ -1513,9 +1535,9 @@ ipcMain.handle('context:stopWatching', async (event) => {
     lightweightContext.stopWatching();
     return { success: true };
   } catch (error) {
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to stop file watching' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to stop file watching'
     };
   }
 });
@@ -1533,9 +1555,9 @@ ipcMain.handle('context:analyzeUsage', async (event, messages: any[], currentCon
     const analysis = contextOptimizer.analyzeContextUsage(messages, currentContext);
     return { success: true, analysis };
   } catch (error) {
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to analyze context usage' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to analyze context usage'
     };
   }
 });
@@ -1545,9 +1567,9 @@ ipcMain.handle('context:buildOptimized', async (event, query: string, workingFil
     const result = await contextOptimizer.buildOptimizedContext(query, workingFiles, maxTokens);
     return { success: true, ...result };
   } catch (error) {
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to build optimized context' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to build optimized context'
     };
   }
 });
@@ -1557,9 +1579,9 @@ ipcMain.handle('context:optimize', async (event, content: string, strategy: any)
     const result = contextOptimizer.optimizeContext(content, strategy);
     return { success: true, result };
   } catch (error) {
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to optimize context' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to optimize context'
     };
   }
 });
@@ -1569,9 +1591,9 @@ ipcMain.handle('context:getRecommendations', async (event, usage: any) => {
     const recommendations = contextOptimizer.getOptimizationRecommendations(usage);
     return { success: true, recommendations };
   } catch (error) {
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to get recommendations' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to get recommendations'
     };
   }
 });
@@ -1581,9 +1603,9 @@ ipcMain.handle('context:shouldInject', async (event, query: string, availableTok
     const decision = contextOptimizer.shouldInjectContext(query, availableTokens, contextSize);
     return { success: true, decision };
   } catch (error) {
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to evaluate context injection' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to evaluate context injection'
     };
   }
 });
@@ -1594,9 +1616,9 @@ ipcMain.handle('workspace:loadContext', async (event, workspacePath: string) => 
     const data = await workspacePersistence.loadWorkspaceContext(workspacePath);
     return { success: true, data };
   } catch (error) {
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to load workspace context' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to load workspace context'
     };
   }
 });
@@ -1606,9 +1628,9 @@ ipcMain.handle('workspace:saveContext', async (event, data: any) => {
     await workspacePersistence.saveWorkspaceContext(data);
     return { success: true };
   } catch (error) {
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to save workspace context' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to save workspace context'
     };
   }
 });
@@ -1618,9 +1640,9 @@ ipcMain.handle('workspace:updateOptimizationTime', async (event, workspacePath: 
     await workspacePersistence.updateOptimizationTime(workspacePath, lastOptimization);
     return { success: true };
   } catch (error) {
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to update optimization time' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to update optimization time'
     };
   }
 });
@@ -1630,9 +1652,9 @@ ipcMain.handle('workspace:updateWorkingFiles', async (event, workspacePath: stri
     await workspacePersistence.updateWorkingFiles(workspacePath, workingFiles);
     return { success: true };
   } catch (error) {
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to update working files' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to update working files'
     };
   }
 });
@@ -1642,9 +1664,9 @@ ipcMain.handle('workspace:saveCheckpoint', async (event, workspacePath: string, 
     await workspacePersistence.saveCheckpoint(workspacePath, checkpoint);
     return { success: true };
   } catch (error) {
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to save checkpoint' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to save checkpoint'
     };
   }
 });
@@ -1654,9 +1676,9 @@ ipcMain.handle('workspace:removeCheckpoint', async (event, workspacePath: string
     await workspacePersistence.removeCheckpoint(workspacePath, checkpointId);
     return { success: true };
   } catch (error) {
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to remove checkpoint' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to remove checkpoint'
     };
   }
 });
@@ -1666,9 +1688,9 @@ ipcMain.handle('workspace:getRecentHistory', async (event, workspacePath: string
     const history = await workspacePersistence.getRecentContextHistory(workspacePath, limit);
     return { success: true, history };
   } catch (error) {
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to get recent history' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to get recent history'
     };
   }
 });
@@ -1678,9 +1700,9 @@ ipcMain.handle('workspace:exportContext', async (event, workspacePath: string) =
     const jsonData = await workspacePersistence.exportWorkspaceContext(workspacePath);
     return { success: true, data: jsonData };
   } catch (error) {
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to export workspace context' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to export workspace context'
     };
   }
 });
@@ -1690,9 +1712,9 @@ ipcMain.handle('workspace:importContext', async (event, workspacePath: string, j
     await workspacePersistence.importWorkspaceContext(workspacePath, jsonData);
     return { success: true };
   } catch (error) {
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to import workspace context' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to import workspace context'
     };
   }
 });

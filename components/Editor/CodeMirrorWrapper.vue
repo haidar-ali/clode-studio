@@ -2,13 +2,13 @@
   <div class="codemirror-wrapper">
     <!-- Knowledge Metadata Bar (only for knowledge files) -->
     <KnowledgeMetadataBar v-if="activeTab" />
-    
+
     <div
       v-if="activeTab"
       ref="editorContainer"
       class="editor-container"
     ></div>
-    
+
     <div v-else class="no-tab-message">
       No file selected
     </div>
@@ -19,9 +19,8 @@
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { EditorView, basicSetup } from 'codemirror';
 import { oneDark } from '@codemirror/theme-one-dark';
-import { EditorState } from '@codemirror/state';
-import { keymap } from '@codemirror/view';
-import { search } from '@codemirror/search';
+import { EditorState, StateEffect, StateField } from '@codemirror/state';
+import { keymap, Decoration } from '@codemirror/view';
 import { useEditorStore } from '~/stores/editor';
 import { useCodeMirrorLanguages } from '~/composables/useCodeMirrorLanguages';
 import KnowledgeMetadataBar from '~/components/Knowledge/KnowledgeMetadataBar.vue';
@@ -34,11 +33,40 @@ const editorContainer = ref<HTMLElement>();
 let editorView: EditorView | null = null;
 let isSettingContent = false;
 
+// Create a state effect for highlighting a line
+const highlightLineEffect = StateEffect.define<{line: number}>();
+
+// Create a state field to track highlighted lines
+const highlightLineField = StateField.define({
+  create() {
+    return Decoration.none;
+  },
+  update(decorations, tr) {
+    decorations = decorations.map(tr.changes);
+    for (let e of tr.effects) {
+      if (e.is(highlightLineEffect)) {
+        decorations = Decoration.none;
+        const line = tr.state.doc.line(e.value.line);
+        decorations = decorations.update({
+          add: [
+            Decoration.line({
+              class: 'cm-highlight-line'
+            }).range(line.from)
+          ]
+        });
+      }
+    }
+    return decorations;
+  },
+  provide: f => EditorView.decorations.from(f)
+});
+
 // Create editor extensions based on file type
 const createEditorExtensions = (filename?: string): any[] => {
   const extensions: any[] = [
     basicSetup,
     oneDark,
+    highlightLineField,
     // Add Ctrl+S save keybinding
     keymap.of([
       {
@@ -98,6 +126,17 @@ const createEditorExtensions = (filename?: string): any[] => {
         backgroundColor: '#3c3c3c',
         border: '1px solid #6c6c6c',
         color: '#d4d4d4'
+      },
+      '.cm-highlight-line': {
+        backgroundColor: 'rgba(255, 255, 0, 0.1)',
+        animation: 'highlight-fade 8s ease-out'
+      },
+      '@keyframes highlight-fade': {
+        '0%': { backgroundColor: 'rgba(255, 255, 0, 0.3)' },
+        '25%': { backgroundColor: 'rgba(255, 255, 0, 0.25)' },
+        '50%': { backgroundColor: 'rgba(255, 255, 0, 0.15)' },
+        '75%': { backgroundColor: 'rgba(255, 255, 0, 0.08)' },
+        '100%': { backgroundColor: 'rgba(255, 255, 0, 0.03)' }
       }
     }),
     EditorView.updateListener.of((update) => {
@@ -120,26 +159,95 @@ const createEditorExtensions = (filename?: string): any[] => {
   return extensions;
 };
 
+// Function to go to a specific line
+const goToLine = (lineNumber: number) => {
+  if (!editorView) return;
+
+  try {
+    const line = editorView.state.doc.line(lineNumber);
+
+    // Create a transaction to set selection and add highlight effect
+    const transaction = editorView.state.update({
+      selection: { anchor: line.from, head: line.from },
+      effects: [highlightLineEffect.of({ line: lineNumber })]
+    });
+
+    editorView.dispatch(transaction);
+
+    // Use requestAnimationFrame to ensure DOM is updated before scrolling
+    requestAnimationFrame(() => {
+      // Get the position of the line
+      const pos = editorView.coordsAtPos(line.from);
+      if (!pos) return;
+
+      // Get editor dimensions
+      const scrollerRect = editorView.scrollDOM.getBoundingClientRect();
+
+      // Calculate the line's position relative to the scroller
+      const lineY = pos.top - scrollerRect.top + editorView.scrollDOM.scrollTop;
+
+      // Calculate scroll position to center the line
+      // We want the line to be in the middle of the viewport
+      const targetScrollTop = lineY - (scrollerRect.height / 2) + 10; // 10px for line height approximation
+
+      // Smooth scroll to the target position
+      editorView.scrollDOM.scrollTo({
+        top: Math.max(0, targetScrollTop),
+        behavior: 'smooth'
+      });
+
+      // Focus the editor
+      editorView.focus();
+    });
+
+    // Remove highlight after animation completes
+    setTimeout(() => {
+      if (editorView) {
+        editorView.dispatch({
+          effects: [highlightLineEffect.of({ line: -1 })]
+        });
+      }
+    }, 10000); // 10 seconds total: 8s animation + 2s extra
+  } catch (error) {
+    console.error('Error jumping to line:', error);
+  }
+};
+
 // Initialize CodeMirror
 onMounted(async () => {
   if (!process.client || !editorContainer.value) return;
-  
+
   try {
     const state = EditorState.create({
       doc: '',
       extensions: createEditorExtensions(activeTab.value?.name)
     });
-    
+
     editorView = new EditorView({
       state,
       parent: editorContainer.value
     });
-    
+
     // Load initial content if there's an active tab
     if (activeTab.value) {
       setEditorContent(activeTab.value);
     }
-    
+
+    // Listen for goto-line events
+    const handleGotoLine = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      if (customEvent.detail && customEvent.detail.line) {
+        goToLine(customEvent.detail.line);
+      }
+    };
+
+    window.addEventListener('editor:goto-line', handleGotoLine);
+
+    // Cleanup listener on unmount
+    onUnmounted(() => {
+      window.removeEventListener('editor:goto-line', handleGotoLine);
+    });
+
   } catch (error) {
     console.error('Failed to initialize CodeMirror:', error);
   }
@@ -148,12 +256,12 @@ onMounted(async () => {
 // Function to set editor content
 const setEditorContent = (tab: any) => {
   if (!editorView) return;
-  
+
   try {
     const content = tab.content || '';
-    
+
     isSettingContent = true;
-    
+
     const transaction = editorView.state.update({
       changes: {
         from: 0,
@@ -161,14 +269,14 @@ const setEditorContent = (tab: any) => {
         insert: content
       }
     });
-    
+
     editorView.dispatch(transaction);
-    
+
     // Reset flag after a short delay
     setTimeout(() => {
       isSettingContent = false;
     }, 100);
-    
+
   } catch (error) {
     console.error('Error setting CodeMirror content:', error);
     isSettingContent = false;
@@ -179,28 +287,28 @@ const setEditorContent = (tab: any) => {
 watch(activeTab, async (newTab, oldTab) => {
   if (newTab && editorView) {
     await nextTick();
-    
+
     // Check if we need to update the language support
     const newExt = newTab.name.split('.').pop()?.toLowerCase();
     const oldExt = oldTab?.name.split('.').pop()?.toLowerCase();
-    
+
     if (newExt !== oldExt || !oldTab) {
       // Recreate editor with new language support
       // Save current scroll position
       const scrollTop = editorView.scrollDOM.scrollTop;
-      
+
       // Create new state with new extensions
       const newState = EditorState.create({
         doc: newTab.content || '',
         extensions: createEditorExtensions(newTab.name)
       });
-      
+
       // Update the editor
       editorView.setState(newState);
-      
+
       // Restore scroll position
       editorView.scrollDOM.scrollTop = scrollTop;
-      
+
       // Mark content as set
       isSettingContent = true;
       setTimeout(() => {
