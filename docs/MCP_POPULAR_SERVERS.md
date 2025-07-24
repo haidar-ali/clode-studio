@@ -212,7 +212,7 @@ This document lists the popular MCP servers integrated into the Clode Studio's q
 ### Playwright
 - **Description**: Cross-browser automation
 - **Type**: stdio
-- **Install**: `npm install -g @modelcontextprotocol/server-playwright`
+- **Install**: `npm install -g @playwright/mcp`
 - **Use Case**: Multi-browser testing
 
 ### Browser Control
