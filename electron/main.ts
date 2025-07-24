@@ -4,8 +4,9 @@ import { dirname, join } from 'path';
 import { spawn, ChildProcess } from 'child_process';
 import Store from 'electron-store';
 import * as pty from 'node-pty';
-import { watch, FSWatcher, existsSync } from 'fs';
+import { FSWatcher, existsSync } from 'fs';
 import { readFile, mkdir } from 'fs/promises';
+import { watch as chokidarWatch } from 'chokidar';
 import { homedir } from 'os';
 import { claudeCodeService } from './claude-sdk-service.js';
 import { lightweightContext } from './lightweight-context.js';
@@ -34,8 +35,7 @@ const __dirname = dirname(__filename);
 
 let mainWindow: BrowserWindow | null = null;
 const store = new Store<Record<string, any>>();
-const fileWatchers: Map<string, FSWatcher> = new Map();
-const fileDebounceTimers: Map<string, NodeJS.Timeout> = new Map();
+const fileWatchers: Map<string, any> = new Map();
 
 // Multi-instance Claude support
 const claudeInstances: Map<string, pty.IPty> = new Map();
@@ -244,15 +244,21 @@ ipcMain.handle('fileWatcher:start', async (event, dirPath: string, options?: any
 
     // Set up event forwarding to renderer
     fileWatcherService.on('file:change', (data) => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('file:change', data);
-      }
+      const windows = BrowserWindow.getAllWindows();
+      windows.forEach(window => {
+        if (!window.isDestroyed()) {
+          window.webContents.send('file:change', data);
+        }
+      });
     });
 
     fileWatcherService.on('batch:change', (data) => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('batch:change', data);
-      }
+      const windows = BrowserWindow.getAllWindows();
+      windows.forEach(window => {
+        if (!window.isDestroyed()) {
+          window.webContents.send('batch:change', data);
+        }
+      });
     });
 
     return { success: true };
@@ -693,39 +699,50 @@ ipcMain.handle('fs:watchFile', async (event, filePath: string) => {
       return { success: true };
     }
 
-    const watcher = watch(filePath, async (eventType, filename) => {
-      if (eventType === 'change') {
-        // Clear existing timer for this file
-        const existingTimer = fileDebounceTimers.get(filePath);
-        if (existingTimer) {
-          clearTimeout(existingTimer);
-        }
-
-        // Set new timer with debounce
-        const timer = setTimeout(async () => {
-          try {
-            // Read the new content
-            const content = await readFile(filePath, 'utf-8');
-
-            // Send update to renderer
-            mainWindow?.webContents.send('file:changed', {
+    
+    const watcher = chokidarWatch(filePath, {
+      persistent: true,
+      ignoreInitial: true,
+      awaitWriteFinish: {
+        stabilityThreshold: 300,
+        pollInterval: 100
+      }
+    });
+    
+    watcher.on('change', async (path) => {
+      
+      try {
+        // Read the new content immediately (chokidar already handles debouncing with awaitWriteFinish)
+        const content = await readFile(filePath, 'utf-8');
+        
+        // Send update to all windows
+        console.log('[FileWatcher] Sending file:changed event for:', filePath);
+        const windows = BrowserWindow.getAllWindows();
+        windows.forEach(window => {
+          if (!window.isDestroyed()) {
+            console.log('[FileWatcher] Sending to window:', window.id);
+            window.webContents.send('file:changed', {
               path: filePath,
               content
             });
-          } catch (error) {
-            console.error('Error reading changed file:', error);
           }
-
-          // Clean up timer
-          fileDebounceTimers.delete(filePath);
-        }, 300); // 300ms debounce
-
-        fileDebounceTimers.set(filePath, timer);
+        });
+        
+        // Also log if no windows are available
+        if (windows.length === 0) {
+          console.error('[FileWatcher] No windows available to send file:changed event');
+        }
+      } catch (error) {
+        console.error('[FileWatcher] Error reading changed file:', error);
       }
+    });
+    
+    // Add error handler
+    watcher.on('error', (error) => {
+      console.error('[FileWatcher] Watcher error for', filePath, ':', error);
     });
 
     fileWatchers.set(filePath, watcher);
-
     return { success: true };
   } catch (error) {
     console.error('Failed to watch file:', error);
@@ -742,12 +759,27 @@ ipcMain.handle('fs:watchDirectory', async (event, dirPath: string) => {
       return { success: true };
     }
 
-    const watcher = watch(dirPath, { recursive: false }, async (eventType, filename) => {
+    const watcher = chokidarWatch(dirPath, {
+      persistent: true,
+      ignoreInitial: true,
+      depth: 0, // Only watch the directory itself, not subdirectories
+      awaitWriteFinish: {
+        stabilityThreshold: 300,
+        pollInterval: 100
+      }
+    });
+    
+    watcher.on('all', (eventType, filePath) => {
       // Send update to renderer
-      mainWindow?.webContents.send('directory:changed', {
-        path: dirPath,
-        eventType,
-        filename
+      const windows = BrowserWindow.getAllWindows();
+      windows.forEach(window => {
+        if (!window.isDestroyed()) {
+          window.webContents.send('directory:changed', {
+            path: dirPath,
+            eventType,
+            filename: filePath
+          });
+        }
       });
     });
 
@@ -780,13 +812,6 @@ ipcMain.handle('fs:unwatchFile', async (event, filePath: string) => {
     if (watcher) {
       watcher.close();
       fileWatchers.delete(filePath);
-
-      // Clear any pending debounce timer
-      const timer = fileDebounceTimers.get(filePath);
-      if (timer) {
-        clearTimeout(timer);
-        fileDebounceTimers.delete(filePath);
-      }
     }
     return { success: true };
   } catch (error) {
@@ -800,12 +825,6 @@ app.on('before-quit', () => {
     watcher.close();
   }
   fileWatchers.clear();
-
-  // Clean up any pending debounce timers
-  for (const [path, timer] of fileDebounceTimers) {
-    clearTimeout(timer);
-  }
-  fileDebounceTimers.clear();
 });
 
 // Claude SDK operations
