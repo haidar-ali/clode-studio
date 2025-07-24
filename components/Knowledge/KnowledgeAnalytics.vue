@@ -392,19 +392,19 @@ function calculateGrowth(): number {
 
 async function handleRecommendationAction(recommendation: any) {
   // Handle different recommendation actions
-  console.log('Handle recommendation:', recommendation);
+  
 }
 
 async function handleRemoveEntry(entry: any) {
   if (confirm(`Remove "${entry.title}" from knowledge base?`)) {
     // Remove entry logic
-    console.log('Remove entry:', entry);
+    
   }
 }
 
 async function handleFixGap(gap: any) {
   // Handle gap fixing
-  console.log('Fix gap:', gap);
+  
 }
 
 async function exportReport() {
@@ -537,7 +537,7 @@ function initializeDependencyGraph() {
   // This is a placeholder - in real implementation, use D3.js
   // to create an interactive force-directed graph
   const graphData = getDependencyGraphData();
-  console.log('Graph data:', graphData);
+  
 }
 
 onMounted(() => {

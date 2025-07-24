@@ -137,9 +137,9 @@ const open = async (workspacePath: string, currentSelection: string[] = []) => {
   
   // Load workspace files
   try {
-    console.log('Loading files from workspace:', actualWorkspacePath);
+    
     const files = await loadWorkspaceFiles(actualWorkspacePath);
-    console.log('Loaded files:', files.length);
+    
     allFiles.value = files;
   } catch (error) {
     console.error('Failed to load workspace files:', error);

@@ -832,7 +832,7 @@ onMounted(async () => {
   
   // Listen for real-time todo updates from Claude
   window.electronAPI.claude.onTodosUpdated((todos) => {
-    console.log('Real-time todos update from Claude:', todos);
+    
     tasksStore.syncWithClaudeNative(todos);
   });
 });

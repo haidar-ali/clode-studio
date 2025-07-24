@@ -1,7 +1,7 @@
 # Project Tasks
 
 *This file is synced with Clode Studio and Claude's native TodoWrite system.*  
-*Last updated: 2025-01-19T21:30:00.000Z*
+*Last updated: 2025-01-22T16:30:00.000Z*
 
 ## Backlog (9)
 
@@ -71,18 +71,242 @@
 
 
 
-## To Do (1)
+## To Do (10)
+
+- [ ] **Create autonomous agent mode store and types**
+  - ID: AGENT-001
+  - Assignee: Claude
+  - Type: feature
+  - Priority: high
+  - Description: Define TypeScript types and Pinia store for managing agent mode state, operations queue, and approval workflow
+  - Resources: File: stores/agent-mode.ts (new), File: types/agent-mode.d.ts (new)
+
+- [ ] **Implement agent operation executor**
+  - ID: AGENT-002
+  - Assignee: Claude
+  - Type: feature
+  - Priority: high
+  - Description: Create service to execute multi-file operations with rollback support and operation history tracking
+  - Resources: File: electron/agent-executor.ts (new), Task: AGENT-001
+
+- [ ] **Build agent approval UI**
+  - ID: AGENT-003
+  - Assignee: Claude
+  - Type: feature
+  - Priority: high
+  - Description: Create visual interface for reviewing and approving agent-proposed changes before execution
+  - Resources: File: components/AgentMode/AgentApprovalPanel.vue (new), Task: AGENT-001
+
+- [ ] **Add agent progress tracking**
+  - ID: AGENT-004
+  - Assignee: Claude
+  - Type: feature
+  - Priority: medium
+  - Description: Implement real-time progress visualization for multi-step agent operations
+  - Resources: File: components/AgentMode/AgentProgressTracker.vue (new), Task: AGENT-002
+
+- [ ] **Create pre-commit AI code review**
+  - ID: AI-003
+  - Assignee: Claude
+  - Type: feature
+  - Priority: high
+  - Description: Implement Claude-based code review that runs before commits to catch issues, suggest improvements, and check security
+  - Resources: File: composables/useAICodeReview.ts (new), File: components/SourceControl/PreCommitReview.vue (new), Task: GIT-010
+
+- [ ] **Implement AI conflict resolution**
+  - ID: AI-004
+  - Assignee: Claude
+  - Type: feature
+  - Priority: high
+  - Description: Build intelligent merge conflict resolver that understands semantic intent and suggests resolutions
+  - Resources: File: composables/useAIConflictResolver.ts (new), File: components/SourceControl/ConflictResolver.vue (new)
+
+- [ ] **Create local version control with micro-commits**
+  - ID: LVC-001
+  - Assignee: Claude
+  - Type: feature
+  - Priority: medium
+  - Description: Implement automatic micro-commits on file saves with efficient storage using content-addressed blobs
+  - Resources: File: electron/local-version-control.ts (new), File: stores/local-vc.ts (new)
+
+- [ ] **Build time travel UI**
+  - ID: LVC-002
+  - Assignee: Claude
+  - Type: feature
+  - Priority: medium
+  - Description: Create visual timeline interface for browsing file history and restoring previous versions
+  - Resources: File: components/TimeTravel/TimeTravelPanel.vue (new), File: components/TimeTravel/FileHistoryViewer.vue (new), Task: LVC-001
+
+- [ ] **Implement file history diffing**
+  - ID: LVC-003
+  - Assignee: Claude
+  - Type: feature
+  - Priority: medium
+  - Description: Add ability to compare any two versions in file history with visual diff display
+  - Resources: File: components/TimeTravel/HistoryDiffViewer.vue (new), Task: LVC-002
 
 - [ ] **Package application for distribution**
   - Assignee: Both
   - Type: documentation
   - Priority: low
   - Description: Configure electron-builder and create installers for macOS, Windows, and Linux platforms
-  - Files: package.json, electron-builder.yml (new), .github/workflows/build.yml (new)
+  - Resources: File: package.json, File: electron-builder.yml (new), File: .github/workflows/build.yml (new)
 
 ## In Progress (0)
 
-## Completed (49)
+## Completed (68)
+
+- [x] ~~Create git hooks integration~~
+  - ~~ID: GIT-010~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: low~~
+  - ~~Description: Install git hooks for pre-commit validation and post-commit checkpointing~~
+  - ~~Resources: File: electron/git-hooks.ts (created), components/SourceControl/GitHooksPanel.vue (created), integrated into main process and UI~~
+
+- [x] ~~Add session comparison tools~~
+  - ~~ID: WT-003~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: low~~
+  - ~~Description: Implement diff viewer for comparing outputs between different worktree sessions~~
+  - ~~Resources: File: components/Worktree/SessionComparison.vue (created), Task: WT-002~~
+
+- [x] ~~Build worktree session UI~~
+  - ~~ID: WT-002~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: low~~
+  - ~~Description: Create UI for managing multiple worktree sessions with status indicators~~
+  - ~~Resources: File: components/Worktree/WorktreePanel.vue (created), components/Worktree/WorktreeCard.vue (created), components/Worktree/WorktreeSessionCard.vue (created), components/Worktree/WorktreeCreateDialog.vue (created), components/Worktree/WorktreeCompareDialog.vue (created)~~
+
+- [x] ~~Implement git worktree manager~~
+  - ~~ID: WT-001~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: low~~
+  - ~~Description: Create worktree management service for parallel development sessions (Crystal-inspired)~~
+  - ~~Resources: File: electron/worktree-manager.ts (created), Knowledge: SOURCE_CONTROL_DESIGN.md~~
+
+- [x] ~~Add AI branch name suggestions~~
+  - ~~ID: AI-002~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: medium~~
+  - ~~Description: Generate branch names based on task descriptions following git flow conventions~~
+  - ~~Resources: File: composables/useAIGit.ts (updated), File: components/SourceControl/BranchSelector.vue (enhanced)~~
+
+- [x] ~~Create AI-powered commit message generator~~
+  - ~~ID: AI-001~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: medium~~
+  - ~~Description: Implement Claude-based commit message generation from staged changes using conventional commit format~~
+  - ~~Resources: File: composables/useAIGit.ts (created), File: components/SourceControl/SourceControlPanel.vue (integrated)~~
+
+- [x] ~~Implement auto-checkpoint triggers~~
+  - ~~ID: CP-004~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: medium~~
+  - ~~Description: Add automatic checkpointing on git operations, risky commands, and time intervals~~
+  - ~~Resources: File: composables/useAutoCheckpoint.ts (created), integrated in IDELayout.vue and Terminal.vue~~
+
+- [x] ~~Add checkpoint UI components~~
+  - ~~ID: CP-003~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: medium~~
+  - ~~Description: Build checkpoint timeline viewer with restore functionality and diff preview~~
+  - ~~Resources: File: components/Checkpoint/CheckpointTimeline.vue (created), File: components/Checkpoint/CheckpointDiff.vue (created), File: components/Checkpoint/CheckpointPanel.vue (created)~~
+
+- [x] ~~Implement shadow repository for checkpoints~~
+  - ~~ID: CP-002~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: medium~~
+  - ~~Description: Create .claude-checkpoints directory structure for local version control independent of main git~~
+  - ~~Resources: File: electron/checkpoint-service.ts (implemented), Task: CP-001~~
+
+- [x] ~~Create enhanced checkpoint store v2~~
+  - ~~ID: CP-001~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: medium~~
+  - ~~Description: Upgrade checkpoint system to capture full workspace state including files, git status, and IDE state~~
+  - ~~Resources: File: stores/checkpoint-v2.ts (created), File: electron/checkpoint-service.ts (created)~~
+
+- [x] ~~Integrate source control panel into IDE layout~~
+  - ~~ID: GIT-009~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Add source control panel to IDE layout with proper panel management~~
+  - ~~Resources: File: components/Layout/IDELayout.vue, Task: GIT-005~~
+
+- [x] ~~Implement commit message interface~~
+  - ~~ID: GIT-007~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Add commit message textarea with AI generation button and keyboard shortcuts~~
+  - ~~Resources: File: components/SourceControl/SourceControlPanel.vue, Task: GIT-005~~
+
+- [x] ~~Add branch selector dropdown~~
+  - ~~ID: GIT-008~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Implement branch switching UI with current branch display and quick actions~~
+  - ~~Resources: File: components/SourceControl/BranchSelector.vue (new), Task: GIT-005~~
+
+- [x] ~~Build source control panel UI~~
+  - ~~ID: GIT-005~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Create main source control panel with branch selector, commit interface, and file status sections~~
+  - ~~Resources: File: components/SourceControl/SourceControlPanel.vue (new), Task: GIT-004~~
+
+- [x] ~~Create git file item component~~
+  - ~~ID: GIT-006~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Build component for displaying individual file status with stage/unstage/discard actions~~
+  - ~~Resources: File: components/SourceControl/GitFileItem.vue (new), Task: GIT-005~~
+
+- [x] ~~Create source control store~~
+  - ~~ID: GIT-004~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Implement Pinia store for managing git state (status, branches, commits, UI state)~~
+  - ~~Resources: File: stores/source-control.ts (new), Task: GIT-003, Knowledge: SOURCE_CONTROL_IMPLEMENTATION.md~~
+
+- [x] ~~Set up git API in preload script~~
+  - ~~ID: GIT-003~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Expose git API methods through contextBridge for renderer process access~~
+  - ~~Resources: File: electron/preload.ts, File: types/electron-api.d.ts, Task: GIT-002~~
+
+- [x] ~~Create git service in main process~~
+  - ~~ID: GIT-002~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Implement GitService class with IPC handlers for basic git operations (status, add, commit, push, pull)~~
+  - ~~Resources: File: electron/git-service.ts (new), Task: GIT-001, Knowledge: SOURCE_CONTROL_IMPLEMENTATION.md~~
+
+- [x] ~~Install git integration dependencies~~
+  - ~~ID: GIT-001~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Add simple-git and isomorphic-git libraries for dual-library approach to git integration~~
+  - ~~Resources: File: package.json, Knowledge: SOURCE_CONTROL_IMPLEMENTATION.md~~
 
 - [x] ~~Create visual knowledge base analytics and insights~~
   - ~~Assignee: Claude~~

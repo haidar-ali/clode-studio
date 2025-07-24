@@ -15,6 +15,14 @@ import { claudeSettingsManager } from './claude-settings-manager.js';
 import { ClaudeDetector } from './claude-detector.js';
 import { fileWatcherService } from './file-watcher.js';
 import { createKnowledgeCache } from './knowledge-cache.js';
+import { GitService } from './git-service.js';
+import { GitServiceManager } from './git-service-manager.js';
+import { CheckpointService } from './checkpoint-service.js';
+import { CheckpointServiceManager } from './checkpoint-service-manager.js';
+import { WorktreeManager } from './worktree-manager.js';
+import { WorktreeManagerGlobal } from './worktree-manager-global.js';
+import { GitHooksManagerGlobal } from './git-hooks-manager-global.js';
+import { GitHooksManager } from './git-hooks.js';
 
 // Load environment variables from .env file
 import { config } from 'dotenv';
@@ -33,6 +41,18 @@ const claudeInstances: Map<string, pty.IPty> = new Map();
 
 // Knowledge cache instances per workspace
 const knowledgeCaches: Map<string, any> = new Map();
+
+// Git service instances per workspace
+const gitServices: Map<string, GitService> = new Map();
+
+// Checkpoint service instances per workspace
+const checkpointServices: Map<string, CheckpointService> = new Map();
+
+// Worktree manager instances per workspace
+const worktreeManagers: Map<string, WorktreeManager> = new Map();
+
+// Git hooks manager instances per workspace - now handled by GitHooksManagerGlobal
+// const gitHooksManagers: Map<string, GitHooksManager> = new Map();
 
 const isDev = process.env.NODE_ENV !== 'production';
 const nuxtURL = isDev ? 'http://localhost:3000' : `file://${join(__dirname, '../.output/public/index.html')}`;
@@ -76,6 +96,12 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  // Initialize all service managers (singletons)
+  GitServiceManager.getInstance();
+  CheckpointServiceManager.getInstance();
+  WorktreeManagerGlobal.getInstance();
+  GitHooksManagerGlobal.getInstance();
+  
   createWindow();
 
   app.on('activate', () => {
@@ -636,6 +662,15 @@ ipcMain.handle('dialog:showOpenDialog', async (event, options) => {
     return result;
   } catch (error) {
     return { canceled: true, filePaths: [] };
+  }
+});
+
+ipcMain.handle('dialog:showSaveDialog', async (event, options) => {
+  try {
+    const result = await dialog.showSaveDialog(mainWindow!, options);
+    return result;
+  } catch (error) {
+    return { canceled: true, filePath: undefined };
   }
 });
 
@@ -1660,4 +1695,64 @@ ipcMain.handle('workspace:importContext', async (event, workspacePath: string, j
       error: error instanceof Error ? error.message : 'Failed to import workspace context' 
     };
   }
+});
+
+// Current active services
+let currentCheckpointService: CheckpointService | null = null;
+let currentWorktreeManager: WorktreeManager | null = null;
+// let currentGitHooksManager: GitHooksManager | null = null; - now handled by GitHooksManagerGlobal
+
+// Git service initialization when workspace changes
+ipcMain.handle('workspace:setPath', async (event, workspacePath: string) => {
+  try {
+    // Store the workspace path
+    (store as any).set('workspacePath', workspacePath);
+    
+    try {
+      // Update the Git Service Manager with the new workspace
+      const gitServiceManager = GitServiceManager.getInstance();
+      gitServiceManager.setWorkspace(workspacePath);
+    } catch (error) {
+      console.error('[Main] Error updating GitServiceManager:', error);
+    }
+    
+    try {
+      // Update the Checkpoint Service Manager with the new workspace
+      const checkpointServiceManager = CheckpointServiceManager.getInstance();
+      checkpointServiceManager.setWorkspace(workspacePath);
+    } catch (error) {
+      console.error('[Main] Error updating CheckpointServiceManager:', error);
+    }
+    
+    try {
+      // Update the Worktree Manager with the new workspace
+      const worktreeManagerGlobal = WorktreeManagerGlobal.getInstance();
+      const result = worktreeManagerGlobal.setWorkspace(workspacePath);
+    } catch (error) {
+      console.error('[Main] Error updating WorktreeManagerGlobal:', error);
+    }
+    
+    try {
+      // Update the Git Hooks Manager with the new workspace
+      const gitHooksManagerGlobal = GitHooksManagerGlobal.getInstance();
+      const result = gitHooksManagerGlobal.setWorkspace(workspacePath);
+    } catch (error) {
+      console.error('[Main] Error updating GitHooksManagerGlobal:', error);
+    }
+    
+    return { success: true };
+  } catch (error) {
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to set workspace path' 
+    };
+  }
+});
+
+// Clean up git services on app quit
+app.on('before-quit', () => {
+  for (const [path, service] of gitServices) {
+    service.cleanup();
+  }
+  gitServices.clear();
 });

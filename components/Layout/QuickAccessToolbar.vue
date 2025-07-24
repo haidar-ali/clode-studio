@@ -20,24 +20,6 @@
     
     <button 
       class="toolbar-button"
-      @click="openContextModal"
-      title="Context Management"
-    >
-      <Icon name="mdi:file-tree" size="16" />
-      <span class="toolbar-label">Context</span>
-    </button>
-    
-    <button 
-      class="toolbar-button"
-      @click="openSessionBrowser"
-      title="Session History"
-    >
-      <Icon name="mdi:history" size="16" />
-      <span class="toolbar-label">Sessions</span>
-    </button>
-    
-    <button 
-      class="toolbar-button"
       @click="openHookManager"
       title="Hook Management"
     >
@@ -76,14 +58,6 @@ const openCommandPalette = () => {
 
 const openMemoryEditor = () => {
   window.dispatchEvent(new CustomEvent('open-memory-editor'));
-};
-
-const openContextModal = () => {
-  window.dispatchEvent(new CustomEvent('show-context-modal'));
-};
-
-const openSessionBrowser = () => {
-  window.dispatchEvent(new CustomEvent('show-session-browser'));
 };
 
 const openHookManager = () => {

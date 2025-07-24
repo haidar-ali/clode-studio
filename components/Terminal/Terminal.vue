@@ -93,9 +93,42 @@ onMounted(async () => {
       terminal?.write(data);
     });
     
+    // Track current command
+    let currentCommand = '';
+    let cursorPosition = 0;
+    
     // Handle terminal input
     terminal.onData((data) => {
       window.electronAPI.terminal.write(ptyProcess, data);
+      
+      // Track command input
+      if (data === '\r' || data === '\n') {
+        // Command entered
+        if (currentCommand.trim()) {
+          // Emit command event for auto-checkpoint
+          window.dispatchEvent(new CustomEvent('terminal-command', {
+            detail: { command: currentCommand.trim() }
+          }));
+        }
+        currentCommand = '';
+        cursorPosition = 0;
+      } else if (data === '\x7f') {
+        // Backspace
+        if (cursorPosition > 0) {
+          currentCommand = currentCommand.slice(0, cursorPosition - 1) + currentCommand.slice(cursorPosition);
+          cursorPosition--;
+        }
+      } else if (data === '\x1b[D') {
+        // Left arrow
+        if (cursorPosition > 0) cursorPosition--;
+      } else if (data === '\x1b[C') {
+        // Right arrow
+        if (cursorPosition < currentCommand.length) cursorPosition++;
+      } else if (data.charCodeAt(0) >= 32 && data.charCodeAt(0) < 127) {
+        // Regular character
+        currentCommand = currentCommand.slice(0, cursorPosition) + data + currentCommand.slice(cursorPosition);
+        cursorPosition++;
+      }
     });
     
     // Handle resize

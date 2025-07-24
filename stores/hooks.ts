@@ -42,7 +42,7 @@ export const useHooksStore = defineStore('hooks', {
       
       try {
         const result = await window.electronAPI.claude.getHooks();
-        console.log('Loaded hooks from API:', result);
+        
         
         // Handle both direct array response and wrapped response
         if (Array.isArray(result)) {

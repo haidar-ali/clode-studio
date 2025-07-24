@@ -1,31 +1,5 @@
 <template>
   <div class="context-panel">
-    <!-- Tab Navigation -->
-    <div class="context-tabs">
-      <button 
-        :class="['tab', { active: activeTab === 'overview' }]"
-        @click="activeTab = 'overview'"
-      >
-        <Icon name="heroicons:folder" />
-        Overview
-      </button>
-      <button 
-        :class="['tab', { active: activeTab === 'visualization' }]"
-        @click="activeTab = 'visualization'"
-      >
-        <Icon name="heroicons:chart-bar" />
-        Visualization
-      </button>
-      <button 
-        :class="['tab', { active: activeTab === 'checkpoints' }]"
-        @click="activeTab = 'checkpoints'"
-      >
-        <Icon name="heroicons:bookmark" />
-        Checkpoints
-      </button>
-    </div>
-
-    <div v-if="activeTab === 'overview'" class="overview-tab">
       <div class="panel-header">
         <h3>Project Context</h3>
         <div class="header-actions">
@@ -163,27 +137,12 @@
         </div>
       </div>
     </div>
-    </div>
-    
-    <!-- Visualization Tab -->
-    <div v-if="activeTab === 'visualization'" class="visualization-tab">
-      <ContextVisualization />
-    </div>
-    
-    <!-- Checkpoints Tab -->
-    <div v-if="activeTab === 'checkpoints'" class="checkpoints-tab">
-      <ContextCheckpoints />
-    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { useContextManager } from '~/composables/useContextManager';
-import ContextVisualization from './ContextVisualization.vue';
-import ContextCheckpoints from './ContextCheckpoints.vue';
-
-const activeTab = ref<'overview' | 'visualization' | 'checkpoints'>('overview');
 import { useProjectContextStore } from '~/stores/project-context';
 import { useEditorStore } from '~/stores/editor';
 
@@ -290,54 +249,14 @@ const formatTime = (date: Date): string => {
   border-left: 1px solid #333;
 }
 
-.context-tabs {
-  display: flex;
-  background-color: #252526;
-  border-bottom: 1px solid #181818;
-}
-
-.tab {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 10px;
-  border: none;
-  background: none;
-  color: #8c8c8c;
-  cursor: pointer;
-  font-size: 13px;
-  transition: all 0.2s;
-  border-bottom: 2px solid transparent;
-}
-
-.tab:hover {
-  color: #e4e4e4;
-  background-color: rgba(255, 255, 255, 0.05);
-}
-
-.tab.active {
-  color: #e4e4e4;
-  border-bottom-color: #3b82f6;
-}
-
-.overview-tab,
-.visualization-tab,
-.checkpoints-tab {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
 
 .panel-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  background: #2d2d30;
-  border-bottom: 1px solid #333;
+  background: #252526;
+  border-bottom: 1px solid #181818;
 }
 
 .panel-header h3 {

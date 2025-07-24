@@ -25,7 +25,11 @@ export default defineNuxtConfig({
   components: [
     { path: '~/components', pathPrefix: false }
   ],
-  css: ['~/assets/css/main.css', 'splitpanes/dist/splitpanes.css'],
+  css: [
+    '~/assets/css/main.css',
+    '~/assets/css/modal-theme.css',
+    'splitpanes/dist/splitpanes.css'
+  ],
   build: {
     transpile: ['naive-ui', 'vueuc', '@css-render/vue3-ssr', '@juggle/resize-observer', 'splitpanes', '@iconify/vue']
   },

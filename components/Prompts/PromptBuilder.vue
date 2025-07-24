@@ -216,7 +216,7 @@ async function executePrompt() {
   try {
     const result = await promptStore.executePrompt();
     if (result) {
-      console.log('Prompt executed successfully:', result);
+      
       // Optionally show success message or switch to terminal view
     }
   } catch (error: any) {

@@ -2,6 +2,9 @@
   <div class="ide-container" :class="layoutStore.layoutClasses">
     <!-- Mode Selector -->
     <ModeSelector />
+    
+    <!-- Worktree Tab Bar -->
+    <WorktreeTabBar />
 
     <!-- Full IDE Mode -->
     <div v-if="layoutStore.isFullIdeMode" class="layout-full-ide">
@@ -98,6 +101,27 @@
                 <Icon name="heroicons:sparkles" size="16" />
                 Prompts
               </button>
+              <button
+                :class="{ active: bottomTab === 'source-control' }"
+                @click="bottomTab = 'source-control'"
+              >
+                <Icon name="mdi:source-branch" size="16" />
+                Source Control
+              </button>
+              <button
+                :class="{ active: bottomTab === 'checkpoints' }"
+                @click="bottomTab = 'checkpoints'"
+              >
+                <Icon name="mdi:history" size="16" />
+                Checkpoints
+              </button>
+              <button
+                :class="{ active: bottomTab === 'worktrees' }"
+                @click="bottomTab = 'worktrees'"
+              >
+                <Icon name="mdi:file-tree" size="16" />
+                Worktrees
+              </button>
             </div>
             <div class="tab-content">
               <KanbanBoard v-if="bottomTab === 'tasks'" />
@@ -106,7 +130,10 @@
               <ContextPanel v-else-if="bottomTab === 'context'" />
               <KnowledgePanel v-else-if="bottomTab === 'knowledge'" />
               <CommandStudio v-else-if="bottomTab === 'commands'" />
-              <PromptStudio v-else />
+              <PromptStudio v-else-if="bottomTab === 'prompts'" />
+              <SourceControlPanel v-else-if="bottomTab === 'source-control'" />
+              <CheckpointPanel v-else-if="bottomTab === 'checkpoints'" />
+              <WorktreePanel v-else />
             </div>
           </div>
         </Pane>
@@ -182,6 +209,27 @@
                 <Icon name="heroicons:sparkles" size="16" />
                 Prompts
               </button>
+              <button
+                :class="{ active: bottomTab === 'source-control' }"
+                @click="bottomTab = 'source-control'"
+              >
+                <Icon name="mdi:source-branch" size="16" />
+                Source Control
+              </button>
+              <button
+                :class="{ active: bottomTab === 'checkpoints' }"
+                @click="bottomTab = 'checkpoints'"
+              >
+                <Icon name="mdi:history" size="16" />
+                Checkpoints
+              </button>
+              <button
+                :class="{ active: bottomTab === 'worktrees' }"
+                @click="bottomTab = 'worktrees'"
+              >
+                <Icon name="mdi:file-tree" size="16" />
+                Worktrees
+              </button>
             </div>
             <div class="tab-content">
               <KanbanBoard v-if="bottomTab === 'tasks'" />
@@ -190,7 +238,10 @@
               <ContextPanel v-else-if="bottomTab === 'context'" />
               <KnowledgePanel v-else-if="bottomTab === 'knowledge'" />
               <CommandStudio v-else-if="bottomTab === 'commands'" />
-              <PromptStudio v-else />
+              <PromptStudio v-else-if="bottomTab === 'prompts'" />
+              <SourceControlPanel v-else-if="bottomTab === 'source-control'" />
+              <CheckpointPanel v-else-if="bottomTab === 'checkpoints'" />
+              <WorktreePanel v-else />
             </div>
           </div>
         </Pane>
@@ -261,6 +312,27 @@
                 <Icon name="heroicons:sparkles" size="16" />
                 Prompts
               </button>
+              <button
+                :class="{ active: bottomTab === 'source-control' }"
+                @click="bottomTab = 'source-control'"
+              >
+                <Icon name="mdi:source-branch" size="16" />
+                Source Control
+              </button>
+              <button
+                :class="{ active: bottomTab === 'checkpoints' }"
+                @click="bottomTab = 'checkpoints'"
+              >
+                <Icon name="mdi:history" size="16" />
+                Checkpoints
+              </button>
+              <button
+                :class="{ active: bottomTab === 'worktrees' }"
+                @click="bottomTab = 'worktrees'"
+              >
+                <Icon name="mdi:file-tree" size="16" />
+                Worktrees
+              </button>
             </div>
             <div class="tab-content">
               <KanbanBoard v-if="bottomTab === 'tasks'" />
@@ -269,7 +341,10 @@
               <ContextPanel v-else-if="bottomTab === 'context'" />
               <KnowledgePanel v-else-if="bottomTab === 'knowledge'" />
               <CommandStudio v-else-if="bottomTab === 'commands'" />
-              <PromptStudio v-else />
+              <PromptStudio v-else-if="bottomTab === 'prompts'" />
+              <SourceControlPanel v-else-if="bottomTab === 'source-control'" />
+              <CheckpointPanel v-else-if="bottomTab === 'checkpoints'" />
+              <WorktreePanel v-else />
             </div>
           </div>
         </Pane>
@@ -338,6 +413,10 @@ import SettingsModal from '~/components/Settings/SettingsModal.vue';
 import KnowledgePanel from '~/components/Knowledge/KnowledgePanel.vue';
 import CommandStudio from '~/components/Commands/CommandStudio.vue';
 import PromptStudio from '~/components/Prompts/PromptStudio.vue';
+import SourceControlPanel from '~/components/SourceControl/SourceControlPanel.vue';
+import CheckpointPanel from '~/components/Checkpoint/CheckpointPanel.vue';
+import WorktreePanel from '~/components/Worktree/WorktreePanel.vue';
+import WorktreeTabBar from '~/components/Layout/WorktreeTabBar.vue';
 
 const editorStore = useEditorStore();
 const tasksStore = useTasksStore();
@@ -345,7 +424,7 @@ const layoutStore = useLayoutStore();
 const mcpStore = useMCPStore();
 const contextManager = useContextManager();
 const commandsStore = useCommandsStore();
-const bottomTab = ref<'tasks' | 'terminal' | 'mcp' | 'context' | 'knowledge' | 'prompts'>('tasks');
+const bottomTab = ref<'tasks' | 'terminal' | 'mcp' | 'context' | 'knowledge' | 'prompts' | 'commands' | 'source-control' | 'checkpoints' | 'worktrees'>('tasks');
 const showGlobalSearch = ref(false);
 
 const activeTab = computed(() => editorStore.activeTab);
@@ -371,6 +450,9 @@ const claudeTerminalTarget = computed(() => {
 useFileWatcher();
 // Set up TASKS.md watching
 useTasksFileWatcher();
+// Set up auto-checkpoint
+const { useAutoCheckpoint } = await import('~/composables/useAutoCheckpoint');
+useAutoCheckpoint();
 
 const handleResize = (event: any) => {
   // Handle resize events if needed
@@ -412,7 +494,7 @@ watch(projectPath, async (newPath) => {
     try {
       await contextManager.initialize(newPath);
       contextInitialized = true;
-      console.log('Context initialized for workspace:', newPath);
+      
     } catch (error) {
       console.error('Failed to initialize context:', error);
     }

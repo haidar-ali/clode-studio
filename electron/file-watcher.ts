@@ -110,7 +110,6 @@ export class FileWatcherService extends EventEmitter {
         this.emit('error', { directory: dirPath, error });
       })
       .on('ready', () => {
-        console.log(`File watcher ready for: ${dirPath}`);
         this.emit('ready', { directory: dirPath });
       });
 
@@ -127,7 +126,6 @@ export class FileWatcherService extends EventEmitter {
       this.watchers.delete(dirPath);
       this.fileIndex.delete(dirPath);
       this.changeQueue.delete(dirPath);
-      console.log(`Stopped watching: ${dirPath}`);
     }
   }
 
