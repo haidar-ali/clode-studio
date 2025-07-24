@@ -173,7 +173,8 @@ export class WorktreeManager {
   
   async createWorktree(
     branchName: string, 
-    sessionName?: string
+    sessionName?: string,
+    sessionDescription?: string
   ): Promise<{ success: boolean; worktree?: Worktree; error?: string }> {
     try {
       // Check if repository has any commits
@@ -215,15 +216,16 @@ export class WorktreeManager {
         throw new Error('Failed to create worktree');
       }
       
-      // Create session if name provided
-      if (sessionName) {
-        await this.createSession({
-          name: sessionName,
-          worktreePath,
-          branchName,
-          metadata: {}
-        });
-      }
+      // Always create a session - use branch name if no session name provided
+      const finalSessionName = sessionName || branchName;
+      await this.createSession({
+        name: finalSessionName,
+        worktreePath,
+        branchName,
+        metadata: {
+          description: sessionDescription
+        }
+      });
       
       return { success: true, worktree: newWorktree };
     } catch (error) {

@@ -43,13 +43,20 @@
         <Icon name="mdi:clock-outline" class="info-icon" />
         <span class="info-text">Created {{ formatDate(worktree.created) }}</span>
       </div>
-      <div v-if="session" class="info-row">
-        <Icon name="mdi:bookmark" class="info-icon" />
-        <span class="info-text session-name">Session: {{ session.name }}</span>
-      </div>
-      <div v-else-if="worktree.description" class="info-row">
-        <Icon name="mdi:text" class="info-icon" />
-        <span class="info-text">{{ worktree.description }}</span>
+      <!-- Session information -->
+      <div v-if="session" class="session-info">
+        <div class="info-row">
+          <Icon name="mdi:bookmark" class="info-icon" />
+          <span class="info-text session-name">{{ session.name }}</span>
+        </div>
+        <div v-if="session.metadata?.description" class="info-row">
+          <Icon name="mdi:text" class="info-icon" />
+          <span class="info-text description">{{ session.metadata.description }}</span>
+        </div>
+        <div v-if="session.lastAccessed" class="info-row">
+          <Icon name="mdi:clock-check" class="info-icon" />
+          <span class="info-text">Last accessed {{ formatDate(session.lastAccessed) }}</span>
+        </div>
       </div>
     </div>
     
@@ -66,8 +73,19 @@
         <Icon name="mdi:check-circle" />
         Currently Active
       </div>
+      
+      <!-- Session actions -->
       <button 
-        v-if="!session"
+        v-if="session"
+        @click="$emit('delete-session', session.id)"
+        class="action-button secondary"
+        title="Delete session"
+      >
+        <Icon name="mdi:delete" />
+        Delete Session
+      </button>
+      <button 
+        v-else
         @click="$emit('create-session', worktree)"
         class="action-button secondary"
         title="Create a named session for this worktree"
@@ -75,10 +93,6 @@
         <Icon name="mdi:plus" />
         Create Session
       </button>
-      <div v-else class="session-indicator">
-        <Icon name="mdi:check" />
-        Has Session
-      </div>
     </div>
   </div>
 </template>
@@ -109,16 +123,17 @@ interface Session {
   };
 }
 
-defineProps<{
+const props = defineProps<{
   worktree: Worktree;
   session?: Session;
 }>();
 
-defineEmits<{
+const emit = defineEmits<{
   switch: [path: string];
   remove: [worktree: Worktree];
   lock: [worktree: Worktree, lock: boolean];
   'create-session': [worktree: Worktree];
+  'delete-session': [sessionId: string];
 }>();
 
 function formatPath(path: string): string {
@@ -351,6 +366,37 @@ function formatDate(date: Date | string): string {
 .info-text.session-name {
   color: #007acc;
   font-weight: 500;
+}
+
+.session-info {
+  background: #252526;
+  padding: 8px;
+  margin: 8px 0;
+  border-radius: 4px;
+  border: 1px solid #3e3e42;
+}
+
+.session-info .info-row {
+  margin-bottom: 4px;
+}
+
+.session-info .info-row:last-child {
+  margin-bottom: 0;
+}
+
+.session-info .session-name {
+  font-weight: 500;
+  color: #4ec9b0;
+}
+
+.session-info .description {
+  font-style: italic;
+  opacity: 0.9;
+}
+
+.card-footer {
+  align-items: center;
+  flex-wrap: wrap;
 }
 
 </style>

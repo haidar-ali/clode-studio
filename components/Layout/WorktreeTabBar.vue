@@ -98,9 +98,9 @@ const showCreateWorktreeDialog = () => {
   showCreateDialog.value = true;
 };
 
-const handleCreateWorktree = async (branchName: string, sessionName?: string) => {
+const handleCreateWorktree = async (branchName: string, sessionName?: string, description?: string) => {
   try {
-    await workspaceManager.createWorktree(branchName, sessionName);
+    await workspaceManager.createWorktree(branchName, sessionName, description);
     // Close dialog
     showCreateDialog.value = false;
     // Refresh worktrees to show the new one

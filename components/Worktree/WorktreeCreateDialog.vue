@@ -39,7 +39,21 @@
             class="form-input"
           />
           <p class="form-hint">
-            Create a named session to easily track this worktree's purpose
+            Create a named session to easily track this worktree's purpose. If left empty, the branch name will be used.
+          </p>
+        </div>
+        
+        <div class="form-group">
+          <label>Description (Optional)</label>
+          <textarea
+            v-model="description"
+            @keydown.escape="$emit('close')"
+            placeholder="Describe the purpose of this worktree..."
+            class="form-input"
+            rows="3"
+          />
+          <p class="form-hint">
+            Add more details about what you'll be working on
           </p>
         </div>
         
@@ -83,7 +97,7 @@ import Icon from '~/components/Icon.vue';
 
 const emit = defineEmits<{
   close: [];
-  create: [branchName: string, sessionName?: string];
+  create: [branchName: string, sessionName?: string, description?: string];
 }>();
 
 const sourceControlStore = useSourceControlStore();
@@ -91,6 +105,7 @@ const sourceControlStore = useSourceControlStore();
 // State
 const branchName = ref('');
 const sessionName = ref('');
+const description = ref('');
 const createFromCurrent = ref(false);
 const isGenerating = ref(false);
 const isCreating = ref(false);
@@ -151,7 +166,9 @@ async function handleCreate() {
       await sourceControlStore.switchBranch('main');
     }
     
-    emit('create', branchName.value, sessionName.value || undefined);
+    // Use branch name as session name if not provided
+    const finalSessionName = sessionName.value.trim() || branchName.value.trim();
+    emit('create', branchName.value, finalSessionName, description.value.trim() || undefined);
   } finally {
     isCreating.value = false;
   }

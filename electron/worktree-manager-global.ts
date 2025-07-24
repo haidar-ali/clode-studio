@@ -105,11 +105,11 @@ export class WorktreeManagerGlobal {
     });
     
     // Create new worktree
-    ipcMain.handle('worktree:create', async (event, branchName, sessionName) => {
+    ipcMain.handle('worktree:create', async (event, branchName, sessionName, sessionDescription) => {
       if (!this.currentManager) {
         return { success: false, error: 'No workspace selected' };
       }
-      return await this.currentManager.createWorktree(branchName, sessionName);
+      return await this.currentManager.createWorktree(branchName, sessionName, sessionDescription);
     });
     
     // Remove worktree

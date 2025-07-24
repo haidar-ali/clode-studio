@@ -356,8 +356,10 @@ export function useWorkspaceManager() {
   };
 
   // NEW: Create a new worktree
-  const createWorktree = async (branchName: string, sessionName?: string) => {
-    const result = await window.electronAPI.worktree.create(branchName, sessionName);
+  const createWorktree = async (branchName: string, sessionName?: string, description?: string) => {
+    // Always create with a session - use branch name if no session name provided
+    const finalSessionName = sessionName || branchName;
+    const result = await window.electronAPI.worktree.create(branchName, finalSessionName, description);
     if (result.success) {
       await initializeWorktrees();
       return result.worktree;

@@ -290,8 +290,8 @@ const electronAPI = {
   },
   worktree: {
     list: () => ipcRenderer.invoke('worktree:list'),
-    create: (branchName: string, sessionName?: string) => 
-      ipcRenderer.invoke('worktree:create', branchName, sessionName),
+    create: (branchName: string, sessionName?: string, sessionDescription?: string) => 
+      ipcRenderer.invoke('worktree:create', branchName, sessionName, sessionDescription),
     remove: (worktreePath: string, force?: boolean) => 
       ipcRenderer.invoke('worktree:remove', worktreePath, force),
     switch: (worktreePath: string) => 

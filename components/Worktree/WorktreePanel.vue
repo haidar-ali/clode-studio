@@ -48,27 +48,8 @@
 
     <!-- Worktree content -->
     <div v-else class="worktree-content">
-      <!-- Active sessions -->
-      <div v-if="sessions.length > 0" class="section">
-        <div class="section-header">
-          <h4>Active Sessions</h4>
-          <span class="count">{{ sessions.length }}</span>
-        </div>
-        <div class="session-list">
-          <WorktreeSessionCard
-            v-for="session in sessions"
-            :key="session.id"
-            :session="session"
-            :current-path="workspaceStore.currentPath"
-            @switch="handleSwitch"
-            @delete="handleDeleteSession"
-            @compare="handleCompare"
-          />
-        </div>
-      </div>
-
-      <!-- Worktrees -->
-      <div class="section">
+      <!-- Worktrees with sessions -->
+      <div v-if="worktrees.length > 0" class="section">
         <div class="section-header">
           <h4>Worktrees</h4>
           <span class="count">{{ worktrees.length }}</span>
@@ -83,12 +64,13 @@
             @remove="handleRemove"
             @lock="handleLock"
             @create-session="handleCreateSession"
+            @delete-session="handleDeleteSession"
           />
         </div>
       </div>
 
       <!-- No worktrees message -->
-      <div v-if="worktrees.length === 0 && sessions.length === 0" class="empty-state">
+      <div v-else class="empty-state">
         <Icon name="mdi:source-branch-fork" />
         <p>No worktrees created yet</p>
         <button @click="showCreateDialog = true" class="primary-button">
@@ -270,10 +252,12 @@ async function handleRefresh() {
   }
 }
 
-async function handleCreate(branchName: string, sessionName?: string) {
+async function handleCreate(branchName: string, sessionName?: string, description?: string) {
   isLoading.value = true;
   try {
-    const result = await window.electronAPI.worktree.create(branchName, sessionName);
+    // Always create with a session - use branch name if no session name provided
+    const finalSessionName = sessionName || branchName;
+    const result = await window.electronAPI.worktree.create(branchName, finalSessionName, description);
     if (result.success) {
       await loadWorktrees();
       showCreateDialog.value = false;

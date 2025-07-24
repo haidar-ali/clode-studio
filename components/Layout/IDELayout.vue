@@ -119,7 +119,7 @@
                 :class="{ active: bottomTab === 'worktrees' }"
                 @click="bottomTab = 'worktrees'"
               >
-                <Icon name="mdi:source-branch-fork" size="16" />
+                <Icon name="mdi:file-tree" size="16" />
                 Worktrees
               </button>
             </div>
@@ -227,7 +227,7 @@
                 :class="{ active: bottomTab === 'worktrees' }"
                 @click="bottomTab = 'worktrees'"
               >
-                <Icon name="mdi:source-branch-fork" size="16" />
+                <Icon name="mdi:file-tree" size="16" />
                 Worktrees
               </button>
             </div>
@@ -330,7 +330,7 @@
                 :class="{ active: bottomTab === 'worktrees' }"
                 @click="bottomTab = 'worktrees'"
               >
-                <Icon name="mdi:source-branch-fork" size="16" />
+                <Icon name="mdi:file-tree" size="16" />
                 Worktrees
               </button>
             </div>
