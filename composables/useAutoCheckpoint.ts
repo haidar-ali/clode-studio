@@ -96,7 +96,7 @@ export function useAutoCheckpoint(options: AutoCheckpointOptions = {}) {
     if (!config.onGitOperations) return;
 
     // Watch for commit changes
-    watch(() => gitStore.commits, (newCommits, oldCommits) => {
+    watch(() => gitStore.commitHistory, (newCommits, oldCommits) => {
       if (newCommits.length > 0 && oldCommits.length > 0) {
         const latestCommit = newCommits[0];
         if (latestCommit.hash !== lastGitCommit.value) {
@@ -274,7 +274,7 @@ export function useAutoCheckpoint(options: AutoCheckpointOptions = {}) {
     isActive.value = true;
     
     // Initialize last values
-    lastGitCommit.value = gitStore.commits[0]?.hash || '';
+    lastGitCommit.value = gitStore.commitHistory[0]?.hash || '';
     lastBranch.value = gitStore.currentBranch;
     
     // Start all monitors

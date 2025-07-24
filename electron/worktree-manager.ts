@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron';
 import * as path from 'path';
-import * as fs from 'fs-extra';
+import fs from 'fs-extra';
 import simpleGit, { SimpleGit } from 'simple-git';
 
 export interface Worktree {
@@ -45,11 +45,16 @@ export class WorktreeManager {
   private worktreesPath: string;
   private sessions: Map<string, WorktreeSession> = new Map();
   
-  constructor(mainRepoPath: string) {
+  constructor(mainRepoPath: string, setupHandlers: boolean = true) {
     this.mainRepoPath = mainRepoPath;
     this.git = simpleGit(mainRepoPath);
     this.worktreesPath = path.join(mainRepoPath, '.worktrees');
-    this.setupIpcHandlers();
+    
+    // Only setup IPC handlers if not managed by WorktreeManagerGlobal
+    if (setupHandlers) {
+      this.setupIpcHandlers();
+    }
+    
     this.initialize();
   }
   
@@ -485,9 +490,13 @@ export class WorktreeManager {
       worktrees.push(currentWorktree as Worktree);
     }
     
-    // Mark main worktree as active
-    if (worktrees.length > 0) {
-      worktrees[0].isActive = true;
+    // Mark the current worktree as active based on the current repo path
+    const currentPath = this.mainRepoPath;
+    for (const worktree of worktrees) {
+      // Normalize paths for comparison
+      const normalizedWorktreePath = path.resolve(worktree.path);
+      const normalizedCurrentPath = path.resolve(currentPath);
+      worktree.isActive = normalizedWorktreePath === normalizedCurrentPath;
     }
     
     return worktrees;

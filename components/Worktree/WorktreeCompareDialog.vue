@@ -118,7 +118,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import Icon from '~/components/UI/Icon.vue';
+import Icon from '~/components/Icon.vue';
 
 interface Worktree {
   path: string;
@@ -195,8 +195,8 @@ function formatPath(path: string): string {
 }
 
 .dialog {
-  background: var(--color-background);
-  border: 1px solid var(--color-border);
+  background: #252526;
+  border: 1px solid #454545;
   border-radius: 8px;
   width: 600px;
   max-width: 90vw;
@@ -215,7 +215,7 @@ function formatPath(path: string): string {
   align-items: center;
   justify-content: space-between;
   padding: 20px 24px;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid #454545;
 }
 
 .dialog-header h3 {
@@ -230,13 +230,13 @@ function formatPath(path: string): string {
   padding: 4px;
   cursor: pointer;
   border-radius: 4px;
-  color: var(--color-text-secondary);
+  color: #858585;
   transition: all 0.2s;
 }
 
 .close-button:hover {
-  background: var(--color-background-mute);
-  color: var(--color-text);
+  background: #3e3e42;
+  color: #cccccc;
 }
 
 .compare-header {
@@ -245,8 +245,8 @@ function formatPath(path: string): string {
   justify-content: center;
   gap: 24px;
   padding: 20px;
-  background: var(--color-background-soft);
-  border-bottom: 1px solid var(--color-border);
+  background: #2d2d30;
+  border-bottom: 1px solid #454545;
 }
 
 .worktree-info {
@@ -262,12 +262,12 @@ function formatPath(path: string): string {
 
 .path {
   font-size: 12px;
-  color: var(--color-text-secondary);
+  color: #858585;
 }
 
 .compare-icon {
   font-size: 24px;
-  color: var(--color-text-secondary);
+  color: #858585;
 }
 
 .loading-state {
@@ -282,7 +282,7 @@ function formatPath(path: string): string {
 
 .loading-state p {
   margin: 0;
-  color: var(--color-text-secondary);
+  color: #858585;
 }
 
 .animate-spin {
@@ -312,8 +312,8 @@ function formatPath(path: string): string {
   align-items: center;
   gap: 12px;
   padding: 16px;
-  background: var(--color-background-soft);
-  border: 1px solid var(--color-border);
+  background: #2d2d30;
+  border: 1px solid #454545;
   border-radius: 8px;
 }
 
@@ -322,11 +322,11 @@ function formatPath(path: string): string {
 }
 
 .summary-icon.added {
-  color: var(--color-success);
+  color: #4ec9b0;
 }
 
 .summary-icon.removed {
-  color: var(--color-error);
+  color: #f48771;
 }
 
 .summary-icon.modified {
@@ -334,7 +334,7 @@ function formatPath(path: string): string {
 }
 
 .summary-icon.commits {
-  color: var(--color-primary);
+  color: #007acc;
 }
 
 .summary-info {
@@ -349,7 +349,7 @@ function formatPath(path: string): string {
 
 .summary-label {
   font-size: 12px;
-  color: var(--color-text-secondary);
+  color: #858585;
 }
 
 .file-lists {
@@ -359,8 +359,8 @@ function formatPath(path: string): string {
 }
 
 .file-section {
-  background: var(--color-background-soft);
-  border: 1px solid var(--color-border);
+  background: #2d2d30;
+  border: 1px solid #454545;
   border-radius: 8px;
   padding: 16px;
 }
@@ -372,7 +372,7 @@ function formatPath(path: string): string {
   margin: 0 0 12px 0;
   font-size: 14px;
   font-weight: 600;
-  color: var(--color-text);
+  color: #cccccc;
 }
 
 .file-list {
@@ -395,25 +395,20 @@ function formatPath(path: string): string {
 }
 
 .file-item:hover {
-  background: var(--color-background-mute);
+  background: #3e3e42;
 }
 
 .file-item.added {
-  color: var(--color-success);
+  color: #4ec9b0;
 }
 
 .file-item.removed {
-  color: var(--color-error);
+  color: #f48771;
 }
 
 .file-item.modified {
   color: var(--color-warning);
 }
 
-/* Dark theme adjustments */
-:root {
-  --color-success: #43b02a;
-  --color-error: #f44336;
-  --color-warning: #ff9800;
-}
+
 </style>

@@ -256,9 +256,9 @@ const electronAPI = {
   },
   git: {
     status: () => ipcRenderer.invoke('git:status'),
-    add: (files: string[]) => ipcRenderer.invoke('git:add', files),
+    add: (files: string[], customPath?: string) => ipcRenderer.invoke('git:add', files, customPath),
     reset: (files: string[]) => ipcRenderer.invoke('git:reset', files),
-    commit: (message: string) => ipcRenderer.invoke('git:commit', message),
+    commit: (message: string, customPath?: string) => ipcRenderer.invoke('git:commit', message, customPath),
     push: (remote?: string, branch?: string) => ipcRenderer.invoke('git:push', remote, branch),
     pull: (remote?: string, branch?: string) => ipcRenderer.invoke('git:pull', remote, branch),
     getCurrentBranch: () => ipcRenderer.invoke('git:getCurrentBranch'),

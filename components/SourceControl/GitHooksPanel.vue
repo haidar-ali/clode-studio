@@ -253,7 +253,7 @@
 <script setup lang="ts">
 import { ref, onMounted, reactive } from 'vue';
 import { useSourceControlStore } from '~/stores/source-control';
-import Icon from '~/components/UI/Icon.vue';
+import Icon from '~/components/Icon.vue';
 
 interface GitHook {
   name: string;
@@ -444,8 +444,8 @@ function formatHookName(hookName: string): string {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--color-background);
-  color: var(--color-text);
+  background: #252526;
+  color: #cccccc;
 }
 
 .panel-header {
@@ -453,8 +453,8 @@ function formatHookName(hookName: string): string {
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-background-soft);
+  border-bottom: 1px solid #454545;
+  background: #2d2d30;
 }
 
 .header-title {
@@ -465,7 +465,7 @@ function formatHookName(hookName: string): string {
 
 .header-icon {
   font-size: 20px;
-  color: var(--color-primary);
+  color: #007acc;
 }
 
 .panel-header h3 {
@@ -485,13 +485,13 @@ function formatHookName(hookName: string): string {
   padding: 6px;
   cursor: pointer;
   border-radius: 4px;
-  color: var(--color-text-secondary);
+  color: #858585;
   transition: all 0.2s;
 }
 
 .icon-button:hover:not(:disabled) {
-  background: var(--color-background-mute);
-  color: var(--color-text);
+  background: #3e3e42;
+  color: #cccccc;
 }
 
 .icon-button:disabled {
@@ -500,7 +500,7 @@ function formatHookName(hookName: string): string {
 }
 
 .primary-button {
-  background: var(--color-primary);
+  background: #007acc;
   color: white;
   border: none;
   padding: 6px 12px;
@@ -515,7 +515,7 @@ function formatHookName(hookName: string): string {
 }
 
 .primary-button:hover:not(:disabled) {
-  background: var(--color-primary-hover);
+  background: #1a8cff;
 }
 
 .primary-button:disabled {
@@ -524,9 +524,9 @@ function formatHookName(hookName: string): string {
 }
 
 .secondary-button {
-  background: var(--color-background-mute);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
+  background: #3e3e42;
+  color: #cccccc;
+  border: 1px solid #454545;
   padding: 6px 12px;
   border-radius: 4px;
   cursor: pointer;
@@ -539,8 +539,8 @@ function formatHookName(hookName: string): string {
 }
 
 .secondary-button:hover:not(:disabled) {
-  background: var(--color-background-soft);
-  border-color: var(--color-border-hover);
+  background: #2d2d30;
+  border-color: #007acc;
 }
 
 .secondary-button:disabled {
@@ -551,7 +551,7 @@ function formatHookName(hookName: string): string {
 .text-button {
   background: none;
   border: none;
-  color: var(--color-primary);
+  color: #007acc;
   cursor: pointer;
   font-size: 13px;
   padding: 4px 8px;
@@ -563,7 +563,7 @@ function formatHookName(hookName: string): string {
 }
 
 .text-button:hover:not(:disabled) {
-  background: var(--color-background-mute);
+  background: #3e3e42;
 }
 
 .text-button:disabled {
@@ -587,7 +587,7 @@ function formatHookName(hookName: string): string {
   align-items: center;
   justify-content: center;
   gap: 16px;
-  color: var(--color-text-secondary);
+  color: #858585;
 }
 
 .loading-state .icon {
@@ -607,15 +607,15 @@ function formatHookName(hookName: string): string {
 }
 
 .hook-card {
-  background: var(--color-background-soft);
-  border: 1px solid var(--color-border);
+  background: #2d2d30;
+  border: 1px solid #454545;
   border-radius: 8px;
   padding: 16px;
   transition: all 0.2s;
 }
 
 .hook-card:hover {
-  border-color: var(--color-border-hover);
+  border-color: #007acc;
 }
 
 .hook-header {
@@ -633,7 +633,7 @@ function formatHookName(hookName: string): string {
 
 .hook-icon {
   font-size: 24px;
-  color: var(--color-primary);
+  color: #007acc;
   margin-top: 2px;
 }
 
@@ -646,7 +646,7 @@ function formatHookName(hookName: string): string {
 .hook-details p {
   margin: 0;
   font-size: 13px;
-  color: var(--color-text-secondary);
+  color: #858585;
 }
 
 .status-badge {
@@ -660,19 +660,19 @@ function formatHookName(hookName: string): string {
 }
 
 .status-badge.enabled {
-  background: var(--color-success-soft);
-  color: var(--color-success);
+  background: rgba(78, 201, 176, 0.2);
+  color: #4ec9b0;
 }
 
 .status-badge.disabled {
-  background: var(--color-error-soft);
-  color: var(--color-error);
+  background: rgba(244, 135, 113, 0.2);
+  color: #f48771;
 }
 
 .hook-options {
   margin: 12px 0;
   padding: 12px;
-  background: var(--color-background);
+  background: #252526;
   border-radius: 4px;
 }
 
@@ -696,16 +696,16 @@ function formatHookName(hookName: string): string {
 
 .option-item label {
   font-size: 12px;
-  color: var(--color-text-secondary);
+  color: #858585;
   margin-right: 4px;
 }
 
 .number-input {
   width: 60px;
   padding: 4px 8px;
-  background: var(--color-background-mute);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
+  background: #3e3e42;
+  color: #cccccc;
+  border: 1px solid #454545;
   border-radius: 4px;
   font-size: 13px;
 }
@@ -714,28 +714,28 @@ function formatHookName(hookName: string): string {
   display: flex;
   gap: 8px;
   padding-top: 12px;
-  border-top: 1px solid var(--color-border);
+  border-top: 1px solid #454545;
 }
 
 .installation-info {
   display: flex;
   gap: 12px;
   padding: 16px;
-  background: var(--color-info-soft);
+  background: rgba(74, 158, 255, 0.2);
   border-radius: 8px;
   margin-top: 16px;
 }
 
 .installation-info .icon {
   font-size: 24px;
-  color: var(--color-info);
+  color: #4a9eff;
   flex-shrink: 0;
 }
 
 .installation-info p {
   margin: 0 0 4px 0;
   font-size: 13px;
-  color: var(--color-text);
+  color: #cccccc;
 }
 
 /* Modal styles */
@@ -753,8 +753,8 @@ function formatHookName(hookName: string): string {
 }
 
 .modal {
-  background: var(--color-background);
-  border: 1px solid var(--color-border);
+  background: #252526;
+  border: 1px solid #454545;
   border-radius: 8px;
   width: 600px;
   max-width: 90vw;
@@ -769,7 +769,7 @@ function formatHookName(hookName: string): string {
   align-items: center;
   justify-content: space-between;
   padding: 16px;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid #454545;
 }
 
 .modal-header h3 {
@@ -784,13 +784,13 @@ function formatHookName(hookName: string): string {
   padding: 4px;
   cursor: pointer;
   border-radius: 4px;
-  color: var(--color-text-secondary);
+  color: #858585;
   transition: all 0.2s;
 }
 
 .close-button:hover {
-  background: var(--color-background-mute);
-  color: var(--color-text);
+  background: #3e3e42;
+  color: #cccccc;
 }
 
 .modal-content {
@@ -805,21 +805,11 @@ function formatHookName(hookName: string): string {
   font-size: 12px;
   white-space: pre;
   line-height: 1.5;
-  background: var(--color-background-soft);
+  background: #2d2d30;
   padding: 12px;
   border-radius: 4px;
   overflow-x: auto;
 }
 
-/* Dark theme adjustments */
-:root {
-  --color-primary-hover: #4a9eff;
-  --color-border-hover: #484848;
-  --color-success-soft: rgba(67, 176, 42, 0.1);
-  --color-success: #43b02a;
-  --color-error-soft: rgba(244, 67, 54, 0.1);
-  --color-error: #f44336;
-  --color-info-soft: rgba(33, 150, 243, 0.1);
-  --color-info: #2196f3;
-}
+
 </style>

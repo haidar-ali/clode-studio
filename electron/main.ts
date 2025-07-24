@@ -16,8 +16,12 @@ import { ClaudeDetector } from './claude-detector.js';
 import { fileWatcherService } from './file-watcher.js';
 import { createKnowledgeCache } from './knowledge-cache.js';
 import { GitService } from './git-service.js';
+import { GitServiceManager } from './git-service-manager.js';
 import { CheckpointService } from './checkpoint-service.js';
+import { CheckpointServiceManager } from './checkpoint-service-manager.js';
 import { WorktreeManager } from './worktree-manager.js';
+import { WorktreeManagerGlobal } from './worktree-manager-global.js';
+import { GitHooksManagerGlobal } from './git-hooks-manager-global.js';
 import { GitHooksManager } from './git-hooks.js';
 
 // Load environment variables from .env file
@@ -47,8 +51,8 @@ const checkpointServices: Map<string, CheckpointService> = new Map();
 // Worktree manager instances per workspace
 const worktreeManagers: Map<string, WorktreeManager> = new Map();
 
-// Git hooks manager instances per workspace
-const gitHooksManagers: Map<string, GitHooksManager> = new Map();
+// Git hooks manager instances per workspace - now handled by GitHooksManagerGlobal
+// const gitHooksManagers: Map<string, GitHooksManager> = new Map();
 
 const isDev = process.env.NODE_ENV !== 'production';
 const nuxtURL = isDev ? 'http://localhost:3000' : `file://${join(__dirname, '../.output/public/index.html')}`;
@@ -92,6 +96,12 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  // Initialize all service managers (singletons)
+  GitServiceManager.getInstance();
+  CheckpointServiceManager.getInstance();
+  WorktreeManagerGlobal.getInstance();
+  GitHooksManagerGlobal.getInstance();
+  
   createWindow();
 
   app.on('activate', () => {
@@ -1687,42 +1697,62 @@ ipcMain.handle('workspace:importContext', async (event, workspacePath: string, j
   }
 });
 
+// Current active services
+let currentCheckpointService: CheckpointService | null = null;
+let currentWorktreeManager: WorktreeManager | null = null;
+// let currentGitHooksManager: GitHooksManager | null = null; - now handled by GitHooksManagerGlobal
+
 // Git service initialization when workspace changes
 ipcMain.handle('workspace:setPath', async (event, workspacePath: string) => {
+  console.log('[Main] workspace:setPath called with:', workspacePath);
+  
   try {
     // Store the workspace path
     (store as any).set('workspacePath', workspacePath);
     
-    // Initialize or update git service for this workspace
-    let gitService = gitServices.get(workspacePath);
-    if (!gitService) {
-      gitService = new GitService(workspacePath);
-      gitServices.set(workspacePath, gitService);
+    try {
+      // Update the Git Service Manager with the new workspace
+      console.log('[Main] Updating GitServiceManager...');
+      const gitServiceManager = GitServiceManager.getInstance();
+      gitServiceManager.setWorkspace(workspacePath);
+      console.log('[Main] GitServiceManager updated successfully');
+    } catch (error) {
+      console.error('[Main] Error updating GitServiceManager:', error);
     }
     
-    // Initialize or update checkpoint service for this workspace
-    let checkpointService = checkpointServices.get(workspacePath);
-    if (!checkpointService) {
-      checkpointService = new CheckpointService(workspacePath);
-      checkpointServices.set(workspacePath, checkpointService);
-      
-      // Initialize shadow repository
-      await checkpointService.initialize();
+    try {
+      // Update the Checkpoint Service Manager with the new workspace
+      console.log('[Main] Updating CheckpointServiceManager...');
+      const checkpointServiceManager = CheckpointServiceManager.getInstance();
+      checkpointServiceManager.setWorkspace(workspacePath);
+      console.log('[Main] CheckpointServiceManager updated successfully');
+    } catch (error) {
+      console.error('[Main] Error updating CheckpointServiceManager:', error);
     }
     
-    // Initialize or update worktree manager for this workspace
-    let worktreeManager = worktreeManagers.get(workspacePath);
-    if (!worktreeManager) {
-      worktreeManager = new WorktreeManager(workspacePath);
-      worktreeManagers.set(workspacePath, worktreeManager);
+    try {
+      // Update the Worktree Manager with the new workspace
+      console.log('[Main] Updating WorktreeManagerGlobal...');
+      const worktreeManagerGlobal = WorktreeManagerGlobal.getInstance();
+      console.log('[Main] Got WorktreeManagerGlobal instance');
+      const result = worktreeManagerGlobal.setWorkspace(workspacePath);
+      console.log('[Main] WorktreeManagerGlobal.setWorkspace returned:', result ? 'manager created' : 'null');
+    } catch (error) {
+      console.error('[Main] Error updating WorktreeManagerGlobal:', error);
     }
     
-    // Initialize or update git hooks manager for this workspace
-    let gitHooksManager = gitHooksManagers.get(workspacePath);
-    if (!gitHooksManager) {
-      gitHooksManager = new GitHooksManager(workspacePath);
-      gitHooksManagers.set(workspacePath, gitHooksManager);
+    try {
+      // Update the Git Hooks Manager with the new workspace
+      console.log('[Main] Updating GitHooksManagerGlobal...');
+      const gitHooksManagerGlobal = GitHooksManagerGlobal.getInstance();
+      console.log('[Main] Got GitHooksManagerGlobal instance');
+      const result = gitHooksManagerGlobal.setWorkspace(workspacePath);
+      console.log('[Main] GitHooksManagerGlobal.setWorkspace returned:', result ? 'manager created' : 'null');
+    } catch (error) {
+      console.error('[Main] Error updating GitHooksManagerGlobal:', error);
     }
+    
+    console.log('[Main] All service managers updated with workspace:', workspacePath);
     
     return { success: true };
   } catch (error) {

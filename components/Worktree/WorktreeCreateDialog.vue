@@ -79,7 +79,7 @@
 <script setup lang="ts">
 import { ref, onMounted, nextTick } from 'vue';
 import { useSourceControlStore } from '~/stores/source-control';
-import Icon from '~/components/UI/Icon.vue';
+import Icon from '~/components/Icon.vue';
 
 const emit = defineEmits<{
   close: [];
@@ -173,8 +173,8 @@ async function handleCreate() {
 }
 
 .dialog {
-  background: var(--color-background);
-  border: 1px solid var(--color-border);
+  background: #252526;
+  border: 1px solid #454545;
   border-radius: 8px;
   padding: 24px;
   width: 500px;
@@ -197,7 +197,7 @@ async function handleCreate() {
   margin-bottom: 8px;
   font-size: 14px;
   font-weight: 500;
-  color: var(--color-text);
+  color: #cccccc;
 }
 
 .input-with-suggest {
@@ -208,9 +208,9 @@ async function handleCreate() {
 .form-input {
   flex: 1;
   padding: 10px 12px;
-  background: var(--color-background-mute);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
+  background: #3e3e42;
+  color: #cccccc;
+  border: 1px solid #454545;
   border-radius: 4px;
   font-size: 14px;
   transition: all 0.2s;
@@ -218,13 +218,13 @@ async function handleCreate() {
 
 .form-input:focus {
   outline: none;
-  border-color: var(--color-primary);
-  background: var(--color-background);
+  border-color: #007acc;
+  background: #252526;
 }
 
 .suggest-button {
   padding: 10px 12px;
-  background: var(--color-primary);
+  background: #007acc;
   color: white;
   border: none;
   border-radius: 4px;
@@ -236,7 +236,7 @@ async function handleCreate() {
 }
 
 .suggest-button:hover:not(:disabled) {
-  background: var(--color-primary-hover);
+  background: #1a8cff;
 }
 
 .suggest-button:disabled {
@@ -247,7 +247,7 @@ async function handleCreate() {
 .form-hint {
   margin: 6px 0 0 0;
   font-size: 12px;
-  color: var(--color-text-secondary);
+  color: #858585;
 }
 
 .form-checkbox {
@@ -261,14 +261,14 @@ async function handleCreate() {
   gap: 12px;
   margin-top: 24px;
   padding-top: 20px;
-  border-top: 1px solid var(--color-border);
+  border-top: 1px solid #454545;
 }
 
 .cancel-button {
   padding: 8px 16px;
-  background: var(--color-background-mute);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
+  background: #3e3e42;
+  color: #cccccc;
+  border: 1px solid #454545;
   border-radius: 4px;
   font-size: 14px;
   cursor: pointer;
@@ -276,13 +276,13 @@ async function handleCreate() {
 }
 
 .cancel-button:hover {
-  background: var(--color-background-soft);
-  border-color: var(--color-border-hover);
+  background: #2d2d30;
+  border-color: #007acc;
 }
 
 .confirm-button {
   padding: 8px 16px;
-  background: var(--color-primary);
+  background: #007acc;
   color: white;
   border: none;
   border-radius: 4px;
@@ -295,7 +295,7 @@ async function handleCreate() {
 }
 
 .confirm-button:hover:not(:disabled) {
-  background: var(--color-primary-hover);
+  background: #1a8cff;
 }
 
 .confirm-button:disabled {
@@ -312,9 +312,4 @@ async function handleCreate() {
   to { transform: rotate(360deg); }
 }
 
-/* Dark theme adjustments */
-:root {
-  --color-primary-hover: #4a9eff;
-  --color-border-hover: #484848;
-}
 </style>

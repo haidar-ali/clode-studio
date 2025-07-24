@@ -43,7 +43,11 @@
         <Icon name="mdi:clock-outline" class="info-icon" />
         <span class="info-text">Created {{ formatDate(worktree.created) }}</span>
       </div>
-      <div v-if="worktree.description" class="info-row">
+      <div v-if="session" class="info-row">
+        <Icon name="mdi:bookmark" class="info-icon" />
+        <span class="info-text session-name">Session: {{ session.name }}</span>
+      </div>
+      <div v-else-if="worktree.description" class="info-row">
         <Icon name="mdi:text" class="info-icon" />
         <span class="info-text">{{ worktree.description }}</span>
       </div>
@@ -51,26 +55,36 @@
     
     <div class="card-footer">
       <button 
+        v-if="!worktree.isActive"
         @click="$emit('switch', worktree.path)"
         class="action-button primary"
-        :disabled="worktree.isActive"
       >
         <Icon name="mdi:folder-open" />
         Switch to Worktree
       </button>
+      <div v-else class="active-indicator">
+        <Icon name="mdi:check-circle" />
+        Currently Active
+      </div>
       <button 
+        v-if="!session"
         @click="$emit('create-session', worktree)"
         class="action-button secondary"
+        title="Create a named session for this worktree"
       >
         <Icon name="mdi:plus" />
         Create Session
       </button>
+      <div v-else class="session-indicator">
+        <Icon name="mdi:check" />
+        Has Session
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import Icon from '~/components/UI/Icon.vue';
+import Icon from '~/components/Icon.vue';
 
 interface Worktree {
   path: string;
@@ -84,8 +98,20 @@ interface Worktree {
   linkedCheckpoint?: string;
 }
 
+interface Session {
+  id: string;
+  name: string;
+  worktree: Worktree;
+  created: Date;
+  lastAccessed: Date;
+  metadata?: {
+    description?: string;
+  };
+}
+
 defineProps<{
   worktree: Worktree;
+  session?: Session;
 }>();
 
 defineEmits<{
@@ -123,20 +149,20 @@ function formatDate(date: Date | string): string {
 
 <style scoped>
 .worktree-card {
-  background: var(--color-background-soft);
-  border: 1px solid var(--color-border);
+  background: #2d2d30;
+  border: 1px solid #454545;
   border-radius: 8px;
   padding: 16px;
   transition: all 0.2s;
 }
 
 .worktree-card:hover {
-  border-color: var(--color-border-hover);
+  border-color: #007acc;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .worktree-card.active {
-  border-color: var(--color-primary);
+  border-color: #007acc;
   background: var(--color-primary-soft);
 }
 
@@ -156,7 +182,7 @@ function formatDate(date: Date | string): string {
 
 .branch-icon {
   font-size: 18px;
-  color: var(--color-primary);
+  color: #007acc;
 }
 
 .branch-name {
@@ -176,8 +202,8 @@ function formatDate(date: Date | string): string {
 }
 
 .active-badge {
-  background: var(--color-success-soft);
-  color: var(--color-success);
+  background: rgba(78, 201, 176, 0.2);
+  color: #4ec9b0;
 }
 
 .locked-badge {
@@ -186,8 +212,8 @@ function formatDate(date: Date | string): string {
 }
 
 .prunable-badge {
-  background: var(--color-error-soft);
-  color: var(--color-error);
+  background: rgba(244, 135, 113, 0.2);
+  color: #f48771;
 }
 
 .card-actions {
@@ -201,18 +227,18 @@ function formatDate(date: Date | string): string {
   padding: 4px;
   cursor: pointer;
   border-radius: 4px;
-  color: var(--color-text-secondary);
+  color: #858585;
   transition: all 0.2s;
 }
 
 .icon-button:hover:not(:disabled) {
-  background: var(--color-background-mute);
-  color: var(--color-text);
+  background: #3e3e42;
+  color: #cccccc;
 }
 
 .icon-button.danger:hover:not(:disabled) {
-  background: var(--color-error-soft);
-  color: var(--color-error);
+  background: rgba(244, 135, 113, 0.2);
+  color: #f48771;
 }
 
 .icon-button:disabled {
@@ -232,7 +258,7 @@ function formatDate(date: Date | string): string {
   align-items: center;
   gap: 8px;
   font-size: 13px;
-  color: var(--color-text-secondary);
+  color: #858585;
 }
 
 .info-icon {
@@ -248,7 +274,7 @@ function formatDate(date: Date | string): string {
 
 .commit {
   font-family: monospace;
-  background: var(--color-background-mute);
+  background: #3e3e42;
   padding: 2px 6px;
   border-radius: 4px;
 }
@@ -257,7 +283,7 @@ function formatDate(date: Date | string): string {
   display: flex;
   gap: 8px;
   padding-top: 12px;
-  border-top: 1px solid var(--color-border);
+  border-top: 1px solid #454545;
 }
 
 .action-button {
@@ -276,12 +302,12 @@ function formatDate(date: Date | string): string {
 }
 
 .action-button.primary {
-  background: var(--color-primary);
+  background: #007acc;
   color: white;
 }
 
 .action-button.primary:hover:not(:disabled) {
-  background: var(--color-primary-hover);
+  background: #1a8cff;
 }
 
 .action-button.primary:disabled {
@@ -290,23 +316,41 @@ function formatDate(date: Date | string): string {
 }
 
 .action-button.secondary {
-  background: var(--color-background-mute);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
+  background: #3e3e42;
+  color: #cccccc;
+  border: 1px solid #454545;
 }
 
 .action-button.secondary:hover {
-  background: var(--color-background);
-  border-color: var(--color-border-hover);
+  background: #252526;
+  border-color: #007acc;
 }
 
-/* Dark theme adjustments */
-:root {
-  --color-primary-soft: rgba(66, 184, 221, 0.1);
-  --color-primary-hover: #4a9eff;
-  --color-border-hover: #484848;
-  --color-success-soft: rgba(67, 176, 42, 0.1);
-  --color-warning-soft: rgba(255, 152, 0, 0.1);
-  --color-error-soft: rgba(244, 67, 54, 0.1);
+.active-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #4ec9b0;
+  font-weight: 500;
+  padding: 8px 16px;
+  background: rgba(78, 201, 176, 0.2);
+  border-radius: 4px;
 }
+
+.session-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #007acc;
+  font-size: 13px;
+  padding: 8px 16px;
+  background: rgba(0, 122, 204, 0.1);
+  border-radius: 4px;
+}
+
+.info-text.session-name {
+  color: #007acc;
+  font-weight: 500;
+}
+
 </style>

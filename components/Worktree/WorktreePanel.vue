@@ -58,6 +58,7 @@
             v-for="session in sessions"
             :key="session.id"
             :session="session"
+            :current-path="workspaceStore.currentPath"
             @switch="handleSwitch"
             @delete="handleDeleteSession"
             @compare="handleCompare"
@@ -76,6 +77,7 @@
             v-for="worktree in worktrees"
             :key="worktree.path"
             :worktree="worktree"
+            :session="findSessionForWorktree(worktree.path)"
             @switch="handleSwitch"
             @remove="handleRemove"
             @lock="handleLock"
@@ -101,6 +103,14 @@
       @close="showCreateDialog = false"
       @create="handleCreate"
     />
+    
+    <!-- Create session dialog -->
+    <WorktreeSessionDialog
+      v-if="showSessionDialog && sessionDialogWorktree"
+      :worktree="sessionDialogWorktree"
+      @close="showSessionDialog = false; sessionDialogWorktree = null"
+      @create="handleSessionCreate"
+    />
 
     <!-- Compare dialog -->
     <WorktreeCompareDialog
@@ -124,15 +134,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import { useWorkspaceStore } from '~/stores/workspace';
+import { useWorkspaceManager } from '~/composables/useWorkspaceManager';
 import { useSourceControlStore } from '~/stores/source-control';
 import WorktreeCard from './WorktreeCard.vue';
 import WorktreeSessionCard from './WorktreeSessionCard.vue';
 import WorktreeCreateDialog from './WorktreeCreateDialog.vue';
 import WorktreeCompareDialog from './WorktreeCompareDialog.vue';
+import WorktreeSessionDialog from './WorktreeSessionDialog.vue';
 import SessionComparison from './SessionComparison.vue';
-import Icon from '~/components/UI/Icon.vue';
+import Icon from '~/components/Icon.vue';
 
 interface Worktree {
   path: string;
@@ -160,6 +172,7 @@ interface WorktreeSession {
 }
 
 const workspaceStore = useWorkspaceStore();
+const { changeWorkspace } = useWorkspaceManager();
 const sourceControlStore = useSourceControlStore();
 
 // State
@@ -168,26 +181,59 @@ const isLoading = ref(false);
 const worktrees = ref<Worktree[]>([]);
 const sessions = ref<WorktreeSession[]>([]);
 const showCreateDialog = ref(false);
+const showSessionDialog = ref(false);
+const sessionDialogWorktree = ref<Worktree | null>(null);
 const compareData = ref<{ worktree1: Worktree; worktree2: Worktree } | null>(null);
 const showSessionComparison = ref(false);
 
 // Computed
 const isGitRepository = computed(() => sourceControlStore.isGitRepository);
 
+// Helper function to find session for a worktree
+function findSessionForWorktree(worktreePath: string): WorktreeSession | undefined {
+  return sessions.value.find(session => session.worktree.path === worktreePath);
+}
+
 // Initialize
 onMounted(async () => {
-  await loadWorktrees();
+  // First ensure source control is properly initialized
+  if (!sourceControlStore.initialized && workspaceStore.currentPath) {
+    await sourceControlStore.initialize(workspaceStore.currentPath);
+  }
+  
+  // Now load worktrees if it's a git repository
+  if (sourceControlStore.isGitRepository) {
+    await loadWorktrees();
+  }
+  
   initialized.value = true;
+});
+
+// Watch for workspace changes
+watch(() => workspaceStore.currentPath, async (newPath) => {
+  if (newPath && !sourceControlStore.initialized) {
+    await sourceControlStore.initialize(newPath);
+    
+    if (sourceControlStore.isGitRepository) {
+      await loadWorktrees();
+    }
+  }
 });
 
 // Load worktrees and sessions
 async function loadWorktrees() {
   if (!workspaceStore.currentPath) return;
   
+  console.log('[WorktreePanel] Loading worktrees for path:', workspaceStore.currentPath);
+  
   isLoading.value = true;
   try {
+    // Set workspace path first to ensure backend is initialized
+    await window.electronAPI.workspace.setPath(workspaceStore.currentPath);
+    
     // Load worktrees
     const worktreeResult = await window.electronAPI.worktree.list();
+    console.log('[WorktreePanel] Worktree list result:', worktreeResult);
     if (worktreeResult.success && worktreeResult.worktrees) {
       worktrees.value = worktreeResult.worktrees;
     }
@@ -206,7 +252,14 @@ async function loadWorktrees() {
 
 // Handlers
 async function handleRefresh() {
-  await loadWorktrees();
+  // Ensure git is initialized before refreshing
+  if (!sourceControlStore.initialized && workspaceStore.currentPath) {
+    await sourceControlStore.initialize(workspaceStore.currentPath);
+  }
+  
+  if (sourceControlStore.isGitRepository) {
+    await loadWorktrees();
+  }
 }
 
 async function handleCreate(branchName: string, sessionName?: string) {
@@ -227,8 +280,11 @@ async function handleCreate(branchName: string, sessionName?: string) {
 async function handleSwitch(worktreePath: string) {
   const result = await window.electronAPI.worktree.switch(worktreePath);
   if (result.success) {
-    // Update workspace path
-    await workspaceStore.setCurrentPath(worktreePath);
+    // Update workspace path in frontend
+    await changeWorkspace(worktreePath);
+    // Update backend services with new path
+    await window.electronAPI.workspace.setPath(worktreePath);
+    // Reload worktrees
     await loadWorktrees();
   }
 }
@@ -256,18 +312,30 @@ async function handleLock(worktree: Worktree, lock: boolean) {
 }
 
 async function handleCreateSession(worktree: Worktree) {
-  const sessionName = prompt('Session name:');
-  if (!sessionName) return;
+  sessionDialogWorktree.value = worktree;
+  showSessionDialog.value = true;
+}
+
+async function handleSessionCreate(data: { name: string; description?: string }) {
+  if (!sessionDialogWorktree.value) return;
   
   const result = await window.electronAPI.worktree.createSession({
-    name: sessionName,
-    worktreePath: worktree.path,
-    branchName: worktree.branch,
-    metadata: {}
+    name: data.name,
+    worktreePath: sessionDialogWorktree.value.path,
+    branchName: sessionDialogWorktree.value.branch,
+    metadata: {
+      description: data.description
+    }
   });
   
   if (result.success) {
     await loadWorktrees();
+    showSessionDialog.value = false;
+    sessionDialogWorktree.value = null;
+  } else {
+    console.error('Failed to create session:', result.error);
+    // Show user-friendly error message
+    alert(result.error || 'Failed to create session');
   }
 }
 
@@ -290,8 +358,8 @@ function handleCompare(worktree1: Worktree, worktree2: Worktree) {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--color-background);
-  color: var(--color-text);
+  background: #252526;
+  color: #cccccc;
 }
 
 .panel-header {
@@ -299,8 +367,8 @@ function handleCompare(worktree1: Worktree, worktree2: Worktree) {
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-background-soft);
+  border-bottom: 1px solid #454545;
+  background: #2d2d30;
 }
 
 .header-title {
@@ -311,7 +379,7 @@ function handleCompare(worktree1: Worktree, worktree2: Worktree) {
 
 .header-icon {
   font-size: 20px;
-  color: var(--color-primary);
+  color: #007acc;
 }
 
 .panel-header h3 {
@@ -331,13 +399,13 @@ function handleCompare(worktree1: Worktree, worktree2: Worktree) {
   padding: 6px;
   cursor: pointer;
   border-radius: 4px;
-  color: var(--color-text-secondary);
+  color: #858585;
   transition: all 0.2s;
 }
 
 .icon-button:hover:not(:disabled) {
-  background: var(--color-background-mute);
-  color: var(--color-text);
+  background: #3e3e42;
+  color: #cccccc;
 }
 
 .icon-button:disabled {
@@ -369,13 +437,13 @@ function handleCompare(worktree1: Worktree, worktree2: Worktree) {
 
 .no-repo-icon {
   font-size: 48px;
-  color: var(--color-text-secondary);
+  color: #858585;
   opacity: 0.5;
 }
 
 .no-repo-message p {
   margin: 0;
-  color: var(--color-text-secondary);
+  color: #858585;
 }
 
 .hint {
@@ -405,15 +473,15 @@ function handleCompare(worktree1: Worktree, worktree2: Worktree) {
   font-size: 14px;
   font-weight: 600;
   text-transform: uppercase;
-  color: var(--color-text-secondary);
+  color: #858585;
 }
 
 .count {
-  background: var(--color-background-mute);
+  background: #3e3e42;
   padding: 2px 8px;
   border-radius: 12px;
   font-size: 12px;
-  color: var(--color-text-secondary);
+  color: #858585;
 }
 
 .session-list,
@@ -424,7 +492,7 @@ function handleCompare(worktree1: Worktree, worktree2: Worktree) {
 }
 
 .primary-button {
-  background: var(--color-primary);
+  background: #007acc;
   color: white;
   border: none;
   padding: 8px 16px;
@@ -439,7 +507,7 @@ function handleCompare(worktree1: Worktree, worktree2: Worktree) {
 }
 
 .primary-button:hover {
-  background: var(--color-primary-hover);
+  background: #1a8cff;
 }
 
 /* Session comparison panel */
@@ -449,7 +517,7 @@ function handleCompare(worktree1: Worktree, worktree2: Worktree) {
   left: 0;
   right: 0;
   bottom: 0;
-  background: var(--color-background);
+  background: #252526;
   z-index: 100;
   display: flex;
   flex-direction: column;
@@ -460,8 +528,8 @@ function handleCompare(worktree1: Worktree, worktree2: Worktree) {
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-background-soft);
+  border-bottom: 1px solid #454545;
+  background: #2d2d30;
 }
 
 .session-comparison-panel .panel-header h3 {
@@ -476,17 +544,14 @@ function handleCompare(worktree1: Worktree, worktree2: Worktree) {
   padding: 4px;
   cursor: pointer;
   border-radius: 4px;
-  color: var(--color-text-secondary);
+  color: #858585;
   transition: all 0.2s;
 }
 
 .close-button:hover {
-  background: var(--color-background-mute);
-  color: var(--color-text);
+  background: #3e3e42;
+  color: #cccccc;
 }
 
-/* Dark theme adjustments */
-:root {
-  --color-primary-hover: #4a9eff;
-}
+
 </style>

@@ -23,6 +23,13 @@
         >
           <Icon name="mdi:cog" />
         </button>
+        <button 
+          @click="cleanupCorrupted"
+          class="icon-button"
+          title="Clean up corrupted checkpoints"
+        >
+          <Icon name="mdi:broom" />
+        </button>
       </div>
     </div>
 
@@ -153,43 +160,57 @@
 
     <!-- Create checkpoint dialog -->
     <teleport to="body">
-      <div v-if="showCreateDialog" class="dialog-overlay" @click.self="closeCreateDialog">
-        <div class="dialog">
-          <h3>Create Checkpoint</h3>
-          <input
-            v-model="newCheckpoint.name"
-            placeholder="Checkpoint name..."
-            class="dialog-input"
-            ref="nameInput"
-            @keyup.enter="confirmCreateCheckpoint"
-          />
-          <textarea
-            v-model="newCheckpoint.description"
-            placeholder="Description (optional)..."
-            class="dialog-textarea"
-            rows="3"
-          />
-          <div class="tag-input">
-            <input
-              v-model="newTagInput"
-              @keyup.enter="addTag"
-              placeholder="Add tags..."
-              class="dialog-input"
-            />
-            <div class="tags" v-if="newCheckpoint.tags.length > 0">
-              <span v-for="(tag, index) in newCheckpoint.tags" :key="index" class="tag">
-                {{ tag }}
-                <Icon name="mdi:close" @click="removeTag(index)" />
-              </span>
+      <div v-if="showCreateDialog" class="modal-overlay" @click.self="closeCreateDialog">
+        <div class="modal">
+          <div class="modal-header">
+            <h3>Create Checkpoint</h3>
+            <button @click="closeCreateDialog" class="close-button">
+              <Icon name="mdi:close" />
+            </button>
+          </div>
+          <div class="modal-content">
+            <div class="form-group">
+              <label>Checkpoint name</label>
+              <input
+                v-model="newCheckpoint.name"
+                placeholder="Enter checkpoint name..."
+                class="form-input"
+                ref="nameInput"
+                @keyup.enter="confirmCreateCheckpoint"
+              />
+            </div>
+            <div class="form-group">
+              <label>Description (optional)</label>
+              <textarea
+                v-model="newCheckpoint.description"
+                placeholder="Enter description..."
+                class="form-input"
+                rows="3"
+              />
+            </div>
+            <div class="form-group">
+              <label>Tags (optional)</label>
+              <input
+                v-model="newTagInput"
+                @keyup.enter="addTag"
+                placeholder="Press enter to add tags..."
+                class="form-input"
+              />
+              <div class="tags" v-if="newCheckpoint.tags.length > 0">
+                <span v-for="(tag, index) in newCheckpoint.tags" :key="index" class="tag">
+                  {{ tag }}
+                  <Icon name="mdi:close" @click="removeTag(index)" />
+                </span>
+              </div>
             </div>
           </div>
-          <div class="dialog-actions">
-            <button @click="closeCreateDialog" class="cancel-button">
+          <div class="modal-actions">
+            <button @click="closeCreateDialog" class="btn btn-secondary">
               Cancel
             </button>
             <button 
               @click="confirmCreateCheckpoint" 
-              class="confirm-button"
+              class="btn btn-primary"
               :disabled="!newCheckpoint.name.trim() || store.isCreating"
             >
               {{ store.isCreating ? 'Creating...' : 'Create' }}
@@ -201,52 +222,57 @@
 
     <!-- Settings dialog -->
     <teleport to="body">
-      <div v-if="showSettings" class="dialog-overlay" @click.self="showSettings = false">
-        <div class="dialog">
-          <h3>Checkpoint Settings</h3>
-          
-          <div class="setting-group">
-            <label>
-              <input 
-                type="checkbox" 
-                v-model="store.autoCheckpointEnabled"
-                @change="updateAutoCheckpoint"
-              />
-              Enable automatic checkpoints
-            </label>
-          </div>
-
-          <div class="setting-group" v-if="store.autoCheckpointEnabled">
-            <label>Auto-checkpoint interval</label>
-            <select v-model="store.autoCheckpointInterval" @change="updateAutoCheckpoint">
-              <option :value="60000">1 minute</option>
-              <option :value="300000">5 minutes</option>
-              <option :value="600000">10 minutes</option>
-              <option :value="1800000">30 minutes</option>
-              <option :value="3600000">1 hour</option>
-            </select>
-          </div>
-
-          <div class="setting-group">
-            <label>Maximum checkpoints</label>
-            <input 
-              type="number" 
-              v-model.number="store.maxCheckpoints" 
-              min="10" 
-              max="100"
-              class="dialog-input"
-            />
-          </div>
-
-          <div class="setting-group">
-            <button @click="cleanOldCheckpoints" class="secondary-button">
-              <Icon name="mdi:broom" />
-              Clean Old Checkpoints
+      <div v-if="showSettings" class="modal-overlay" @click.self="showSettings = false">
+        <div class="modal">
+          <div class="modal-header">
+            <h3>Checkpoint Settings</h3>
+            <button @click="showSettings = false" class="close-button">
+              <Icon name="mdi:close" />
             </button>
           </div>
+          <div class="modal-content">
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input 
+                  type="checkbox" 
+                  v-model="store.autoCheckpointEnabled"
+                  @change="updateAutoCheckpoint"
+                />
+                Enable automatic checkpoints
+              </label>
+            </div>
 
-          <div class="dialog-actions">
-            <button @click="showSettings = false" class="confirm-button">
+            <div class="form-group" v-if="store.autoCheckpointEnabled">
+              <label>Auto-checkpoint interval</label>
+              <select v-model="store.autoCheckpointInterval" @change="updateAutoCheckpoint" class="form-input">
+                <option :value="60000">1 minute</option>
+                <option :value="300000">5 minutes</option>
+                <option :value="600000">10 minutes</option>
+                <option :value="1800000">30 minutes</option>
+                <option :value="3600000">1 hour</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>Maximum checkpoints</label>
+              <input 
+                type="number" 
+                v-model.number="store.maxCheckpoints" 
+                min="10" 
+                max="100"
+                class="form-input"
+              />
+            </div>
+
+            <div class="form-group">
+              <button @click="cleanOldCheckpoints" class="btn btn-secondary full-width">
+                <Icon name="mdi:broom" />
+                Clean Old Checkpoints
+              </button>
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button @click="showSettings = false" class="btn btn-primary">
               Done
             </button>
           </div>
@@ -268,7 +294,7 @@ import { ref, computed, nextTick } from 'vue';
 import { useCheckpointV2Store } from '~/stores/checkpoint-v2';
 import type { CheckpointV2 } from '~/stores/checkpoint-v2';
 import CheckpointDiff from './CheckpointDiff.vue';
-import Icon from '~/components/UI/Icon.vue';
+import Icon from '~/components/Icon.vue';
 
 const store = useCheckpointV2Store();
 
@@ -368,6 +394,20 @@ function createManualCheckpoint() {
     nameInput.value?.focus();
     nameInput.value?.select();
   });
+}
+
+async function cleanupCorrupted() {
+  if (!confirm('This will remove any corrupted checkpoints. Continue?')) {
+    return;
+  }
+  
+  const cleanedCount = await store.cleanupCorruptedCheckpoints();
+  
+  if (cleanedCount > 0) {
+    alert(`Removed ${cleanedCount} corrupted checkpoint(s).`);
+  } else {
+    alert('No corrupted checkpoints found.');
+  }
 }
 
 function closeCreateDialog() {
@@ -808,8 +848,8 @@ async function cleanOldCheckpoints() {
   color: white;
 }
 
-/* Dialog styles */
-.dialog-overlay {
+/* Modal styles */
+.modal-overlay {
   position: fixed;
   top: 0;
   left: 0;
@@ -822,143 +862,157 @@ async function cleanOldCheckpoints() {
   z-index: 2000;
 }
 
-.dialog {
-  background: var(--color-background);
-  border: 1px solid var(--color-border);
+.modal {
+  background: #252526;
+  border: 1px solid #3e3e42;
   border-radius: 8px;
-  padding: 24px;
   width: 500px;
   max-width: 90vw;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
 }
 
-.dialog h3 {
-  margin: 0 0 20px 0;
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid #3e3e42;
+}
+
+.modal-header h3 {
+  margin: 0;
   font-size: 18px;
   font-weight: 600;
+  color: #cccccc;
 }
 
-.dialog-input,
-.dialog-textarea {
-  width: 100%;
-  padding: 10px 12px;
-  background: var(--color-background-mute);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
+.close-button {
+  background: none;
+  border: none;
+  color: #cccccc;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 4px;
-  font-size: 14px;
-  margin-bottom: 16px;
   transition: all 0.2s;
 }
 
-.dialog-textarea {
+.close-button:hover {
+  background: #3e3e42;
+}
+
+.modal-content {
+  padding: 24px;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group:last-child {
+  margin-bottom: 0;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+  color: #cccccc;
+  font-size: 14px;
+}
+
+.form-input {
+  width: 100%;
+  padding: 10px 12px;
+  background: #3e3e42;
+  color: #cccccc;
+  border: 1px solid #454545;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: #007acc;
+  background: #1e1e1e;
+}
+
+textarea.form-input {
   resize: vertical;
   min-height: 60px;
 }
 
-.dialog-input:focus,
-.dialog-textarea:focus {
-  outline: none;
-  border-color: var(--color-primary);
-  background: var(--color-background);
+.checkbox-label {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
 }
 
-.tag-input {
-  margin-bottom: 16px;
+.checkbox-label input[type="checkbox"] {
+  margin: 0;
 }
 
-.tag-input .tags {
+.tags {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 8px;
 }
 
-.dialog-actions {
+.modal-actions {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
-  margin-top: 20px;
+  padding: 20px 24px;
+  border-top: 1px solid #3e3e42;
 }
 
-.cancel-button {
-  padding: 8px 16px;
-  background: var(--color-background-mute);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
+.btn {
+  padding: 10px 20px;
   border-radius: 4px;
   font-size: 14px;
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
-}
-
-.cancel-button:hover {
-  background: var(--color-background-soft);
-}
-
-.confirm-button {
-  padding: 8px 16px;
-  background: var(--color-primary);
-  color: white;
   border: none;
-  border-radius: 4px;
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.confirm-button:hover:not(:disabled) {
-  background: var(--color-primary-hover);
+.btn-primary {
+  background: #007acc;
+  color: white;
 }
 
-.confirm-button:disabled {
+.btn-primary:hover:not(:disabled) {
+  background: #1a8cff;
+}
+
+.btn-primary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.secondary-button {
-  background: var(--color-background-mute);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
-  padding: 8px 16px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 14px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  transition: all 0.2s;
+.btn-secondary {
+  background: #3e3e42;
+  color: #cccccc;
 }
 
-.secondary-button:hover {
-  background: var(--color-background-soft);
-  border-color: var(--color-border-hover);
+.btn-secondary:hover {
+  background: #4e4e52;
 }
 
-.setting-group {
-  margin-bottom: 20px;
-}
-
-.setting-group label {
-  display: block;
-  margin-bottom: 8px;
-  font-size: 14px;
-  color: var(--color-text-secondary);
-}
-
-.setting-group input[type="checkbox"] {
-  margin-right: 8px;
-}
-
-.setting-group select {
+.btn.full-width {
   width: 100%;
-  padding: 8px 12px;
-  background: var(--color-background-mute);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
-  font-size: 14px;
+  justify-content: center;
 }
+
 
 /* Dark theme color variables */
 :root {

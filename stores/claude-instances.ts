@@ -456,12 +456,6 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
       if (!this.activeInstanceId && instances.length > 0) {
         this.activeInstanceId = instances[0].id;
       }
-    },
-    
-    setActiveInstance(instanceId: string) {
-      if (this.instances.has(instanceId)) {
-        this.activeInstanceId = instanceId;
-      }
     }
   }
 });

@@ -39,7 +39,7 @@ export class GitService {
   constructor(repoPath: string) {
     this.repoPath = repoPath;
     this.git = simpleGit(repoPath);
-    this.setupIpcHandlers();
+    // Don't setup IPC handlers here - they're handled by GitServiceManager
     this.checkGitRepo();
   }
 

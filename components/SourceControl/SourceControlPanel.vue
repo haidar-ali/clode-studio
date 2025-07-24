@@ -229,7 +229,7 @@ import { useWorkspaceStore } from '~/stores/workspace';
 import BranchSelector from './BranchSelector.vue';
 import GitFileItem from './GitFileItem.vue';
 import GitHooksPanel from './GitHooksPanel.vue';
-import Icon from '~/components/UI/Icon.vue';
+import Icon from '~/components/Icon.vue';
 
 const store = useSourceControlStore();
 const workspaceStore = useWorkspaceStore();
@@ -239,11 +239,19 @@ const activeTab = ref<'changes' | 'hooks'>('changes');
 
 // Initialize when component mounts
 onMounted(async () => {
-  if (workspaceStore.currentPath) {
-    await store.initialize(workspaceStore.currentPath);
-    
-    // Set up auto-refresh
-    startAutoRefresh();
+  try {
+    const currentPath = workspaceStore.currentPath;
+    if (currentPath) {
+      await store.initialize(currentPath);
+      
+      // Set up auto-refresh
+      startAutoRefresh();
+    } else {
+      console.warn('No workspace path available');
+    }
+  } catch (error) {
+    console.error('Failed to initialize source control:', error);
+    store.lastError = error instanceof Error ? error.message : 'Failed to initialize';
   }
 });
 
@@ -256,12 +264,12 @@ onUnmounted(() => {
 let refreshInterval: NodeJS.Timeout | null = null;
 
 function startAutoRefresh() {
-  // Refresh every 5 seconds if not loading
+  // Refresh every 30 seconds if not loading (was 5 seconds - too frequent)
   refreshInterval = setInterval(() => {
     if (!store.isLoading && store.isGitRepository) {
       store.refreshStatus();
     }
-  }, 5000);
+  }, 30000);
 }
 
 function stopAutoRefresh() {
@@ -370,14 +378,14 @@ async function handleFileAction(action: string, file: any) {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--color-background);
-  color: var(--color-text);
+  background: #252526;
+  color: #cccccc;
 }
 
 .source-control-tabs {
   display: flex;
-  background: var(--color-background-soft);
-  border-bottom: 1px solid var(--color-border);
+  background: #2d2d30;
+  border-bottom: 1px solid #181818;
 }
 
 .source-control-tabs button {
@@ -389,7 +397,7 @@ async function handleFileAction(action: string, file: any) {
   padding: 10px 16px;
   background: none;
   border: none;
-  color: var(--color-text-secondary);
+  color: #858585;
   cursor: pointer;
   font-size: 13px;
   font-weight: 500;
@@ -398,13 +406,13 @@ async function handleFileAction(action: string, file: any) {
 }
 
 .source-control-tabs button:hover {
-  color: var(--color-text);
-  background: var(--color-background-mute);
+  color: #cccccc;
+  background: #3e3e42;
 }
 
 .source-control-tabs button.active {
-  color: var(--color-primary);
-  border-bottom-color: var(--color-primary);
+  color: #007acc;
+  border-bottom-color: #007acc;
 }
 
 .tab-content {
@@ -419,8 +427,8 @@ async function handleFileAction(action: string, file: any) {
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-background-soft);
+  border-bottom: 1px solid #181818;
+  background: #2d2d30;
 }
 
 .header-title {
@@ -431,7 +439,7 @@ async function handleFileAction(action: string, file: any) {
 
 .header-icon {
   font-size: 20px;
-  color: var(--color-primary);
+  color: #007acc;
 }
 
 .panel-header h3 {
@@ -451,13 +459,13 @@ async function handleFileAction(action: string, file: any) {
   padding: 6px;
   cursor: pointer;
   border-radius: 4px;
-  color: var(--color-text-secondary);
+  color: #858585;
   transition: all 0.2s;
 }
 
 .icon-button:hover:not(:disabled) {
-  background: var(--color-background-mute);
-  color: var(--color-text);
+  background: #3e3e42;
+  color: #cccccc;
 }
 
 .icon-button:disabled {
@@ -487,17 +495,17 @@ async function handleFileAction(action: string, file: any) {
 
 .no-repo-icon {
   font-size: 48px;
-  color: var(--color-text-secondary);
+  color: #858585;
   opacity: 0.5;
 }
 
 .no-repo-message p {
   margin: 0;
-  color: var(--color-text-secondary);
+  color: #858585;
 }
 
 .primary-button {
-  background: var(--color-primary);
+  background: #007acc;
   color: white;
   border: none;
   padding: 8px 16px;
@@ -512,7 +520,7 @@ async function handleFileAction(action: string, file: any) {
 }
 
 .primary-button:hover:not(:disabled) {
-  background: var(--color-primary-hover);
+  background: #1a8cff;
 }
 
 .primary-button:disabled {
@@ -521,9 +529,9 @@ async function handleFileAction(action: string, file: any) {
 }
 
 .secondary-button {
-  background: var(--color-background-mute);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
+  background: #3e3e42;
+  color: #cccccc;
+  border: 1px solid #454545;
   padding: 8px 16px;
   border-radius: 4px;
   cursor: pointer;
@@ -536,8 +544,8 @@ async function handleFileAction(action: string, file: any) {
 }
 
 .secondary-button:hover:not(:disabled) {
-  background: var(--color-background-soft);
-  border-color: var(--color-border-hover);
+  background: #2d2d30;
+  border-color: #007acc;
 }
 
 .secondary-button:disabled {
@@ -548,7 +556,7 @@ async function handleFileAction(action: string, file: any) {
 .text-button {
   background: none;
   border: none;
-  color: var(--color-primary);
+  color: #007acc;
   cursor: pointer;
   font-size: 13px;
   padding: 4px 8px;
@@ -557,7 +565,7 @@ async function handleFileAction(action: string, file: any) {
 }
 
 .text-button:hover:not(:disabled) {
-  background: var(--color-background-mute);
+  background: #3e3e42;
 }
 
 .text-button:disabled {
@@ -574,13 +582,13 @@ async function handleFileAction(action: string, file: any) {
 
 .branch-section {
   padding: 12px 16px;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid #181818;
 }
 
 .commit-section {
   padding: 16px;
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-background-soft);
+  border-bottom: 1px solid #181818;
+  background: #2d2d30;
 }
 
 .commit-input-wrapper {
@@ -592,9 +600,9 @@ async function handleFileAction(action: string, file: any) {
   min-height: 60px;
   max-height: 120px;
   padding: 10px;
-  background: var(--color-background);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
+  background: #252526;
+  color: #cccccc;
+  border: 1px solid #454545;
   border-radius: 4px;
   font-family: inherit;
   font-size: 14px;
@@ -604,7 +612,7 @@ async function handleFileAction(action: string, file: any) {
 
 .commit-textarea:focus {
   outline: none;
-  border-color: var(--color-primary);
+  border-color: #007acc;
 }
 
 .commit-textarea:disabled {
@@ -629,16 +637,16 @@ async function handleFileAction(action: string, file: any) {
   align-items: center;
   gap: 8px;
   padding: 12px 16px;
-  background: var(--color-error-background);
-  color: var(--color-error);
-  border-bottom: 1px solid var(--color-error-border);
+  background: #5a1d1d;
+  color: #f48771;
+  border-bottom: 1px solid #8b2929;
 }
 
 .error-message .close-button {
   margin-left: auto;
   background: none;
   border: none;
-  color: var(--color-error);
+  color: #f48771;
   cursor: pointer;
   padding: 2px;
   border-radius: 4px;
@@ -678,15 +686,15 @@ async function handleFileAction(action: string, file: any) {
   font-size: 13px;
   font-weight: 600;
   text-transform: uppercase;
-  color: var(--color-text-secondary);
+  color: #858585;
 }
 
 .staged-icon {
-  color: var(--color-success);
+  color: #4ec9b0;
 }
 
 .changes-icon {
-  color: var(--color-warning);
+  color: #f9c74f;
 }
 
 .file-list {
@@ -702,7 +710,7 @@ async function handleFileAction(action: string, file: any) {
   align-items: center;
   justify-content: center;
   gap: 12px;
-  color: var(--color-text-secondary);
+  color: #858585;
   opacity: 0.7;
 }
 
@@ -717,18 +725,10 @@ async function handleFileAction(action: string, file: any) {
   align-items: center;
   justify-content: center;
   gap: 12px;
-  color: var(--color-text-secondary);
+  color: #858585;
 }
 
 .loading-state .icon {
   font-size: 32px;
-}
-
-/* Dark theme adjustments */
-:root {
-  --color-primary-hover: #4a9eff;
-  --color-border-hover: #484848;
-  --color-error-background: rgba(255, 0, 0, 0.1);
-  --color-error-border: rgba(255, 0, 0, 0.3);
 }
 </style>

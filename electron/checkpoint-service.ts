@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import * as fs from 'fs-extra';
+import fs from 'fs-extra';
 import * as path from 'path';
 import simpleGit, { SimpleGit } from 'simple-git';
 import * as crypto from 'crypto';
@@ -20,10 +20,11 @@ export class CheckpointService {
   private options: CheckpointOptions;
   private postCommitWatcher: FSWatcher | null = null;
 
-  constructor(workspacePath: string, options: CheckpointOptions = {}) {
+  constructor(workspacePath: string, options: CheckpointOptions = {}, setupHandlers: boolean = true) {
     this.workspacePath = workspacePath;
     this.shadowRepoPath = path.join(workspacePath, '.claude-checkpoints');
-    this.git = simpleGit(this.shadowRepoPath);
+    // Don't initialize git until the directory exists
+    this.git = null as any; // Will be initialized in initialize()
     this.options = {
       includeNodeModules: false,
       includeGitIgnored: false,
@@ -31,7 +32,9 @@ export class CheckpointService {
       maxFileSize: 10 * 1024 * 1024, // 10MB default
       ...options
     };
-    this.setupIpcHandlers();
+    if (setupHandlers) {
+      this.setupIpcHandlers();
+    }
     this.setupPostCommitWatcher();
   }
 
@@ -96,6 +99,9 @@ export class CheckpointService {
     try {
       // Create shadow repo directory
       await fs.ensureDir(this.shadowRepoPath);
+      
+      // Initialize git now that directory exists
+      this.git = simpleGit(this.shadowRepoPath);
 
       // Check if already initialized
       const gitDir = path.join(this.shadowRepoPath, '.git');
@@ -115,15 +121,36 @@ export class CheckpointService {
         await this.git.commit('Initialize checkpoint repository');
       }
 
-      // Update parent .gitignore
+      // Update parent .gitignore (only if it exists - creation is handled by frontend)
       const parentGitignore = path.join(path.dirname(this.shadowRepoPath), '.gitignore');
       if (await fs.pathExists(parentGitignore)) {
         let gitignoreContent = await fs.readFile(parentGitignore, 'utf-8');
+        let contentToAppend = '';
+        
+        // Check for .claude-checkpoints
         if (!gitignoreContent.includes('.claude-checkpoints')) {
-          gitignoreContent += '\n# Claude Code IDE checkpoints\n.claude-checkpoints/\n';
-          await fs.writeFile(parentGitignore, gitignoreContent);
+          if (gitignoreContent.trim()) {
+            contentToAppend += '\n';
+          }
+          contentToAppend += '# Claude Code IDE generated directories\n.claude-checkpoints/\n';
+        }
+        
+        // Check for .worktrees
+        if (!gitignoreContent.includes('.worktrees')) {
+          if (!contentToAppend && gitignoreContent.trim()) {
+            contentToAppend += '\n';
+          }
+          if (!gitignoreContent.includes('.claude-checkpoints')) {
+            contentToAppend += '# Claude Code IDE generated directories\n';
+          }
+          contentToAppend += '.worktrees/\n';
+        }
+        
+        if (contentToAppend) {
+          await fs.writeFile(parentGitignore, gitignoreContent + contentToAppend);
         }
       }
+      // Note: If .gitignore doesn't exist, the frontend will create it with proper defaults
 
       this.initialized = true;
       return { success: true };
@@ -414,8 +441,15 @@ export class CheckpointService {
       const manifest2 = checkpoint2.checkpoint.manifest;
 
       // Build file maps
-      const files1 = new Map(manifest1.files.map((f: any) => [f.path, f]));
-      const files2 = new Map(manifest2.files.map((f: any) => [f.path, f]));
+      interface FileSnapshot {
+        path: string;
+        hash: string;
+        size: number;
+        modified: string;
+        permissions: number;
+      }
+      const files1 = new Map<string, FileSnapshot>(manifest1.files.map((f: FileSnapshot) => [f.path, f]));
+      const files2 = new Map<string, FileSnapshot>(manifest2.files.map((f: FileSnapshot) => [f.path, f]));
 
       const diff = {
         added: [] as string[],
@@ -428,18 +462,18 @@ export class CheckpointService {
       for (const [path, file2] of files2) {
         const file1 = files1.get(path);
         if (!file1) {
-          diff.added.push(path);
+          diff.added.push(path as string);
         } else if (file1.hash !== file2.hash) {
-          diff.modified.push(path);
+          diff.modified.push(path as string);
         } else {
-          diff.unchanged.push(path);
+          diff.unchanged.push(path as string);
         }
       }
 
       // Check for removed files
       for (const [path] of files1) {
         if (!files2.has(path)) {
-          diff.removed.push(path);
+          diff.removed.push(path as string);
         }
       }
 

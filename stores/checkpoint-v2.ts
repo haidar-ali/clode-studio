@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import type { GitFileStatus } from '~/types/git';
 
 export interface FileSnapshot {
@@ -115,22 +115,26 @@ export const useCheckpointV2Store = defineStore('checkpoint-v2', () => {
     try {
       // Get all tracked files from git
       const gitStatus = await window.electronAPI.git.status();
-      if (!gitStatus.success) return snapshots;
+      if (!gitStatus.success || !gitStatus.data) return snapshots;
+      
+      // Safely extract file paths
+      const files = gitStatus.data.files || [];
+      const notAdded = gitStatus.data.not_added || gitStatus.data.untracked || [];
       
       const allFiles = [
-        ...gitStatus.data.files.map(f => f.path),
-        ...gitStatus.data.not_added.map(f => f.path)
-      ];
+        ...(Array.isArray(files) ? files.map(f => typeof f === 'string' ? f : f.path) : []),
+        ...(Array.isArray(notAdded) ? notAdded.map(f => typeof f === 'string' ? f : f.path) : [])
+      ].filter(Boolean);
       
       // Read each file
       for (const filePath of allFiles) {
         try {
-          const content = await window.electronAPI.file.readFile(filePath);
-          if (content.success) {
-            const hash = await createHash(content.data);
+          const content = await window.electronAPI.fs.readFile(filePath);
+          if (content.success && content.content) {
+            const hash = await createHash(content.content);
             snapshots.push({
               path: filePath,
-              content: content.data,
+              content: content.content,
               modified: Date.now(),
               hash
             });
@@ -149,16 +153,25 @@ export const useCheckpointV2Store = defineStore('checkpoint-v2', () => {
   async function captureGitSnapshot(): Promise<GitSnapshot | null> {
     try {
       const status = await window.electronAPI.git.status();
-      const branches = await window.electronAPI.git.branches();
-      const log = await window.electronAPI.git.log({ maxCount: 1 });
+      const branches = await window.electronAPI.git.getBranches();
+      const log = await window.electronAPI.git.getLog(1);
       
-      if (!status.success || !branches.success || !log.success) return null;
+      if (!status.success || !status.data) return null;
+      
+      // Extract file changes safely
+      const files = status.data.files || [];
+      const uncommittedChanges = Array.isArray(files) 
+        ? files.map(f => `${f.index || f.status || '?'} ${f.path}`)
+        : [];
+      
+      // Get current commit info
+      const currentCommit = log?.success && log?.data?.[0]?.hash || 'unknown';
       
       return {
         branch: status.data.current || 'unknown',
-        commit: log.data.latest?.hash || 'unknown',
-        status: status.data.files,
-        uncommittedChanges: status.data.files.map(f => `${f.index} ${f.path}`),
+        commit: currentCommit,
+        status: files,
+        uncommittedChanges,
         ahead: status.data.ahead || 0,
         behind: status.data.behind || 0
       };
@@ -177,14 +190,21 @@ export const useCheckpointV2Store = defineStore('checkpoint-v2', () => {
     const claudeStore = useClaudeInstancesStore();
     const tasksStore = useTasksStore();
     
+    // Safely get claude instances
+    const instances = Array.isArray(claudeStore.instances) 
+      ? claudeStore.instances 
+      : (claudeStore.instances && typeof claudeStore.instances === 'object' 
+        ? Object.values(claudeStore.instances) 
+        : []);
+    
     return {
-      openFiles: editorStore.tabs.map(t => t.path),
+      openFiles: Array.isArray(editorStore.tabs) ? editorStore.tabs.map(t => t.path) : [],
       activeFile: editorStore.activeTab?.path || null,
-      cursorPositions: editorStore.getCursorPositions(),
-      scrollPositions: editorStore.getScrollPositions(),
+      cursorPositions: editorStore.getCursorPositions ? editorStore.getCursorPositions() : {},
+      scrollPositions: editorStore.getScrollPositions ? editorStore.getScrollPositions() : {},
       selectedText: {},
       terminalState: {
-        claudeInstances: claudeStore.instances.map(instance => ({
+        claudeInstances: instances.map(instance => ({
           id: instance.id,
           personality: instance.personality,
           messages: instance.messages || []
@@ -192,8 +212,8 @@ export const useCheckpointV2Store = defineStore('checkpoint-v2', () => {
         activeInstanceId: claudeStore.activeInstanceId
       },
       taskState: {
-        columns: tasksStore.columns,
-        taskOrder: tasksStore.taskOrder
+        columns: tasksStore.columns || [],
+        taskOrder: tasksStore.taskOrder || []
       }
     };
   }
@@ -217,6 +237,9 @@ export const useCheckpointV2Store = defineStore('checkpoint-v2', () => {
         captureIDESnapshot()
       ]);
       
+      // Ensure files is an array
+      const fileSnapshots = files || [];
+      
       // Get context messages
       const { useContextStore } = await import('~/stores/context');
       const contextStore = useContextStore();
@@ -231,7 +254,7 @@ export const useCheckpointV2Store = defineStore('checkpoint-v2', () => {
       };
       
       // Calculate stats
-      const totalSize = files.reduce((sum, f) => sum + f.content.length, 0);
+      const totalSize = fileSnapshots.reduce((sum, f) => sum + (f.content?.length || 0), 0);
       
       // Create checkpoint
       const checkpoint: CheckpointV2 = {
@@ -243,11 +266,11 @@ export const useCheckpointV2Store = defineStore('checkpoint-v2', () => {
         trigger,
         tags,
         stats: {
-          fileCount: files.length,
+          fileCount: fileSnapshots.length,
           totalSize,
           duration: Date.now() - startTime
         },
-        files,
+        files: fileSnapshots,
         git,
         ide,
         contextMessages,
@@ -291,7 +314,7 @@ export const useCheckpointV2Store = defineStore('checkpoint-v2', () => {
       
       // Restore files
       for (const file of checkpoint.files) {
-        await window.electronAPI.file.writeFile(file.path, file.content);
+        await window.electronAPI.fs.writeFile(file.path, file.content);
       }
       
       // Restore IDE state
@@ -398,25 +421,103 @@ export const useCheckpointV2Store = defineStore('checkpoint-v2', () => {
 
   // Shadow repository management
   async function initializeShadowRepo(): Promise<void> {
-    if (!shadowRepoPath.value) return;
+    if (!shadowRepoPath.value) {
+      console.warn('No shadow repo path set, skipping initialization');
+      return;
+    }
     
     try {
+      console.log('Initializing shadow repo at:', shadowRepoPath.value);
+      
       // Create .claude-checkpoints directory
-      await window.electronAPI.file.createDirectory(shadowRepoPath.value);
+      await window.electronAPI.fs.ensureDir(shadowRepoPath.value);
       
-      // Create .gitignore in parent directory to ignore checkpoints
-      const gitignorePath = `${window.electronAPI.workspace.getCurrentPath()}/.gitignore`;
-      const gitignoreContent = await window.electronAPI.file.readFile(gitignorePath);
+      // Update .gitignore in parent directory to ignore our directories
+      const workspacePath = shadowRepoPath.value.replace('/.claude-checkpoints', '');
+      const gitignorePath = `${workspacePath}/.gitignore`;
+      const gitignoreContent = await window.electronAPI.fs.readFile(gitignorePath);
       
-      if (gitignoreContent.success && !gitignoreContent.data.includes('.claude-checkpoints')) {
-        await window.electronAPI.file.writeFile(
+      // Entries we need to add
+      const claudeEntries = [
+        '# Claude Code IDE generated directories',
+        '.claude-checkpoints/',
+        '.worktrees/',
+        '.claude/'
+      ];
+      
+      if (gitignoreContent.success && gitignoreContent.content) {
+        // File exists, check if it includes our entries
+        let contentToAppend = '';
+        
+        if (!gitignoreContent.content.includes('.claude-checkpoints')) {
+          if (!contentToAppend && gitignoreContent.content.trim()) {
+            contentToAppend += '\n'; // Add newline if file has content
+          }
+          contentToAppend += claudeEntries[0] + '\n' + claudeEntries[1] + '\n';
+        }
+        
+        if (!gitignoreContent.content.includes('.worktrees')) {
+          if (!contentToAppend && !gitignoreContent.content.includes('.claude-checkpoints')) {
+            contentToAppend += '\n' + claudeEntries[0] + '\n';
+          }
+          contentToAppend += claudeEntries[2] + '\n';
+        }
+        
+        if (!gitignoreContent.content.includes('.claude/')) {
+          if (!contentToAppend && !gitignoreContent.content.includes('.claude-checkpoints') && !gitignoreContent.content.includes('.worktrees')) {
+            contentToAppend += '\n' + claudeEntries[0] + '\n';
+          }
+          contentToAppend += claudeEntries[3] + '\n';
+        }
+        
+        if (contentToAppend) {
+          await window.electronAPI.fs.writeFile(
+            gitignorePath,
+            gitignoreContent.content + contentToAppend
+          );
+        }
+      } else {
+        // File doesn't exist, create it with common defaults + our entries
+        const defaultGitignore = `# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build outputs
+dist/
+build/
+.next/
+.nuxt/
+.cache/
+coverage/
+
+${claudeEntries.join('\n')}
+`;
+        await window.electronAPI.fs.writeFile(
           gitignorePath,
-          gitignoreContent.data + '\n.claude-checkpoints/\n'
+          defaultGitignore
         );
       }
       
-      // Initialize git in shadow repo
-      await window.electronAPI.git.init(shadowRepoPath.value);
+      // Initialize shadow repo through checkpoint service
+      await window.electronAPI.checkpoint.init();
       
       // Load existing checkpoints
       await loadCheckpointsFromShadowRepo();
@@ -430,47 +531,71 @@ export const useCheckpointV2Store = defineStore('checkpoint-v2', () => {
     
     try {
       const checkpointDir = `${shadowRepoPath.value}/${checkpoint.id}`;
-      await window.electronAPI.file.createDirectory(checkpointDir);
+      await window.electronAPI.fs.ensureDir(checkpointDir);
       
-      // Save metadata
-      await window.electronAPI.file.writeFile(
+      // Save metadata - explicitly include all required fields
+      const metadata = {
+        id: checkpoint.id,
+        name: checkpoint.name,
+        description: checkpoint.description,
+        timestamp: checkpoint.timestamp,
+        projectPath: checkpoint.projectPath,
+        trigger: checkpoint.trigger,
+        tags: checkpoint.tags,
+        stats: checkpoint.stats,
+        git: checkpoint.git  // Keep git in metadata for quick access
+      };
+      
+      await window.electronAPI.fs.writeFile(
         `${checkpointDir}/metadata.json`,
-        JSON.stringify({
-          ...checkpoint,
-          files: undefined,
-          ide: undefined,
-          contextMessages: undefined,
-          knowledge: undefined
-        }, null, 2)
+        JSON.stringify(metadata, null, 2)
       );
       
       // Save file snapshots
-      await window.electronAPI.file.writeFile(
+      await window.electronAPI.fs.writeFile(
         `${checkpointDir}/files.json`,
-        JSON.stringify(checkpoint.files, null, 2)
+        JSON.stringify(checkpoint.files || [], null, 2)
       );
       
       // Save IDE state
-      await window.electronAPI.file.writeFile(
+      await window.electronAPI.fs.writeFile(
         `${checkpointDir}/ide.json`,
-        JSON.stringify(checkpoint.ide, null, 2)
+        JSON.stringify(checkpoint.ide || {}, null, 2)
       );
       
       // Save context and knowledge
-      await window.electronAPI.file.writeFile(
+      await window.electronAPI.fs.writeFile(
         `${checkpointDir}/context.json`,
         JSON.stringify({
-          messages: checkpoint.contextMessages,
-          knowledge: checkpoint.knowledge
+          messages: checkpoint.contextMessages || [],
+          knowledge: checkpoint.knowledge || {}
         }, null, 2)
       );
       
       // Commit to shadow repo
-      await window.electronAPI.git.add(['*'], shadowRepoPath.value);
-      await window.electronAPI.git.commit(
+      console.log('Committing checkpoint to shadow repo:', checkpoint.id);
+      const addResult = await window.electronAPI.git.add(['*'], shadowRepoPath.value);
+      if (!addResult.success) {
+        console.error('Failed to add files to git:', addResult.error);
+      }
+      
+      const commitResult = await window.electronAPI.git.commit(
         `Checkpoint: ${checkpoint.name} (${checkpoint.trigger})`,
         shadowRepoPath.value
       );
+      if (!commitResult.success) {
+        console.error('Failed to commit checkpoint:', commitResult.error);
+      }
+      
+      // Verify files were saved
+      const verifyMetadata = await window.electronAPI.fs.readFile(`${checkpointDir}/metadata.json`);
+      if (!verifyMetadata.success) {
+        console.error('Failed to verify metadata was saved:', verifyMetadata.error);
+      } else if (!verifyMetadata.content || verifyMetadata.content.trim() === '') {
+        console.error('Metadata file is empty!');
+      } else {
+        console.log('Checkpoint saved successfully:', checkpoint.id);
+      }
     } catch (error) {
       console.error('Failed to save checkpoint to shadow repo:', error);
     }
@@ -481,7 +606,7 @@ export const useCheckpointV2Store = defineStore('checkpoint-v2', () => {
     
     try {
       const checkpointDir = `${shadowRepoPath.value}/${checkpoint.id}`;
-      await window.electronAPI.file.deleteDirectory(checkpointDir);
+      await window.electronAPI.fs.delete(checkpointDir);
       
       // Commit deletion
       await window.electronAPI.git.add(['*'], shadowRepoPath.value);
@@ -495,35 +620,89 @@ export const useCheckpointV2Store = defineStore('checkpoint-v2', () => {
   }
 
   async function loadCheckpointsFromShadowRepo(): Promise<void> {
-    if (!shadowRepoPath.value) return;
+    if (!shadowRepoPath.value) {
+      console.warn('No shadow repo path, skipping checkpoint loading');
+      return;
+    }
     
     try {
-      const dirs = await window.electronAPI.file.readDirectory(shadowRepoPath.value);
-      if (!dirs.success) return;
+      console.log('Loading checkpoints from:', shadowRepoPath.value);
+      const dirs = await window.electronAPI.fs.readDir(shadowRepoPath.value);
+      if (!dirs.success) {
+        console.warn('Failed to read shadow repo directory:', dirs.error);
+        return;
+      }
       
+      console.log('Found entries in shadow repo:', dirs.files.map(f => ({ name: f.name, isDirectory: f.isDirectory })));
       const loadedCheckpoints: CheckpointV2[] = [];
       
-      for (const dir of dirs.data) {
-        if (dir.startsWith('cp-v2-')) {
+      // Filter for directories only
+      const checkpointDirs = dirs.files.filter(f => f.isDirectory);
+      
+      for (const entry of checkpointDirs) {
+        if (entry.name.startsWith('cp-v2-')) {
           try {
-            const checkpointDir = `${shadowRepoPath.value}/${dir}`;
+            const checkpointDir = `${shadowRepoPath.value}/${entry.name}`;
+            console.log('Loading checkpoint from:', checkpointDir);
             
             // Load metadata
-            const metadataContent = await window.electronAPI.file.readFile(`${checkpointDir}/metadata.json`);
-            if (!metadataContent.success) continue;
-            const metadata = JSON.parse(metadataContent.data);
+            const metadataContent = await window.electronAPI.fs.readFile(`${checkpointDir}/metadata.json`);
+            if (!metadataContent.success) {
+              console.warn(`Skipping checkpoint ${entry.name}: Failed to read metadata`, metadataContent.error);
+              continue;
+            }
+            
+            if (!metadataContent.content || metadataContent.content.trim() === '') {
+              console.warn(`Skipping checkpoint ${entry.name}: Empty metadata file`);
+              continue;
+            }
+            
+            let metadata;
+            try {
+              // Check for "undefined" string which indicates corrupted data
+              if (metadataContent.content === 'undefined' || metadataContent.content.trim() === 'undefined') {
+                console.warn(`Skipping checkpoint ${entry.name}: Corrupted metadata (contains "undefined")`);
+                continue;
+              }
+              metadata = JSON.parse(metadataContent.content);
+            } catch (parseError) {
+              console.warn(`Failed to parse metadata for checkpoint ${entry.name}:`, parseError);
+              console.warn(`Metadata content:`, metadataContent.content?.substring(0, 100));
+              continue;
+            }
             
             // Load files
-            const filesContent = await window.electronAPI.file.readFile(`${checkpointDir}/files.json`);
-            const files = filesContent.success ? JSON.parse(filesContent.data) : [];
+            const filesContent = await window.electronAPI.fs.readFile(`${checkpointDir}/files.json`);
+            let files = [];
+            if (filesContent.success && filesContent.content && filesContent.content !== 'undefined') {
+              try {
+                files = JSON.parse(filesContent.content);
+              } catch (e) {
+                console.warn(`Failed to parse files.json for ${entry.name}`);
+              }
+            }
             
             // Load IDE state
-            const ideContent = await window.electronAPI.file.readFile(`${checkpointDir}/ide.json`);
-            const ide = ideContent.success ? JSON.parse(ideContent.data) : {};
+            const ideContent = await window.electronAPI.fs.readFile(`${checkpointDir}/ide.json`);
+            let ide = {};
+            if (ideContent.success && ideContent.content && ideContent.content !== 'undefined') {
+              try {
+                ide = JSON.parse(ideContent.content);
+              } catch (e) {
+                console.warn(`Failed to parse ide.json for ${entry.name}`);
+              }
+            }
             
             // Load context
-            const contextContent = await window.electronAPI.file.readFile(`${checkpointDir}/context.json`);
-            const context = contextContent.success ? JSON.parse(contextContent.data) : { messages: [], knowledge: {} };
+            const contextContent = await window.electronAPI.fs.readFile(`${checkpointDir}/context.json`);
+            let context = { messages: [], knowledge: {} };
+            if (contextContent.success && contextContent.content && contextContent.content !== 'undefined') {
+              try {
+                context = JSON.parse(contextContent.content);
+              } catch (e) {
+                console.warn(`Failed to parse context.json for ${entry.name}`);
+              }
+            }
             
             loadedCheckpoints.push({
               ...metadata,
@@ -533,7 +712,7 @@ export const useCheckpointV2Store = defineStore('checkpoint-v2', () => {
               knowledge: context.knowledge
             });
           } catch (err) {
-            console.warn(`Failed to load checkpoint ${dir}:`, err);
+            console.warn(`Failed to load checkpoint ${entry.name}:`, err);
           }
         }
       }
@@ -597,7 +776,10 @@ export const useCheckpointV2Store = defineStore('checkpoint-v2', () => {
     const workspacePath = workspaceStore.currentPath || '';
     shadowRepoPath.value = workspacePath ? `${workspacePath}/.claude-checkpoints` : '';
     
-    if (shadowRepoPath.value) {
+    if (shadowRepoPath.value && workspacePath) {
+      // Set workspace path in main process first
+      await window.electronAPI.workspace.setPath(workspacePath);
+      
       await initializeShadowRepo();
       if (autoCheckpointEnabled.value) {
         startAutoCheckpoint();
@@ -605,8 +787,65 @@ export const useCheckpointV2Store = defineStore('checkpoint-v2', () => {
     }
   }
   
-  // Initialize on store creation
-  updateShadowRepoPath();
+  // Initialize on store creation (delayed to ensure workspace is ready)
+  setTimeout(() => {
+    updateShadowRepoPath();
+  }, 1000);
+  
+  // Watch for workspace changes
+  (async () => {
+    const { useWorkspaceStore } = await import('~/stores/workspace');
+    const workspaceStore = useWorkspaceStore();
+    let previousPath = '';
+    
+    // Set up a watcher for workspace path changes
+    const unwatch = watch(
+      () => workspaceStore.currentPath,
+      async (newPath) => {
+        if (newPath && newPath !== previousPath) {
+          previousPath = newPath;
+          console.log('[CheckpointStore] Workspace changed to:', newPath);
+          // Stop auto checkpoint for old workspace
+          stopAutoCheckpoint();
+          // Update shadow repo path and initialize for new workspace
+          await updateShadowRepoPath();
+        }
+      }
+    );
+  })();
+
+  // Clean up corrupted checkpoints
+  async function cleanupCorruptedCheckpoints(): Promise<number> {
+    if (!shadowRepoPath.value) return 0;
+    
+    let cleanedCount = 0;
+    const dirs = await window.electronAPI.fs.readDir(shadowRepoPath.value);
+    if (!dirs.success) return 0;
+    
+    for (const entry of dirs.files) {
+      if (entry.name.startsWith('cp-v2-')) {
+        const checkpointDir = `${shadowRepoPath.value}/${entry.name}`;
+        const metadataContent = await window.electronAPI.fs.readFile(`${checkpointDir}/metadata.json`);
+        
+        // Remove if metadata is corrupted
+        if (!metadataContent.success || 
+            !metadataContent.content || 
+            metadataContent.content === 'undefined' ||
+            metadataContent.content.trim() === 'undefined') {
+          console.log(`Removing corrupted checkpoint: ${entry.name}`);
+          await window.electronAPI.fs.delete(checkpointDir);
+          cleanedCount++;
+        }
+      }
+    }
+    
+    if (cleanedCount > 0) {
+      // Reload checkpoints after cleanup
+      await loadCheckpointsFromShadowRepo();
+    }
+    
+    return cleanedCount;
+  }
 
   return {
     // State
@@ -631,6 +870,7 @@ export const useCheckpointV2Store = defineStore('checkpoint-v2', () => {
     compareCheckpoints,
     initializeShadowRepo,
     startAutoCheckpoint,
-    stopAutoCheckpoint
+    stopAutoCheckpoint,
+    cleanupCorruptedCheckpoints
   };
 });

@@ -1,0 +1,115 @@
+/* Modal Theme - Consistent styling for all modals */
+
+/* Dark theme colors */
+:root {
+  --modal-bg: #1e1e1e;
+  --modal-bg-soft: #252526;
+  --modal-bg-mute: #2d2d30;
+  --modal-border: #454545;
+  --modal-border-hover: #007acc;
+  --modal-text: #cccccc;
+  --modal-text-secondary: #8b8b8b;
+  --modal-primary: #007acc;
+  --modal-primary-hover: #1a8cff;
+  --modal-success: #4ec9b0;
+  --modal-error: #f44747;
+  --modal-warning: #ffcc00;
+  --modal-shadow: 0 20px 40px rgba(0, 0, 0, 0.8);
+}
+
+/* Replace CSS variables in checkpoint components */
+.diff-container,
+.checkpoint-modal,
+.checkpoint-timeline,
+.checkpoint-restore-dialog {
+  /* Background colors */
+  --color-background: var(--modal-bg);
+  --color-background-soft: var(--modal-bg-soft);
+  --color-background-mute: var(--modal-bg-mute);
+  
+  /* Border colors */
+  --color-border: var(--modal-border);
+  --color-border-hover: var(--modal-border-hover);
+  
+  /* Text colors */
+  --color-text: var(--modal-text);
+  --color-text-secondary: var(--modal-text-secondary);
+  
+  /* Theme colors */
+  --color-primary: var(--modal-primary);
+  --color-primary-hover: var(--modal-primary-hover);
+  --color-success: var(--modal-success);
+  --color-error: var(--modal-error);
+  --color-warning: var(--modal-warning);
+}
+
+/* Common modal overlay */
+.modal-overlay,
+.dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+}
+
+/* Common modal/dialog container */
+.modal,
+.dialog {
+  background: var(--modal-bg);
+  border: 1px solid var(--modal-border);
+  border-radius: 8px;
+  box-shadow: var(--modal-shadow);
+}
+
+/* Common form styles */
+.form-input,
+.modal-input {
+  padding: 10px 12px;
+  background: var(--modal-bg-mute);
+  color: var(--modal-text);
+  border: 1px solid var(--modal-border);
+  border-radius: 4px;
+  font-size: 14px;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.form-input:focus,
+.modal-input:focus {
+  outline: none;
+  border-color: var(--modal-primary);
+  background: var(--modal-bg-soft);
+}
+
+/* Common button styles */
+.btn-primary,
+.primary-button {
+  background: var(--modal-primary);
+  color: white;
+  border: none;
+}
+
+.btn-primary:hover:not(:disabled),
+.primary-button:hover:not(:disabled) {
+  background: var(--modal-primary-hover);
+}
+
+.btn-secondary,
+.secondary-button {
+  background: var(--modal-bg-mute);
+  color: var(--modal-text);
+  border: 1px solid var(--modal-border);
+}
+
+.btn-secondary:hover,
+.secondary-button:hover {
+  background: var(--modal-bg-soft);
+  border-color: var(--modal-primary);
+}

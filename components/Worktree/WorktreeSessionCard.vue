@@ -1,5 +1,5 @@
 <template>
-  <div class="session-card">
+  <div class="session-card" :class="{ 'active': isActive }">
     <div class="session-header">
       <div class="session-info">
         <Icon name="mdi:briefcase" class="session-icon" />
@@ -42,12 +42,17 @@
     
     <div class="session-footer">
       <button 
+        v-if="!isActive"
         @click="$emit('switch', session.worktree.path)"
         class="action-button primary"
       >
         <Icon name="mdi:folder-open" />
         Switch to Session
       </button>
+      <div v-else class="active-indicator">
+        <Icon name="mdi:check-circle" />
+        Currently Active
+      </div>
       <button 
         @click="handleCompare"
         class="action-button secondary"
@@ -61,7 +66,7 @@
 
 <script setup lang="ts">
 import { useWorkspaceStore } from '~/stores/workspace';
-import Icon from '~/components/UI/Icon.vue';
+import Icon from '~/components/Icon.vue';
 
 interface Worktree {
   path: string;
@@ -87,6 +92,7 @@ interface WorktreeSession {
 
 const props = defineProps<{
   session: WorktreeSession;
+  currentPath?: string;
 }>();
 
 const emit = defineEmits<{
@@ -96,6 +102,15 @@ const emit = defineEmits<{
 }>();
 
 const workspaceStore = useWorkspaceStore();
+
+// Check if this session is active based on the current path
+const isActive = computed(() => {
+  if (!props.currentPath) return false;
+  // Normalize paths for comparison
+  const normalizedSessionPath = props.session.worktree.path.replace(/\/$/, '');
+  const normalizedCurrentPath = props.currentPath.replace(/\/$/, '');
+  return normalizedSessionPath === normalizedCurrentPath;
+});
 
 function handleCompare() {
   // Compare with main worktree (first one in list)
@@ -129,15 +144,15 @@ function formatDate(date: Date | string): string {
 
 <style scoped>
 .session-card {
-  background: var(--color-background-soft);
-  border: 1px solid var(--color-border);
+  background: #2d2d30;
+  border: 1px solid #454545;
   border-radius: 8px;
   padding: 16px;
   transition: all 0.2s;
 }
 
 .session-card:hover {
-  border-color: var(--color-border-hover);
+  border-color: #007acc;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
@@ -157,7 +172,7 @@ function formatDate(date: Date | string): string {
 
 .session-icon {
   font-size: 18px;
-  color: var(--color-primary);
+  color: #007acc;
 }
 
 .session-name {
@@ -177,8 +192,8 @@ function formatDate(date: Date | string): string {
 }
 
 .experiment-badge {
-  background: var(--color-info-soft);
-  color: var(--color-info);
+  background: rgba(74, 158, 255, 0.2);
+  color: #4a9eff;
 }
 
 .session-actions {
@@ -192,18 +207,18 @@ function formatDate(date: Date | string): string {
   padding: 4px;
   cursor: pointer;
   border-radius: 4px;
-  color: var(--color-text-secondary);
+  color: #858585;
   transition: all 0.2s;
 }
 
 .icon-button:hover {
-  background: var(--color-background-mute);
-  color: var(--color-text);
+  background: #3e3e42;
+  color: #cccccc;
 }
 
 .icon-button.danger:hover {
-  background: var(--color-error-soft);
-  color: var(--color-error);
+  background: rgba(244, 135, 113, 0.2);
+  color: #f48771;
 }
 
 .session-content {
@@ -218,7 +233,7 @@ function formatDate(date: Date | string): string {
   align-items: center;
   gap: 8px;
   font-size: 13px;
-  color: var(--color-text-secondary);
+  color: #858585;
 }
 
 .info-icon {
@@ -241,17 +256,17 @@ function formatDate(date: Date | string): string {
 
 .tag {
   padding: 2px 8px;
-  background: var(--color-background-mute);
+  background: #3e3e42;
   border-radius: 12px;
   font-size: 11px;
-  color: var(--color-text-secondary);
+  color: #858585;
 }
 
 .session-footer {
   display: flex;
   gap: 8px;
   padding-top: 12px;
-  border-top: 1px solid var(--color-border);
+  border-top: 1px solid #454545;
 }
 
 .action-button {
@@ -270,33 +285,41 @@ function formatDate(date: Date | string): string {
 }
 
 .action-button.primary {
-  background: var(--color-primary);
+  background: #007acc;
   color: white;
 }
 
 .action-button.primary:hover {
-  background: var(--color-primary-hover);
+  background: #1a8cff;
 }
 
 .action-button.secondary {
-  background: var(--color-background-mute);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
+  background: #3e3e42;
+  color: #cccccc;
+  border: 1px solid #454545;
   padding: 6px;
   flex: 0 0 auto;
 }
 
 .action-button.secondary:hover {
-  background: var(--color-background);
-  border-color: var(--color-border-hover);
+  background: #252526;
+  border-color: #007acc;
 }
 
-/* Dark theme adjustments */
-:root {
-  --color-primary-hover: #4a9eff;
-  --color-border-hover: #484848;
-  --color-info-soft: rgba(33, 150, 243, 0.1);
-  --color-info: #2196f3;
-  --color-error-soft: rgba(244, 67, 54, 0.1);
+.session-card.active {
+  border-color: #007acc;
+  background: #2a2a2d;
 }
+
+.active-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #4ec9b0;
+  font-weight: 500;
+  padding: 8px 16px;
+  background: rgba(78, 201, 176, 0.2);
+  border-radius: 4px;
+}
+
 </style>

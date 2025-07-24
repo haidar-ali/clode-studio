@@ -25,19 +25,19 @@
           <div class="diff-summary">
             <div class="summary-stat added">
               <Icon name="mdi:plus-circle" />
-              <span>{{ diff.added.length }} files added</span>
+              <span>{{ diff.added?.length || 0 }} files added</span>
             </div>
             <div class="summary-stat removed">
               <Icon name="mdi:minus-circle" />
-              <span>{{ diff.removed.length }} files removed</span>
+              <span>{{ diff.removed?.length || 0 }} files removed</span>
             </div>
             <div class="summary-stat modified">
               <Icon name="mdi:pencil-circle" />
-              <span>{{ diff.modified.length }} files modified</span>
+              <span>{{ diff.modified?.length || 0 }} files modified</span>
             </div>
             <div class="summary-stat unchanged">
               <Icon name="mdi:check-circle" />
-              <span>{{ diff.unchanged.length }} files unchanged</span>
+              <span>{{ diff.unchanged?.length || 0 }} files unchanged</span>
             </div>
           </div>
 
@@ -131,7 +131,7 @@
 import { ref, computed, onMounted } from 'vue';
 import type { CheckpointV2, CheckpointDiff } from '~/stores/checkpoint-v2';
 import { useCheckpointV2Store } from '~/stores/checkpoint-v2';
-import Icon from '~/components/UI/Icon.vue';
+import Icon from '~/components/Icon.vue';
 
 const props = defineProps<{
   checkpoint: CheckpointV2;

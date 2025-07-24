@@ -230,7 +230,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
-import Icon from '~/components/UI/Icon.vue';
+import Icon from '~/components/Icon.vue';
 
 interface WorktreeSession {
   id: string;
@@ -436,14 +436,14 @@ function formatDate(date: Date) {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--color-background);
-  color: var(--color-text);
+  background: #252526;
+  color: #cccccc;
 }
 
 .comparison-header {
   padding: 16px;
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-background-soft);
+  border-bottom: 1px solid #454545;
+  background: #2d2d30;
 }
 
 .comparison-header h3 {
@@ -467,15 +467,15 @@ function formatDate(date: Date) {
 
 .selector-group label {
   font-size: 12px;
-  color: var(--color-text-secondary);
+  color: #858585;
   font-weight: 500;
 }
 
 .selector-group select {
   padding: 8px 12px;
-  background: var(--color-background);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
+  background: #252526;
+  color: #cccccc;
+  border: 1px solid #454545;
   border-radius: 4px;
   font-size: 14px;
   cursor: pointer;
@@ -483,7 +483,7 @@ function formatDate(date: Date) {
 
 .compare-icon {
   font-size: 24px;
-  color: var(--color-text-secondary);
+  color: #858585;
 }
 
 .empty-state,
@@ -494,7 +494,7 @@ function formatDate(date: Date) {
   align-items: center;
   justify-content: center;
   gap: 16px;
-  color: var(--color-text-secondary);
+  color: #858585;
 }
 
 .empty-state .icon,
@@ -521,8 +521,8 @@ function formatDate(date: Date) {
 
 .comparison-tabs {
   display: flex;
-  background: var(--color-background-soft);
-  border-bottom: 1px solid var(--color-border);
+  background: #2d2d30;
+  border-bottom: 1px solid #454545;
   padding: 0 16px;
 }
 
@@ -533,7 +533,7 @@ function formatDate(date: Date) {
   padding: 12px 16px;
   background: none;
   border: none;
-  color: var(--color-text-secondary);
+  color: #858585;
   cursor: pointer;
   font-size: 14px;
   font-weight: 500;
@@ -542,13 +542,13 @@ function formatDate(date: Date) {
 }
 
 .comparison-tabs button:hover {
-  color: var(--color-text);
-  background: var(--color-background-mute);
+  color: #cccccc;
+  background: #3e3e42;
 }
 
 .comparison-tabs button.active {
-  color: var(--color-primary);
-  border-bottom-color: var(--color-primary);
+  color: #007acc;
+  border-bottom-color: #007acc;
 }
 
 .tab-content {
@@ -570,14 +570,14 @@ function formatDate(date: Date) {
   align-items: center;
   gap: 12px;
   padding: 16px;
-  background: var(--color-background-soft);
-  border: 1px solid var(--color-border);
+  background: #2d2d30;
+  border: 1px solid #454545;
   border-radius: 8px;
 }
 
 .metric-card .icon {
   font-size: 24px;
-  color: var(--color-primary);
+  color: #007acc;
 }
 
 .metric-info {
@@ -587,7 +587,7 @@ function formatDate(date: Date) {
 
 .metric-label {
   font-size: 12px;
-  color: var(--color-text-secondary);
+  color: #858585;
 }
 
 .metric-value {
@@ -612,7 +612,7 @@ function formatDate(date: Date) {
   align-items: center;
   gap: 12px;
   padding: 8px;
-  background: var(--color-background-soft);
+  background: #2d2d30;
   border-radius: 4px;
 }
 
@@ -620,11 +620,11 @@ function formatDate(date: Date) {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--color-primary);
+  background: #007acc;
 }
 
 .timeline-marker.session1 {
-  background: var(--color-success);
+  background: #4ec9b0;
 }
 
 .timeline-marker.session2 {
@@ -639,12 +639,12 @@ function formatDate(date: Date) {
 }
 
 .timeline-time {
-  color: var(--color-text-secondary);
+  color: #858585;
 }
 
 .timeline-session {
   margin-left: auto;
-  color: var(--color-text-secondary);
+  color: #858585;
   font-size: 12px;
 }
 
@@ -681,7 +681,7 @@ function formatDate(date: Date) {
 }
 
 .file-item:hover {
-  background: var(--color-background-mute);
+  background: #3e3e42;
 }
 
 .file-item.modified {
@@ -689,7 +689,7 @@ function formatDate(date: Date) {
 }
 
 .file-item.added {
-  color: var(--color-success);
+  color: #4ec9b0;
 }
 
 .file-item.modified {
@@ -697,7 +697,7 @@ function formatDate(date: Date) {
 }
 
 .file-item.removed {
-  color: var(--color-error);
+  color: #f48771;
 }
 
 .action-icon {
@@ -733,15 +733,15 @@ function formatDate(date: Date) {
 
 .commit-item {
   padding: 12px;
-  background: var(--color-background-soft);
-  border: 1px solid var(--color-border);
+  background: #2d2d30;
+  border: 1px solid #454545;
   border-radius: 4px;
 }
 
 .commit-hash {
   font-family: monospace;
   font-size: 12px;
-  color: var(--color-primary);
+  color: #007acc;
   margin-bottom: 4px;
 }
 
@@ -754,7 +754,7 @@ function formatDate(date: Date) {
   display: flex;
   justify-content: space-between;
   font-size: 12px;
-  color: var(--color-text-secondary);
+  color: #858585;
 }
 
 /* Outputs tab */
@@ -772,8 +772,8 @@ function formatDate(date: Date) {
 }
 
 .output-content {
-  background: var(--color-background-soft);
-  border: 1px solid var(--color-border);
+  background: #2d2d30;
+  border: 1px solid #454545;
   border-radius: 4px;
   padding: 12px;
   overflow: auto;
@@ -802,8 +802,8 @@ function formatDate(date: Date) {
 }
 
 .diff-modal {
-  background: var(--color-background);
-  border: 1px solid var(--color-border);
+  background: #252526;
+  border: 1px solid #454545;
   border-radius: 8px;
   width: 80%;
   max-width: 1000px;
@@ -818,7 +818,7 @@ function formatDate(date: Date) {
   align-items: center;
   justify-content: space-between;
   padding: 16px;
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid #454545;
 }
 
 .diff-modal-header h3 {
@@ -833,13 +833,13 @@ function formatDate(date: Date) {
   padding: 4px;
   cursor: pointer;
   border-radius: 4px;
-  color: var(--color-text-secondary);
+  color: #858585;
   transition: all 0.2s;
 }
 
 .close-button:hover {
-  background: var(--color-background-mute);
-  color: var(--color-text);
+  background: #3e3e42;
+  color: #cccccc;
 }
 
 .diff-modal-content {
@@ -856,10 +856,5 @@ function formatDate(date: Date) {
   line-height: 1.5;
 }
 
-/* Dark theme adjustments */
-:root {
-  --color-success: #43b02a;
-  --color-warning: #ff9800;
-  --color-error: #f44336;
-}
+
 </style>

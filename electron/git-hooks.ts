@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron';
 import * as path from 'path';
-import * as fs from 'fs-extra';
+import fs from 'fs-extra';
 import * as os from 'os';
 
 export interface GitHook {
@@ -45,12 +45,14 @@ export class GitHooksManager {
   private backupPath: string;
   private options: HookOptions;
   
-  constructor(repoPath: string) {
+  constructor(repoPath: string, setupHandlers: boolean = true) {
     this.repoPath = repoPath;
     this.hooksPath = path.join(repoPath, '.git', 'hooks');
     this.backupPath = path.join(repoPath, '.git', 'hooks-backup');
     this.options = this.loadOptions();
-    this.setupIpcHandlers();
+    if (setupHandlers) {
+      this.setupIpcHandlers();
+    }
   }
   
   private setupIpcHandlers() {
@@ -247,25 +249,25 @@ export class GitHooksManager {
       switch (hookName) {
         case 'pre-commit':
           this.options.preCommit = { ...this.options.preCommit, ...options };
-          if (this.options.preCommit.enabled) {
+          if (this.options.preCommit?.enabled) {
             await this.installPreCommitHook();
           }
           break;
         case 'post-commit':
           this.options.postCommit = { ...this.options.postCommit, ...options };
-          if (this.options.postCommit.enabled) {
+          if (this.options.postCommit?.enabled) {
             await this.installPostCommitHook();
           }
           break;
         case 'pre-push':
           this.options.prePush = { ...this.options.prePush, ...options };
-          if (this.options.prePush.enabled) {
+          if (this.options.prePush?.enabled) {
             await this.installPrePushHook();
           }
           break;
         case 'commit-msg':
           this.options.commitMsg = { ...this.options.commitMsg, ...options };
-          if (this.options.commitMsg.enabled) {
+          if (this.options.commitMsg?.enabled) {
             await this.installCommitMsgHook();
           }
           break;
@@ -291,7 +293,7 @@ export class GitHooksManager {
       // Test hook with dummy data
       const { exec } = require('child_process');
       const output = await new Promise<string>((resolve, reject) => {
-        exec(`sh ${hookPath} test`, { cwd: this.repoPath }, (error, stdout, stderr) => {
+        exec(`sh ${hookPath} test`, { cwd: this.repoPath }, (error: any, stdout: string, stderr: string) => {
           if (error && error.code !== 0) {
             resolve(`Hook test failed:\n${stdout}\n${stderr}`);
           } else {
@@ -511,7 +513,7 @@ url="$2"
       script += `
 # Check protected branches
 protected_branches="main master production"
-current_branch=$(git symbolic-ref HEAD | sed -e 's,.*/\(.*\),\1,')
+current_branch=$(git symbolic-ref HEAD | sed -e 's,.*/\\(.*\\),\\1,')
 
 for branch in $protected_branches; do
   if [ "$current_branch" = "$branch" ]; then
