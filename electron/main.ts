@@ -119,7 +119,7 @@ app.on('window-all-closed', () => {
 });
 
 // Claude Process Management using PTY with multi-instance support
-ipcMain.handle('claude:start', async (event, instanceId: string, workingDirectory: string, instanceName?: string) => {
+ipcMain.handle('claude:start', async (event, instanceId: string, workingDirectory: string, instanceName?: string, runConfig?: { command?: string; args?: string[] }) => {
   if (claudeInstances.has(instanceId)) {
     return { success: false, error: 'Claude instance already running' };
   }
@@ -130,8 +130,26 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
 
     // Get the command configuration
     const debugArgs = process.env.CLAUDE_DEBUG === 'true' ? ['--debug'] : [];
-    const { command, args: commandArgs, useShell } = ClaudeDetector.getClaudeCommand(claudeInfo, debugArgs);
 
+    let { command, args: commandArgs, useShell } = ClaudeDetector.getClaudeCommand(claudeInfo, debugArgs);
+    
+    // Override with run config if provided
+    if (runConfig) {
+      if (runConfig.command) {
+        // If the command is just 'claude', use the detected path
+        command = runConfig.command === 'claude' ? command : runConfig.command;
+      }
+      if (runConfig.args && runConfig.args.length > 0) {
+        // When we have custom args, we need to rebuild the command
+        const allArgs = [...runConfig.args, ...debugArgs];
+        const result = ClaudeDetector.getClaudeCommand(claudeInfo, allArgs);
+        command = result.command;
+        commandArgs = result.args;
+        useShell = result.useShell;
+      }
+    }
+    
+  
     // Log settings file to verify it exists
     const settingsPath = join(homedir(), '.claude', 'settings.json');
     if (!existsSync(settingsPath)) {

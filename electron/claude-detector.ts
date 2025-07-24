@@ -179,9 +179,16 @@ export class ClaudeDetector {
     // proper environment setup (including PATH modifications)
     if (claudeInfo.source === 'local' || claudeInfo.source === 'shell') {
       const userShell = process.env.SHELL || '/bin/bash';
+      // Build the full command with proper quoting
+      // We need to escape the command for the shell
+      const quotedPath = `'${claudeInfo.path}'`;
+      const quotedArgs = args.map(arg => `'${arg}'`).join(' ');
+      const fullCommand = args.length > 0 
+        ? `${quotedPath} ${quotedArgs}`
+        : quotedPath;
       return {
         command: userShell,
-        args: ['-l', '-c', `"${claudeInfo.path}" ${args.join(' ')}`],
+        args: ['-l', '-c', fullCommand],
         useShell: true
       };
     }
