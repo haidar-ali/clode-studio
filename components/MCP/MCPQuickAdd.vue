@@ -855,9 +855,9 @@ const serverTemplates: MCPServerTemplate[] = [
     detailedDescription: 'Automate Chromium, Firefox and WebKit with a single API.',
     icon: 'mdi:web',
     type: 'stdio',
-    installCommand: 'npx -y @modelcontextprotocol/server-playwright',
+    installCommand: 'npm install -g @playwright/mcp',
     command: 'npx',
-    args: ['-y', '@modelcontextprotocol/server-playwright'],
+    args: ['@playwright/mcp'],
     category: 'automation'
   },
   {
