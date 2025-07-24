@@ -106,17 +106,23 @@ export const useEditorStore = defineStore('editor', {
       // Clear all tabs and reset active tab
       this.tabs = [];
       this.activeTabId = null;
-      
+
       console.log('Closed all editor tabs for workspace switch');
     },
     
     updateFileContent(path: string, content: string) {
-      const tab = this.tabs.find(t => t.path === path);
-      if (tab) {
-        console.log('Updating file content from external change:', path);
+      const tabIndex = this.tabs.findIndex(t => t.path === path);
+      if (tabIndex !== -1) {
+        const tab = this.tabs[tabIndex];
         // Only update if content is different and tab is not dirty
         if (tab.content !== content && !tab.isDirty) {
-          tab.content = content;
+          console.log('Updating file content from external change:', path);
+          
+          // Use Vue's reactivity system to ensure the change is detected
+          this.tabs[tabIndex] = {
+            ...tab,
+            content: content
+          };
         }
       }
     },
