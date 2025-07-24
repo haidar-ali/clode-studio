@@ -14,7 +14,23 @@
             size="14" 
             class="tab-icon"
           />
-          <span class="tab-name">{{ instance.name }}</span>
+          <input
+            v-if="editingInstanceId === instance.id"
+            v-model="editingName"
+            type="text"
+            class="tab-name-input"
+            @blur="saveInstanceName(instance.id)"
+            @keyup.enter="saveInstanceName(instance.id)"
+            @keyup.escape="cancelEdit"
+            @click.stop
+            :ref="el => { if (editingInstanceId === instance.id) nextTick(() => (el as HTMLInputElement)?.focus()) }"
+          />
+          <span 
+            v-else
+            class="tab-name"
+            @dblclick.stop="startEditName(instance)"
+            :title="'Double-click to rename'"
+          >{{ instance.name }}</span>
           <div class="tab-status" :class="`status-${instance.status}`"></div>
           <button
             v-if="instances.length > 1"
@@ -52,11 +68,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue';
+import { computed, onMounted, ref, nextTick } from 'vue';
 import { useClaudeInstancesStore } from '~/stores/claude-instances';
 import ClaudeTerminalTab from './ClaudeTerminalTab.vue';
 
 const instancesStore = useClaudeInstancesStore();
+
+// Editing state
+const editingInstanceId = ref<string | null>(null);
+const editingName = ref('');
 
 const instances = computed(() => instancesStore.instancesList);
 const activeInstanceId = computed(() => instancesStore.activeInstanceId);
@@ -87,6 +107,25 @@ const updateInstanceStatus = (id: string, status: any, pid?: number) => {
 
 const updateInstancePersonality = (id: string, personalityId: string | undefined) => {
   instancesStore.updateInstancePersonality(id, personalityId);
+};
+
+// Name editing functions
+const startEditName = (instance: any) => {
+  editingInstanceId.value = instance.id;
+  editingName.value = instance.name;
+};
+
+const saveInstanceName = async (instanceId: string) => {
+  const trimmedName = editingName.value.trim();
+  if (trimmedName && trimmedName !== instancesStore.instances.get(instanceId)?.name) {
+    await instancesStore.updateInstanceName(instanceId, trimmedName);
+  }
+  cancelEdit();
+};
+
+const cancelEdit = () => {
+  editingInstanceId.value = null;
+  editingName.value = '';
 };
 
 onMounted(async () => {
@@ -184,6 +223,19 @@ onMounted(async () => {
   max-width: 120px;
   overflow: hidden;
   text-overflow: ellipsis;
+  cursor: text;
+}
+
+.tab-name-input {
+  max-width: 120px;
+  background: #3c3c3c;
+  border: 1px solid #007acc;
+  border-radius: 2px;
+  color: #d4d4d4;
+  padding: 2px 4px;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
 }
 
 .tab-status {

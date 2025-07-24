@@ -178,6 +178,18 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
       
       await this.saveInstances();
       
+      // Save to workspace configuration if we have a workspace
+      if (typeof window !== 'undefined' && window.electronAPI?.store?.get) {
+        try {
+          const storedWorkspace = await window.electronAPI.store.get('workspacePath');
+          if (storedWorkspace) {
+            await this.saveWorkspaceConfiguration(storedWorkspace);
+          }
+        } catch (error) {
+          console.error('Failed to save workspace configuration after creating instance:', error);
+        }
+      }
+      
       return id;
     },
 
@@ -204,6 +216,18 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
       }
 
       await this.saveInstances();
+      
+      // Save to workspace configuration if we have a workspace
+      if (typeof window !== 'undefined' && window.electronAPI?.store?.get) {
+        try {
+          const storedWorkspace = await window.electronAPI.store.get('workspacePath');
+          if (storedWorkspace) {
+            await this.saveWorkspaceConfiguration(storedWorkspace);
+          }
+        } catch (error) {
+          console.error('Failed to save workspace configuration after removing instance:', error);
+        }
+      }
     },
 
     setActiveInstance(id: string) {
@@ -237,11 +261,23 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
       }
     },
 
-    updateInstanceName(id: string, name: string) {
+    async updateInstanceName(id: string, name: string) {
       const instance = this.instances.get(id);
       if (instance) {
         instance.name = name;
-        this.saveInstances();
+        await this.saveInstances();
+        
+        // Also save to workspace configuration if we have a workspace
+        if (typeof window !== 'undefined' && window.electronAPI?.store?.get) {
+          try {
+            const workspacePath = await window.electronAPI.store.get('workspacePath');
+            if (workspacePath) {
+              await this.saveWorkspaceConfiguration(workspacePath);
+            }
+          } catch (error) {
+            console.error('Failed to save workspace configuration after name update:', error);
+          }
+        }
       }
     },
 
