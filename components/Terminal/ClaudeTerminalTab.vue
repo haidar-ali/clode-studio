@@ -173,12 +173,30 @@ const initTerminal = () => {
     fastScrollSensitivity: 5,
     windowsMode: false
   });
-  
+
   fitAddon = new FitAddon();
   terminal.loadAddon(fitAddon);
   
   terminal.open(terminalElement.value);
   fitAddon.fit();
+
+  terminal.attachCustomKeyEventHandler((event: KeyboardEvent) => {
+    
+    // Block Option+Enter (Alt+Enter) - prevent xterm's default behavior
+    if (event.type === 'keydown' && event.key === 'Enter' && event.altKey) {
+      return false;
+    }
+
+    // Handle Shift+Enter for inserting a newline
+    if (event.type === 'keydown' && event.key === 'Enter' && event.shiftKey) {
+      event.preventDefault();
+      terminal.paste('\n');
+      return false;
+    }
+
+    return true;
+  });
+  console.log('Custom key handler attached for Shift+Enter');
   
   terminal.onScroll(() => {
     const buffer = terminal.buffer.active;
