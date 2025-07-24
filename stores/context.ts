@@ -180,7 +180,7 @@ export const useContextStore = defineStore('context', () => {
         const persistedData = await window.electronAPI.workspace.loadContext(tasksStore.projectPath);
         if (persistedData.success && persistedData.data && persistedData.data.checkpoints) {
           checkpoints.value = persistedData.data.checkpoints || [];
-          console.log('Loaded persisted checkpoints:', checkpoints.value.length);
+          
         }
       }
     } catch (error) {
@@ -208,5 +208,12 @@ export const useContextStore = defineStore('context', () => {
     provideFeedback,
     getContextAnalytics,
     loadPersistedCheckpoints,
+    
+    // Method for checkpoint system
+    restoreMessages(messages: any[]) {
+      // This would need to integrate with the chat store
+      // For now, just log
+      
+    }
   };
 });

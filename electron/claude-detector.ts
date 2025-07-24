@@ -30,8 +30,6 @@ export class ClaudeDetector {
       const userShell = process.env.SHELL || '/bin/bash';
       const shellCommand = `${userShell} -l -c "which claude && claude --version"`;
       
-      console.log('Detecting Claude installation...');
-      console.log('Shell command:', shellCommand);
       
       const { stdout, stderr } = await execAsync(shellCommand, {
         cwd: workingDirectory || process.cwd(),
@@ -48,8 +46,6 @@ export class ClaudeDetector {
       const versionInfo = lines.slice(1).join(' ');
       
       if (claudePath && existsSync(claudePath)) {
-        console.log('Found Claude via shell:', claudePath);
-        console.log('Version info:', versionInfo);
         
         // Determine the source based on the path
         let source: ClaudeInfo['source'] = 'shell';
@@ -76,7 +72,6 @@ export class ClaudeDetector {
     }
     
     // Fallback: Check common installation locations
-    console.log('Falling back to manual detection...');
     const fallbackPaths = [
       // Local node_modules (highest priority)
       join(process.cwd(), 'node_modules', '.bin', 'claude'),
@@ -95,7 +90,6 @@ export class ClaudeDetector {
     
     for (const path of fallbackPaths) {
       if (existsSync(path)) {
-        console.log('Found Claude at fallback path:', path);
         
         // Try to get version
         let version = 'unknown';

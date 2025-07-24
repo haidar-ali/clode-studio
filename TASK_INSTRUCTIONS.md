@@ -9,15 +9,21 @@ Each task in TASKS.md should include the following metadata:
 
 ### Required Fields:
 - **Content**: The task description
-- **Status**: pending | in_progress | completed
+- **Status**: backlog | pending | in_progress | completed
 - **Priority**: high | medium | low
 - **Assignee**: Claude | User | Both
 - **Type**: feature | bugfix | refactor | documentation | research
 
 ### Optional Fields:
+- **ID**: A custom identifier for easy reference (e.g., TASK-001, AUTH-42)
 - **Description**: Additional context or details about the task
-- **Files Modified**: List of files that will be or were modified
-- **Dependencies**: Other tasks that must be completed first
+- **Resources**: Linked resources including:
+  - Files: Source files relevant to the task
+  - Tasks: Related or dependent tasks (by ID)
+  - Knowledge: Documentation or reference materials
+  - Hooks: Relevant automation scripts
+  - MCP: Tools or servers needed
+  - Commands: CLI commands or scripts
 
 ## TASKS.md Format
 
@@ -30,38 +36,42 @@ Each task in TASKS.md should include the following metadata:
 ## Backlog ([count])
 
 - [ ] **[Task Content]**
+  - ID: FEAT-001
   - Assignee: Claude
   - Type: feature
   - Priority: low
   - Description: Future enhancement to consider
-  - Files: TBD
+  - Resources: Task: AUTH-01, File: src/config.ts
 
 ## To Do ([count])
 
 - [ ] **[Task Content]**
+  - ID: API-003
   - Assignee: Claude
   - Type: feature
   - Priority: high
   - Description: Brief description of what needs to be done
-  - Files: src/component.ts, src/types.ts
+  - Resources: File: src/api/users.ts, Task: AUTH-01, knowledge: API Guidelines
 
 ## In Progress ([count])
 
 - [ ] **[Task Content]** ⏳
+  - ID: BUG-007
   - Assignee: Claude
   - Type: bugfix
   - Priority: high
   - Description: Currently working on fixing the login validation
-  - Files: src/auth/login.ts
+  - Resources: File: src/auth/login.ts, File: src/utils/validator.ts
 
 ## Completed ([count])
 
 - [x] ~~[Task Content]~~
+  - ~~ID: AUTH-01~~
   - ~~Assignee: Claude~~
   - ~~Type: feature~~
   - ~~Priority: medium~~
   - ~~Description: Implemented user authentication~~
-  - ~~Files: src/auth/*, src/middleware/auth.ts~~
+  - ~~Resources: File: src/auth/*, File: src/middleware/auth.ts~~
 ```
 
 ## Important Rules for Claude
@@ -69,8 +79,9 @@ Each task in TASKS.md should include the following metadata:
 ### 1. Task Creation
 - **ALWAYS** create tasks in TASKS.md when you use TodoWrite
 - Include all required metadata (assignee, type, priority)
+- Consider adding an ID for easy reference in resources
 - Add helpful descriptions for future reference
-- List files that will be modified
+- Link relevant resources (files, other tasks, knowledge, etc.)
 
 ### 2. Task Updates
 - Move tasks between sections as you work on them:
@@ -98,6 +109,13 @@ Each task in TASKS.md should include the following metadata:
 - **User**: Tasks requiring user input or decisions
 - **Both**: Collaborative tasks needing both parties
 
+### 6. Resource Linking
+- **Files**: Use relative paths from project root
+- **Tasks**: Reference by ID (e.g., Task: AUTH-01)
+- **Knowledge**: Reference by title or category
+- **MCP/Commands**: Reference by name
+- Tasks can link to other tasks as dependencies or related work
+
 ## Best Practices
 
 1. **Be Specific**: Write clear, actionable task descriptions
@@ -122,11 +140,12 @@ User: "Add a search functionality to the user list"
 
 Claude should create in TASKS.md:
 - [ ] **Add search functionality to user list**
+  - ID: FEAT-023
   - Assignee: Claude
   - Type: feature
   - Priority: medium
   - Description: Implement real-time search filtering for the user list component
-  - Files: src/components/UserList.tsx, src/hooks/useSearch.ts
+  - Resources: File: src/components/UserList.tsx, File: src/hooks/useSearch.ts, Task: UI-001
 ```
 
 Remember: Good task management helps maintain project clarity and progress visibility!

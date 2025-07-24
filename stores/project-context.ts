@@ -77,7 +77,7 @@ export const useProjectContextStore = defineStore('projectContext', () => {
           // Restore working files
           if (persistedData.data.workingFiles && persistedData.data.workingFiles.length > 0) {
             workingFiles.value = persistedData.data.workingFiles;
-            console.log('Restored working files:', workingFiles.value.length);
+            
           }
         }
         
@@ -276,7 +276,7 @@ export const useProjectContextStore = defineStore('projectContext', () => {
         
         // Set up file change listener
         window.electronAPI.context.onFileChange((event, filePath) => {
-          console.log(`File ${event}:`, filePath);
+          
           
           // Refresh statistics to update file counts
           refreshStatistics();

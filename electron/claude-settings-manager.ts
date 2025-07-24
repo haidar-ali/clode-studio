@@ -54,7 +54,6 @@ export class ClaudeSettingsManager {
     try {
       await this.ensureClaudeDir();
       await writeFile(this.userSettingsPath, JSON.stringify(settings, null, 2), 'utf-8');
-      console.log('Saved Claude settings to:', this.userSettingsPath);
     } catch (error) {
       console.error('Failed to save Claude settings:', error);
       throw error;
@@ -191,21 +190,17 @@ export class ClaudeSettingsManager {
     command: string;
     disabled?: boolean;
   }>) {
-    console.log('saveHooks called with:', hooks);
-    
     // Save IDE hooks separately
     await this.saveIDEHooks(hooks);
     
     // Save Claude format (without ideHooks field)
     const settings = await this.loadSettings();
     const convertedHooks = this.convertToClaudeFormat(hooks);
-    console.log('Converted hooks to Claude format:', JSON.stringify(convertedHooks, null, 2));
     
     // Remove ideHooks if it exists from old version
     delete settings.ideHooks;
     
     settings.hooks = convertedHooks;
-    console.log('Final settings to save:', JSON.stringify(settings, null, 2));
     await this.saveSettings(settings);
   }
   

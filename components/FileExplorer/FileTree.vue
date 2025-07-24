@@ -21,7 +21,12 @@
     <div v-if="hasWorkspace" class="workspace-info">
       <div class="workspace-path">
         <Icon name="mdi:folder" />
-        {{ workspaceName }}
+        <span v-if="activeWorktreePath && activeWorktreePath !== currentWorkspacePath">
+          {{ workspaceName }} / {{ activeWorktreePath.split('/').pop() }}
+        </span>
+        <span v-else>
+          {{ workspaceName }}
+        </span>
       </div>
     </div>
     
@@ -121,7 +126,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { useEditorStore } from '~/stores/editor';
 import { useTasksStore } from '~/stores/tasks';
 import { useWorkspaceManager } from '~/composables/useWorkspaceManager';
@@ -148,15 +153,18 @@ const renameInput = ref<HTMLInputElement>();
 const modalMode = ref<'rename' | 'newFile' | 'newFolder'>('rename');
 
 // Use workspace manager's computed properties
-const { currentWorkspacePath, workspaceName, hasWorkspace, isChangingWorkspace, selectWorkspace } = workspaceManager;
+const { currentWorkspacePath, workspaceName, hasWorkspace, isChangingWorkspace, selectWorkspace, activeWorktreePath } = workspaceManager;
+
+// Use active worktree path if available, otherwise use workspace path
+const explorerPath = computed(() => activeWorktreePath.value || currentWorkspacePath.value);
 
 const handleWorkspaceSelect = async () => {
   try {
     isLoading.value = true;
     await selectWorkspace();
     // After workspace change, reload the directory
-    if (currentWorkspacePath.value) {
-      await loadDirectory(currentWorkspacePath.value);
+    if (explorerPath.value) {
+      await loadDirectory(explorerPath.value);
     }
   } catch (error) {
     alert(`Failed to load workspace: ${error instanceof Error ? error.message : String(error)}`);
@@ -186,7 +194,7 @@ const loadDirectory = async (dirPath: string): Promise<FileNode[]> => {
       children: file.isDirectory ? [] : undefined
     }));
   
-  if (dirPath === currentWorkspacePath.value) {
+  if (dirPath === explorerPath.value) {
     fileTree.value = nodes;
   }
   
@@ -386,7 +394,7 @@ const confirmRename = async () => {
     }
     
     // Refresh the directory
-    await loadDirectory(currentWorkspacePath.value);
+    await loadDirectory(explorerPath.value);
     
   } catch (error) {
     console.error('Failed to perform operation:', error);
@@ -414,7 +422,7 @@ const confirmDelete = async () => {
     }
     
     // Refresh the directory
-    await loadDirectory(currentWorkspacePath.value);
+    await loadDirectory(explorerPath.value);
     
   } catch (error) {
     console.error('Failed to delete:', error);
@@ -435,24 +443,35 @@ const loadSavedWorkspace = async () => {
   const savedPath = await workspaceManager.loadWorkspaceFromStorage();
   if (savedPath) {
     try {
-      await loadDirectory(savedPath);
-      // Start watching the saved workspace
-      await window.electronAPI.fs.watchDirectory(savedPath);
-      
-      // Load tasks for the saved workspace
-      tasksStore.setProjectPath(savedPath);
-      await tasksStore.loadTasksFromProject();
+      // Use explorer path which will be the active worktree or workspace
+      await loadDirectory(explorerPath.value);
+      // Watching is handled by workspace manager
     } catch (error) {
       console.error('Failed to load saved workspace:', error);
     }
   }
 };
 
+// Watch for active worktree changes
+watch(explorerPath, async (newPath, oldPath) => {
+  if (newPath && newPath !== oldPath) {
+    
+    isLoading.value = true;
+    try {
+      await loadDirectory(newPath);
+    } catch (error) {
+      console.error('Failed to load worktree directory:', error);
+    } finally {
+      isLoading.value = false;
+    }
+  }
+});
+
 // Handle directory changes
 const handleDirectoryChange = async (data: { path: string; eventType: string; filename: string }) => {
   
-  // If it's the root workspace
-  if (data.path === currentWorkspacePath.value) {
+  // If it's the root workspace or active worktree
+  if (data.path === explorerPath.value) {
     await loadDirectory(data.path);
     return;
   }

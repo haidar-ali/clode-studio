@@ -314,7 +314,7 @@ const viewClaudeSettings = async () => {
       const claudeDir = `${homePath}/.claude`;
       await window.electronAPI.fs.ensureDir(claudeDir);
       await window.electronAPI.fs.writeFile(settingsPath, JSON.stringify({ hooks: {} }, null, 2));
-      console.log('Created new Claude settings file');
+      
     } catch (error) {
       console.error('Failed to create settings file:', error);
       alert(`Claude settings file not found at ~/.claude/settings.json\n\nError: ${error}\n\nPlease manually create the .claude directory in your home folder.`);

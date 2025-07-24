@@ -302,7 +302,7 @@ async function loadTemplate(template: PromptTemplate) {
 async function deleteTemplate(templateId: string) {
   if (confirm('Are you sure you want to delete this template?')) {
     // TODO: Implement delete functionality
-    console.log('Delete template:', templateId);
+    
   }
 }
 </script>

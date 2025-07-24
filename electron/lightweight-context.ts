@@ -77,6 +77,8 @@ export class LightweightContext {
     'node_modules',
     '.git',
     '.claude',
+    '.claude-checkpoints',
+    '.worktrees',
     'dist',
     'build',
     '.output',
@@ -99,10 +101,12 @@ export class LightweightContext {
     
     this.workspacePath = workspacePath;
     
+    // Load .gitignore patterns
+    await this.loadGitignorePatterns();
+    
     // Try to load persisted context first
     const persistedData = await workspacePersistence.loadWorkspaceContext(workspacePath);
     if (persistedData && persistedData.projectInfo) {
-      console.log('Loaded persisted workspace context');
       this.projectInfo = persistedData.projectInfo;
       // Still scan to get fresh file data
     }
@@ -119,7 +123,6 @@ export class LightweightContext {
   }
 
   async scanWorkspace(): Promise<void> {
-    console.log('Scanning workspace:', this.workspacePath);
     const startTime = Date.now();
     
     this.fileCache.clear();
@@ -128,8 +131,6 @@ export class LightweightContext {
     // Build project info
     this.projectInfo = this.analyzeProject(files);
     this.lastScanTime = Date.now();
-    
-    console.log(`Scanned ${files.length} files in ${Date.now() - startTime}ms`);
   }
 
   private async scanDirectory(dirPath: string, depth: number = 0): Promise<FileInfo[]> {
@@ -442,8 +443,6 @@ export class LightweightContext {
   startWatching(): void {
     if (!this.workspacePath) return;
     
-    console.log('Starting file watching for:', this.workspacePath);
-    
     try {
       // Watch the workspace directory
       const watcher = watch(this.workspacePath, { recursive: true }, (eventType, filename) => {
@@ -472,7 +471,6 @@ export class LightweightContext {
   }
   
   stopWatching(): void {
-    console.log('Stopping file watchers');
     
     for (const [path, watcher] of this.watchers) {
       try {
@@ -509,19 +507,16 @@ export class LightweightContext {
             // File added
             await this.addFileToCache(filePath);
             this.notifyWatchers('add', filePath);
-            console.log('File added:', relativePath);
           } else {
             // File removed
             this.removeFileFromCache(filePath);
             this.notifyWatchers('remove', filePath);
-            console.log('File removed:', relativePath);
           }
         } else if (eventType === 'change') {
           // File modified
           if (this.fileCache.has(filePath)) {
             await this.updateFileInCache(filePath);
             this.notifyWatchers('change', filePath);
-            console.log('File changed:', relativePath);
           }
         }
         
@@ -599,6 +594,30 @@ export class LightweightContext {
       } catch (error) {
         console.warn('Error in file watcher callback:', error);
       }
+    }
+  }
+
+  private async loadGitignorePatterns(): Promise<void> {
+    try {
+      const gitignorePath = join(this.workspacePath, '.gitignore');
+      if (existsSync(gitignorePath)) {
+        const gitignoreContent = await readFile(gitignorePath, 'utf-8');
+        const lines = gitignoreContent.split('\n');
+        
+        for (const line of lines) {
+          const trimmedLine = line.trim();
+          // Skip empty lines and comments
+          if (!trimmedLine || trimmedLine.startsWith('#')) continue;
+          
+          // Add pattern if not already in default patterns
+          if (!this.ignorePatterns.includes(trimmedLine)) {
+            this.ignorePatterns.push(trimmedLine);
+          }
+        }
+        
+      }
+    } catch (error) {
+      console.warn('Failed to load .gitignore patterns:', error);
     }
   }
 

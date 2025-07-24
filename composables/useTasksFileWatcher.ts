@@ -26,12 +26,12 @@ export const useTasksFileWatcher = () => {
     
     // Set new timer to debounce rapid changes
     debounceTimer = setTimeout(async () => {
-      console.log('TASKS.md changed externally');
+      
       
       try {
         // Replace all tasks with the content from TASKS.md
         const imported = tasksStore.importTasksFromFile(data.content);
-        console.log(`Synced ${imported} tasks from TASKS.md`);
+        
         
         // Update last synced time
         tasksStore.lastSyncedWithClaude = new Date();
@@ -53,7 +53,7 @@ export const useTasksFileWatcher = () => {
         // Watch the file
         await window.electronAPI.fs.watchFile(tasksFilePath.value);
         isWatching.value = true;
-        console.log('Started watching TASKS.md');
+        
         
         // Initial import
         handleTasksFileChange({ path: tasksFilePath.value, content: result.content });
@@ -76,7 +76,7 @@ export const useTasksFileWatcher = () => {
     try {
       await window.electronAPI.fs.unwatchFile(tasksFilePath.value);
       isWatching.value = false;
-      console.log('Stopped watching TASKS.md');
+      
     } catch (error) {
       console.error('Failed to stop watching TASKS.md:', error);
     }

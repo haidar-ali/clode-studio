@@ -329,7 +329,7 @@ function clearUnusedContext() {
 
 function showAdvancedSettings() {
   // Would open a modal with advanced settings
-  console.log('Show advanced context settings');
+  
 }
 
 function addToHistory() {

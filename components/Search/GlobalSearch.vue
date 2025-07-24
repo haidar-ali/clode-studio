@@ -12,7 +12,7 @@
           <Icon name="mdi:close" />
         </button>
       </div>
-      
+
       <div class="search-form">
         <div class="form-group">
           <label>Search</label>
@@ -25,7 +25,7 @@
             @keyup.escape="close"
           />
         </div>
-        
+
         <div class="form-group">
           <label>Replace with (optional)</label>
           <input
@@ -36,7 +36,7 @@
             @keyup.escape="close"
           />
         </div>
-        
+
         <div class="form-options">
           <label>
             <input v-model="caseSensitive" type="checkbox" />
@@ -51,7 +51,7 @@
             Regular expression
           </label>
         </div>
-        
+
         <div class="form-group">
           <label>Include files</label>
           <input
@@ -60,7 +60,7 @@
             placeholder="e.g., *.ts, *.vue (leave empty for all)"
           />
         </div>
-        
+
         <div class="form-group">
           <label>Exclude files</label>
           <input
@@ -69,9 +69,9 @@
             placeholder="e.g., node_modules/**, dist/**"
           />
         </div>
-        
+
         <div class="search-actions">
-          <button @click="performSearch" class="primary-button" :disabled="!searchQuery">
+          <button @click="performSearch" class="primary-button" :disabled="!canSearch">
             <Icon name="mdi:magnify" />
             Search
           </button>
@@ -80,18 +80,22 @@
             Replace All
           </button>
         </div>
+        
+        <div v-if="searchQuery.length > 0 && searchQuery.length < 3" class="search-hint">
+          Please enter at least 3 characters to search
+        </div>
       </div>
-      
+
       <div v-if="isSearching" class="search-status">
         <Icon name="mdi:loading" class="spinner" />
         Searching...
       </div>
-      
+
       <div v-if="searchResults.length > 0" class="search-results">
         <div class="results-header">
           <span>{{ searchResults.length }} results in {{ fileCount }} files</span>
         </div>
-        
+
         <div class="results-list">
           <div v-for="file in searchResults" :key="file.path" class="file-results">
             <div class="file-header" @click="toggleFile(file.path)">
@@ -99,7 +103,7 @@
               <span class="file-path">{{ file.relativePath }}</span>
               <span class="match-count">({{ file.matches.length }})</span>
             </div>
-            
+
             <div v-if="expandedFiles.has(file.path)" class="file-matches">
               <div
                 v-for="(match, index) in file.matches"
@@ -122,7 +126,7 @@
           </div>
         </div>
       </div>
-      
+
       <div v-else-if="hasSearched && searchResults.length === 0" class="no-results">
         No results found
       </div>
@@ -165,7 +169,7 @@ const caseSensitive = ref(false);
 const wholeWord = ref(false);
 const useRegex = ref(false);
 const includePattern = ref('');
-const excludePattern = ref('node_modules/**, dist/**, .git/**');
+const excludePattern = ref('node_modules/**, dist/**, .git/**, .nuxt/**, .claude/**, .claude-checkpoints/**, .worktrees/**, build/**, .output/**, coverage/**, .nyc_output/**, tmp/**, temp/**, .cache/**, .parcel-cache/**, .vscode/**, .idea/**, __pycache__/**, *.pyc, .DS_Store, *.log, *.min.js, *.map, package-lock.json, yarn.lock, *.bundle.js, vendor/**, .next/**, out/**');
 
 const searchResults = ref<FileResult[]>([]);
 const expandedFiles = ref(new Set<string>());
@@ -178,6 +182,10 @@ const workspaceName = computed(() => {
   if (!tasksStore.projectPath) return '';
   const parts = tasksStore.projectPath.split('/');
   return parts[parts.length - 1];
+});
+
+const canSearch = computed(() => {
+  return searchQuery.value.length >= 3;
 });
 
 watch(() => props.isOpen, async (newVal) => {
@@ -201,25 +209,27 @@ const toggleFile = (path: string) => {
 };
 
 const performSearch = async () => {
-  if (!searchQuery.value) return;
-  
+  if (!searchQuery.value || searchQuery.value.length < 3) return;
+
+  console.log('[GlobalSearch] Starting search with query:', searchQuery.value);
+
   // Check if search API is available
   if (!window.electronAPI?.search) {
     alert('Search API not available. Please restart the Electron app.');
     return;
   }
-  
+
   isSearching.value = true;
   hasSearched.value = true;
-  
+
   try {
     const workspacePath = tasksStore.projectPath;
     if (!workspacePath) {
       alert('Please select a workspace first!');
       return;
     }
-    
-    const results = await window.electronAPI.search.findInFiles({
+
+    const searchParams = {
       query: searchQuery.value,
       caseSensitive: caseSensitive.value,
       wholeWord: wholeWord.value,
@@ -227,17 +237,41 @@ const performSearch = async () => {
       includePattern: includePattern.value,
       excludePattern: excludePattern.value,
       workspacePath: workspacePath
-    });
+    };
+
+    console.log('[GlobalSearch] Search params:', searchParams);
+    console.log('[GlobalSearch] Calling electronAPI.search.findInFiles...');
     
-    searchResults.value = results;
+    const startTime = Date.now();
+    
+    let results;
+    try {
+      // Just await the search without a timeout - the backend already has a 2s timeout
+      results = await window.electronAPI.search.findInFiles(searchParams);
+      
+      const searchTime = Date.now() - startTime;
+      console.log(`[GlobalSearch] Search completed in ${searchTime}ms with ${results?.length || 0} results`);
+    } catch (ipcError) {
+      console.error('[GlobalSearch] IPC call failed:', ipcError);
+      throw ipcError;
+    }
+
+    console.log('[GlobalSearch] Received results:', results);
+    searchResults.value = results || [];
+    expandedFiles.value.clear();
+
     // Expand first few files by default
-    results.slice(0, 3).forEach(file => {
-      expandedFiles.value.add(file.path);
-    });
-  } catch (error) {
-    console.error('Search failed:', error);
-    alert('Search failed: ' + error.message);
+    if (results && results.length > 0) {
+      results.slice(0, 3).forEach(file => {
+        expandedFiles.value.add(file.path);
+      });
+    }
+    console.log('[GlobalSearch] Search complete, UI should update');
+  } catch (error: any) {
+    console.error('[GlobalSearch] Search failed:', error);
+    alert('Search failed: ' + (error?.message || 'Unknown error'));
   } finally {
+    console.log('[GlobalSearch] Setting isSearching to false');
     isSearching.value = false;
   }
 };
@@ -246,7 +280,7 @@ const highlightMatch = (text: string, column: number, length: number) => {
   const before = text.substring(0, column);
   const match = text.substring(column, column + length);
   const after = text.substring(column + length);
-  
+
   return `${escapeHtml(before)}<mark>${escapeHtml(match)}</mark>${escapeHtml(after)}`;
 };
 
@@ -257,8 +291,7 @@ const escapeHtml = (text: string) => {
 };
 
 const openFileAtLine = async (filePath: string, line: number) => {
-  await editorStore.openFile(filePath);
-  // TODO: Jump to specific line in editor
+  await editorStore.openFile(filePath, line);
 };
 
 const replaceSingle = async (filePath: string, match: SearchMatch) => {
@@ -273,7 +306,7 @@ const replaceSingle = async (filePath: string, match: SearchMatch) => {
       wholeWord: wholeWord.value,
       useRegex: useRegex.value
     });
-    
+
     // Refresh search results
     await performSearch();
   } catch (error) {
@@ -286,7 +319,7 @@ const replaceAll = async () => {
   if (!confirm(`Replace all ${searchResults.value.reduce((sum, f) => sum + f.matches.length, 0)} occurrences?`)) {
     return;
   }
-  
+
   try {
     for (const file of searchResults.value) {
       await window.electronAPI.search.replaceAllInFile({
@@ -298,7 +331,7 @@ const replaceAll = async () => {
         useRegex: useRegex.value
       });
     }
-    
+
     // Refresh search results
     await performSearch();
     alert('Replace completed successfully!');
@@ -574,5 +607,12 @@ const replaceAll = async () => {
   padding: 40px;
   text-align: center;
   color: #858585;
+}
+
+.search-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #f14c4c;
+  text-align: center;
 }
 </style>

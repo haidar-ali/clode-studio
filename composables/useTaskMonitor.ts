@@ -29,7 +29,7 @@ export const useTaskMonitor = () => {
       const imported = tasksStore.importTasksFromClaude(outputBuffer.value);
       
       if (imported > 0) {
-        console.log(`Imported ${imported} new tasks from Claude's output`);
+        
         
         // Show notification (could be improved with a toast component)
         setTimeout(() => {

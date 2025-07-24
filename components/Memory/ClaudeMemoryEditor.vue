@@ -585,12 +585,12 @@ const extractImports = (content: string): string[] => {
 
 const addImport = () => {
   // Implement import addition logic
-  console.log('Add import');
+  
 };
 
 const validateImports = () => {
   // Implement import validation logic
-  console.log('Validate imports');
+  
 };
 
 // Watch for project path changes
