@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 const electronAPI = {
   claude: {
-    start: (instanceId: string, workingDirectory: string, instanceName?: string): Promise<{
+    start: (instanceId: string, workingDirectory: string, instanceName?: string, runConfig?: { command?: string; args?: string[] }): Promise<{
       success: boolean;
       error?: string;
       pid?: number;
@@ -12,7 +12,7 @@ const electronAPI = {
         source: string;
       };
     }> => 
-      ipcRenderer.invoke('claude:start', instanceId, workingDirectory, instanceName),
+      ipcRenderer.invoke('claude:start', instanceId, workingDirectory, instanceName, runConfig),
     detectInstallation: (): Promise<{
       success: boolean;
       info?: {

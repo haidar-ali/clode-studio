@@ -8,6 +8,10 @@
           :currentPersonalityId="instance.personalityId"
           @update="updatePersonality"
         />
+        <ClaudeRunConfigSelector 
+          v-if="instance.status === 'disconnected'"
+          @config-changed="onConfigChanged"
+        />
         <button
           v-if="instance.status === 'disconnected'"
           @click="startClaude"
@@ -56,7 +60,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
+import { ref, onMounted, onUnmounted, computed, watch, provide } from 'vue';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import type { ClaudeInstance } from '~/stores/claude-instances';
@@ -65,6 +69,8 @@ import { useContextManager } from '~/composables/useContextManager';
 import { useCommandsStore } from '~/stores/commands';
 import PersonalitySelector from './PersonalitySelector.vue';
 import TerminalChatInput from './TerminalChatInput.vue';
+import ClaudeRunConfigSelector from './ClaudeRunConfigSelector.vue';
+import type { ClaudeRunConfig } from '~/stores/claude-run-configs';
 import 'xterm/css/xterm.css';
 
 const props = defineProps<{
@@ -80,6 +86,10 @@ const contextManager = useContextManager();
 const commandsStore = useCommandsStore();
 const terminalElement = ref<HTMLElement>();
 const showChatInput = ref(false);
+const selectedRunConfig = ref<ClaudeRunConfig | null>(null);
+
+// Provide working directory for child components
+provide('workingDirectory', props.instance.workingDirectory);
 
 // Terminal state
 
@@ -341,6 +351,10 @@ const removeClaudeListeners = () => {
   }
 };
 
+const onConfigChanged = (config: ClaudeRunConfig) => {
+  selectedRunConfig.value = config;
+};
+
 const startClaude = async () => {
   if (!terminal) return;
   
@@ -359,10 +373,21 @@ const startClaude = async () => {
   
   emit('status-change', 'connecting');
   
+  // Display the run configuration if it has special parameters
+  if (selectedRunConfig.value && selectedRunConfig.value.args.length > 0) {
+    terminal.writeln(`\x1b[90mRun configuration: ${selectedRunConfig.value.name}\x1b[0m`);
+    terminal.writeln(`\x1b[90mCommand: ${selectedRunConfig.value.command} ${selectedRunConfig.value.args.join(' ')}\x1b[0m`);
+    terminal.writeln('');
+  }
+  
   const result = await window.electronAPI.claude.start(
     props.instance.id, 
     props.instance.workingDirectory,
-    props.instance.name // Pass the instance name for hooks
+    props.instance.name, // Pass the instance name for hooks
+    selectedRunConfig.value ? {
+      command: selectedRunConfig.value.command,
+      args: [...selectedRunConfig.value.args] // Create a new array to ensure it's serializable
+    } : undefined
   );
   
   if (result.success) {
