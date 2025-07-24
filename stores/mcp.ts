@@ -93,7 +93,7 @@ export const useMCPStore = defineStore('mcp', {
           ...(config.headers && { headers: { ...config.headers } })
         };
         
-        console.log('Sending config to main process:', plainConfig);
+        
         
         const result = await window.electronAPI.mcp.add(plainConfig);
         if (result.success) {

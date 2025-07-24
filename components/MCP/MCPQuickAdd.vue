@@ -855,9 +855,9 @@ const serverTemplates: MCPServerTemplate[] = [
     detailedDescription: 'Automate Chromium, Firefox and WebKit with a single API.',
     icon: 'mdi:web',
     type: 'stdio',
-    installCommand: 'npx -y @modelcontextprotocol/server-playwright',
+    installCommand: 'npm install -g @playwright/mcp',
     command: 'npx',
-    args: ['-y', '@modelcontextprotocol/server-playwright'],
+    args: ['@playwright/mcp'],
     category: 'automation'
   },
   {
@@ -1258,7 +1258,7 @@ const installServer = async () => {
     const cleanConfig: MCPServerConfig = JSON.parse(JSON.stringify(config));
     
     // Log the config to debug
-    console.log('Adding MCP server with config:', JSON.stringify(cleanConfig, null, 2));
+    
     
     await mcpStore.addServer(cleanConfig);
     emit('server-added', selectedServer.value);

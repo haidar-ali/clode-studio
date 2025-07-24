@@ -186,7 +186,7 @@ const setupClaudeListeners = () => {
   // Remove any existing listeners first to avoid duplicates
   window.electronAPI.claude.removeAllListeners();
   
-  console.log('Setting up Claude listeners...');
+  
   
   // Listen for Claude output
   window.electronAPI.claude.onOutput((data: string) => {
@@ -274,7 +274,7 @@ const startClaude = async () => {
         // Sync the PTY size after each fit
         if (chatStore.claudeStatus === 'connected') {
           await window.electronAPI.claude.resize(terminal.cols, terminal.rows);
-          console.log(`Terminal resize attempt ${i + 1}: ${terminal.cols}x${terminal.rows}`);
+          
         }
         
         // Progressive delays

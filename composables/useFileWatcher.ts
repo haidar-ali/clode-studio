@@ -7,7 +7,7 @@ export const useFileWatcher = () => {
   const contextStore = useProjectContextStore();
   
   const handleFileChange = async (data: { path: string; content: string }) => {
-    console.log('File changed externally:', data.path);
+    
     
     // Update editor content
     editorStore.updateFileContent(data.path, data.content);
