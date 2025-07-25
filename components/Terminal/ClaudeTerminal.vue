@@ -154,52 +154,55 @@ const initTerminal = () => {
       return true;
     }
     
-    // Cmd + Delete: Clear line before cursor
-    if (e.metaKey && e.key === 'Backspace') {
-      if (chatStore.claudeStatus === 'connected') {
+    // Only process if Claude is connected
+    if (chatStore.claudeStatus !== 'connected') {
+      return true;
+    }
+    
+    try {
+      // Cmd + Delete: Clear line before cursor
+      if (e.metaKey && e.key === 'Backspace') {
+        e.preventDefault();
         window.electronAPI.claude.send('\x15'); // Ctrl+U clears line before cursor
+        return false;
       }
-      return false;
-    }
-    
-    // Cmd + Left Arrow: Go to beginning of line
-    if (e.metaKey && e.key === 'ArrowLeft') {
-      if (chatStore.claudeStatus === 'connected') {
+      
+      // Cmd + Left Arrow: Go to beginning of line
+      if (e.metaKey && e.key === 'ArrowLeft') {
+        e.preventDefault();
         window.electronAPI.claude.send('\x01'); // Ctrl+A
+        return false;
       }
-      return false;
-    }
-    
-    // Cmd + Right Arrow: Go to end of line
-    if (e.metaKey && e.key === 'ArrowRight') {
-      if (chatStore.claudeStatus === 'connected') {
+      
+      // Cmd + Right Arrow: Go to end of line
+      if (e.metaKey && e.key === 'ArrowRight') {
+        e.preventDefault();
         window.electronAPI.claude.send('\x05'); // Ctrl+E
+        return false;
       }
-      return false;
-    }
-    
-    // Option + Left Arrow: Move left one word
-    if (e.altKey && e.key === 'ArrowLeft') {
-      if (chatStore.claudeStatus === 'connected') {
+      
+      // Option + Left Arrow: Move left one word
+      if (e.altKey && e.key === 'ArrowLeft') {
+        e.preventDefault();
         window.electronAPI.claude.send('\x1bb'); // Alt+B
+        return false;
       }
-      return false;
-    }
-    
-    // Option + Right Arrow: Move right one word
-    if (e.altKey && e.key === 'ArrowRight') {
-      if (chatStore.claudeStatus === 'connected') {
+      
+      // Option + Right Arrow: Move right one word
+      if (e.altKey && e.key === 'ArrowRight') {
+        e.preventDefault();
         window.electronAPI.claude.send('\x1bf'); // Alt+F
+        return false;
       }
-      return false;
-    }
-    
-    // Option + Delete: Delete word before cursor
-    if (e.altKey && e.key === 'Backspace') {
-      if (chatStore.claudeStatus === 'connected') {
+      
+      // Option + Delete: Delete word before cursor
+      if (e.altKey && e.key === 'Backspace') {
+        e.preventDefault();
         window.electronAPI.claude.send('\x17'); // Ctrl+W
+        return false;
       }
-      return false;
+    } catch (error) {
+      console.error('Error handling keyboard shortcut:', error);
     }
     
     return true;
