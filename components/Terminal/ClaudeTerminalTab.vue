@@ -281,7 +281,7 @@ const setupClaudeListeners = () => {
 
       terminal.write(data);
 
-      // Check if Claude is showing a prompt - this means it's ready for inpu
+      // Check if Claude is showing a prompt - this means it's ready for input
       const hasPromptIndicators = data.includes('Do you want to') ||
                                  data.includes('❯') ||
                                  data.includes('Yes, and don\'t ask again') ||
@@ -402,9 +402,9 @@ const startClaude = async () => {
     terminal.writeln('');
     autoScrollIfNeeded();
 
-    // Send personality instructions if se
+    // Send personality instructions if set
     if (personality.value && personality.value.instructions) {
-      // Capture instructions value to avoid reactive reference in timeou
+      // Capture instructions value to avoid reactive reference in timeout
       const personalityInstructions = personality.value.instructions;
       setTimeout(async () => {
         try {

@@ -37,7 +37,7 @@ let mainWindow: BrowserWindow | null = null;
 const store = new Store<Record<string, any>>();
 const fileWatchers: Map<string, any> = new Map();
 
-// Multi-instance Claude suppor
+// Multi-instance Claude support
 const claudeInstances: Map<string, pty.IPty> = new Map();
 
 // Knowledge cache instances per workspace
@@ -118,7 +118,7 @@ app.on('window-all-closed', () => {
   }
 });
 
-// Claude Process Management using PTY with multi-instance suppor
+// Claude Process Management using PTY with multi-instance support
 ipcMain.handle('claude:start', async (event, instanceId: string, workingDirectory: string, instanceName?: string, runConfig?: { command?: string; args?: string[] }) => {
   if (claudeInstances.has(instanceId)) {
     return { success: false, error: 'Claude instance already running' };
@@ -169,8 +169,8 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
         FORCE_COLOR: '1',
         TERM: 'xterm-256color',
         HOME: process.env.HOME, // Ensure HOME is set so Claude can find ~/.claude/settings.json
-        USER: process.env.USER, // Ensure USER is se
-        SHELL: userShell, // Ensure SHELL is se
+        USER: process.env.USER, // Ensure USER is set
+        SHELL: userShell, // Ensure SHELL is set
         // Add instance-specific environment variables for hooks
         CLAUDE_INSTANCE_ID: instanceId,
         CLAUDE_INSTANCE_NAME: instanceName || `Claude-${instanceId.slice(7, 15)}`, // Use provided name or short ID
@@ -188,7 +188,7 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
       mainWindow?.webContents.send(`claude:output:${instanceId}`, data);
     });
 
-    // Handle exi
+    // Handle exit
     claudePty.onExit(({ exitCode, signal }) => {
       mainWindow?.webContents.send(`claude:exit:${instanceId}`, exitCode);
       claudeInstances.delete(instanceId);
@@ -616,7 +616,7 @@ ipcMain.handle('claude:testHook', async (event, hook: any) => {
 
     const testCommand = claudeSettingsManager.createTestCommand(hook);
     const { stdout, stderr } = await execAsync(testCommand, {
-      timeout: 5000 // 5 second timeou
+      timeout: 5000 // 5 second timeout
     });
 
     return {
@@ -837,7 +837,7 @@ ipcMain.handle('fs:unwatchFile', async (event, filePath: string) => {
   }
 });
 
-// Clean up watchers on app qui
+// Clean up watchers on app quit
 app.on('before-quit', () => {
   for (const [path, watcher] of fileWatchers) {
     watcher.close();
@@ -907,10 +907,10 @@ ipcMain.handle('search:findInFiles', async (event, options) => {
     }
 
     try {
-      // Try ripgrep firs
+      // Try ripgrep first
       console.log('[Main] Attempting to use ripgrep...');
 
-      // Check for bundled ripgrep firs
+      // Check for bundled ripgrep first
       const platform = process.platform;
       const arch = process.arch;
       const platformKey = platform === 'darwin'
@@ -1194,7 +1194,7 @@ ipcMain.handle('terminal:destroy', async (event, id: string) => {
   return { success: false, error: 'Terminal not found' };
 });
 
-// Clean up terminals on app qui
+// Clean up terminals on app quit
 app.on('before-quit', () => {
   for (const [id, terminal] of terminals) {
     terminal.kill();
@@ -1223,7 +1223,7 @@ ipcMain.handle('mcp:list', async (event, workspacePath?: string) => {
       env: process.env
     });
 
-    // Parse the text outpu
+    // Parse the text output
     const lines = stdout.trim().split('\n');
     const servers: any[] = [];
 
@@ -1242,7 +1242,7 @@ ipcMain.handle('mcp:list', async (event, workspacePath?: string) => {
         // Check if transport type is specified in parentheses
         const parenIndex = rest.lastIndexOf('(');
         let url = rest;
-        let transport = 'stdio'; // defaul
+        let transport = 'stdio'; // default
 
         if (parenIndex > -1) {
           url = rest.substring(0, parenIndex).trim();
@@ -1316,7 +1316,7 @@ ipcMain.handle('mcp:add', async (event, config) => {
         command += ` ${config.args.map((arg: string) => `"${arg}"`).join(' ')}`;
       }
     } else if (config.type === 'sse' || config.type === 'http') {
-      // For HTTP/SSE servers, the URL is the command argumen
+      // For HTTP/SSE servers, the URL is the command argument
       command += ` -- "${config.url}"`;
     }
 
@@ -1808,7 +1808,7 @@ ipcMain.handle('workspace:setPath', async (event, workspacePath: string) => {
   }
 });
 
-// Clean up git services on app qui
+// Clean up git services on app quit
 app.on('before-quit', () => {
   for (const [path, service] of gitServices) {
     service.cleanup();
