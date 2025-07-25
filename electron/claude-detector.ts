@@ -1,6 +1,6 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { existsSync } from 'fs';
+import { existsSync, readdirSync } from 'fs';
 import { join } from 'path';
 
 const execAsync = promisify(exec);
@@ -144,7 +144,6 @@ export class ClaudeDetector {
         // Check for Claude in any Node version
         const nodeVersionsDir = join(nvmDir, 'versions', 'node');
         if (existsSync(nodeVersionsDir)) {
-          const { readdirSync } = require('fs');
           const versions = readdirSync(nodeVersionsDir);
           for (const version of versions) {
             const claudePath = join(nodeVersionsDir, version, 'bin', 'claude');
