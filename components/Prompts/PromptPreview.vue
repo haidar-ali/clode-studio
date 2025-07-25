@@ -44,8 +44,8 @@
             <label>Test with Claude Instance</label>
             <select v-model="testInstanceId">
               <option value="">New Instance</option>
-              <option 
-                v-for="instance in claudeInstances" 
+              <option
+                v-for="instance in claudeInstances"
                 :key="instance.id"
                 :value="instance.id"
               >
@@ -55,8 +55,8 @@
           </div>
           <div class="form-group">
             <label>Test Input (optional)</label>
-            <textarea 
-              v-model="testInput" 
+            <textarea
+              v-model="testInput"
               placeholder="Additional context or question for testing"
               rows="3"
             ></textarea>
@@ -68,11 +68,19 @@
         </div>
       </div>
     </div>
+
+    <!-- Notification Toast -->
+    <Transition name="notification">
+      <div v-if="notification.show" :class="['notification-toast', notification.type]">
+        <Icon :name="getNotificationIcon(notification.type)" />
+        <span>{{ notification.message }}</span>
+      </div>
+    </Transition>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, nextTick } from 'vue';
 import { usePromptEngineeringStore } from '~/stores/prompt-engineering';
 import { useClaudeInstancesStore } from '~/stores/claude-instances';
 
@@ -80,16 +88,27 @@ const promptStore = usePromptEngineeringStore();
 const instancesStore = useClaudeInstancesStore();
 
 const showTestDialog = ref(false);
-const testInstanceId = ref('');
+const testInstanceId = ref(''); // Empty string means "New Instance"
 const testInput = ref('');
 const copied = ref(false);
 
+const notification = ref({
+  show: false,
+  message: '',
+  type: 'info' as 'success' | 'error' | 'info'
+});
+
 const builtPrompt = ref('');
-const subagentCount = computed(() => 
+const subagentCount = computed(() =>
   promptStore.currentPrompt.structure?.subagents?.length || 0
 );
 
-const claudeInstances = computed(() => instancesStore.instances);
+const claudeInstances = computed(() => {
+  // Convert Map to array for the dropdown
+  return Array.from(instancesStore.instances.values()).filter(instance =>
+    instance.status === 'connected'
+  );
+});
 
 // Watch for changes and rebuild prompt
 watch(
@@ -113,17 +132,154 @@ async function copyPrompt() {
 }
 
 function testPrompt() {
+  // Reset to "New Instance" first
+  testInstanceId.value = '';
+
+  // Always show the dialog to give users options
   showTestDialog.value = true;
+
+  // Only pre-select the active instance if one exists
+  if (instancesStore.activeInstanceId && claudeInstances.value.some(i => i.id === instancesStore.activeInstanceId)) {
+    testInstanceId.value = instancesStore.activeInstanceId;
+  }
 }
 
 async function runTest() {
-  const finalPrompt = testInput.value 
-    ? `${builtPrompt.value}\n\n${testInput.value}`
-    : builtPrompt.value;
+  try {
+    const finalPrompt = testInput.value
+      ? `${builtPrompt.value}\n\n${testInput.value}`
+      : builtPrompt.value;
 
-  showTestDialog.value = false;
-  testInstanceId.value = '';
-  testInput.value = '';
+    if (!finalPrompt || !builtPrompt.value) {
+      showNotification('Please build a prompt first', 'error');
+      showTestDialog.value = false;
+      return;
+    }
+
+    showTestDialog.value = false;
+
+    // Determine target instance
+    let targetInstanceId = testInstanceId.value;
+
+    // If "New Instance" is selected (empty string) or no instance exists, create one
+    if (!targetInstanceId || targetInstanceId === '') {
+      // Get workspace path for working directory
+      let workingDirectory = '.';
+      try {
+        const storedWorkspace = await window.electronAPI.store.get('workspacePath');
+        if (typeof storedWorkspace === 'string' && storedWorkspace) {
+          workingDirectory = storedWorkspace;
+        }
+      } catch (error) {
+        console.error('Failed to get workspace path:', error);
+      }
+
+      // Create a new instance with no personality (undefined)
+      const newInstanceId = await instancesStore.createInstance('Template Prompt Test', undefined, workingDirectory);
+
+      // Set it as the active instance so the tab shows up
+      instancesStore.setActiveInstance(newInstanceId);
+
+      // Wait for Vue to update the DOM
+      await nextTick();
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      // Dispatch an event to trigger the start button in the terminal
+      window.dispatchEvent(new CustomEvent('start-claude-instance', {
+        detail: { instanceId: newInstanceId }
+      }));
+
+      targetInstanceId = newInstanceId;
+
+      // Wait for Claude to be ready
+      try {
+        await waitForClaudeReady(newInstanceId);
+      } catch (timeoutError) {
+        // If Claude didn't become ready, clean up
+        await instancesStore.removeInstance(newInstanceId);
+        throw new Error('Claude did not start properly. Please try again.');
+      }
+    }
+
+    // Send the prompt to the instance
+    let sendResult = await window.electronAPI.claude.send(targetInstanceId, finalPrompt);
+    if (!sendResult.success) {
+      throw new Error(sendResult.error || 'Failed to send test prompt');
+    }
+
+    // Send carriage return to submit
+    sendResult = await window.electronAPI.claude.send(targetInstanceId, '\r');
+    if (!sendResult.success) {
+      throw new Error(sendResult.error || 'Failed to submit test prompt');
+    }
+
+    // Show success notification
+    showNotification('Test prompt sent successfully!', 'success');
+
+    // Switch to terminal view
+    window.dispatchEvent(new CustomEvent('prompt-test-sent', {
+      detail: { instanceId: targetInstanceId }
+    }));
+
+    // Reset form
+    testInstanceId.value = '';
+    testInput.value = '';
+  } catch (error: any) {
+    console.error('Test failed:', error);
+    showNotification(error.message || 'Failed to run test', 'error');
+  }
+}
+
+// Notification helper
+function showNotification(message: string, type: 'success' | 'error' | 'info' = 'info') {
+  notification.value = {
+    show: true,
+    message,
+    type
+  };
+
+  // Auto-hide after 4 seconds
+  setTimeout(() => {
+    notification.value.show = false;
+  }, 4000);
+}
+
+function getNotificationIcon(type: string): string {
+  const icons: Record<string, string> = {
+    success: 'heroicons:check-circle',
+    error: 'heroicons:x-circle',
+    info: 'heroicons:information-circle'
+  };
+  return icons[type] || icons.info;
+}
+
+// Wait for Claude to be ready by monitoring its output
+function waitForClaudeReady(instanceId: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let outputBuffer = '';
+    let cleanup: (() => void) | null = null;
+
+    // Set a timeout in case Claude doesn't start properly
+    const timeout = setTimeout(() => {
+      if (cleanup) cleanup();
+      reject(new Error('Timeout waiting for Claude to be ready'));
+    }, 5000);
+
+    // Listen for Claude's output
+    cleanup = window.electronAPI.claude.onOutput(instanceId, (data: string) => {
+      outputBuffer += data;
+
+      // Check if Claude is ready - look for the welcome message
+      // The text might have ANSI escape codes, so we need to check for the text with possible codes in between
+      if (outputBuffer.includes('Welcome to') && outputBuffer.includes('Claude Code')) {
+        clearTimeout(timeout);
+        if (cleanup) cleanup();
+
+        // Small additional delay to ensure Claude is fully ready
+        setTimeout(() => resolve(), 500);
+      }
+    });
+  });
 }
 </script>
 
@@ -335,5 +491,54 @@ async function runTest() {
 
 .preview-content::-webkit-scrollbar-thumb:hover {
   background: #4f4f4f;
+}
+
+/* Notification Toast */
+.notification-toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-radius: 8px;
+  background-color: #3c3c3c;
+  color: #cccccc;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  z-index: 1001;
+  max-width: 400px;
+}
+
+.notification-toast.success {
+  background-color: #10b981;
+  color: white;
+}
+
+.notification-toast.error {
+  background-color: #ef4444;
+  color: white;
+}
+
+.notification-toast svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+/* Notification transition */
+.notification-enter-active,
+.notification-leave-active {
+  transition: all 0.3s ease;
+}
+
+.notification-enter-from {
+  transform: translateX(100%);
+  opacity: 0;
+}
+
+.notification-leave-to {
+  transform: translateX(100%);
+  opacity: 0;
 }
 </style>

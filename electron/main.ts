@@ -37,7 +37,7 @@ let mainWindow: BrowserWindow | null = null;
 const store = new Store<Record<string, any>>();
 const fileWatchers: Map<string, any> = new Map();
 
-// Multi-instance Claude support
+// Multi-instance Claude suppor
 const claudeInstances: Map<string, pty.IPty> = new Map();
 
 // Knowledge cache instances per workspace
@@ -102,7 +102,7 @@ app.whenReady().then(() => {
   CheckpointServiceManager.getInstance();
   WorktreeManagerGlobal.getInstance();
   GitHooksManagerGlobal.getInstance();
-  
+
   createWindow();
 
   app.on('activate', () => {
@@ -118,7 +118,7 @@ app.on('window-all-closed', () => {
   }
 });
 
-// Claude Process Management using PTY with multi-instance support
+// Claude Process Management using PTY with multi-instance suppor
 ipcMain.handle('claude:start', async (event, instanceId: string, workingDirectory: string, instanceName?: string, runConfig?: { command?: string; args?: string[] }) => {
   if (claudeInstances.has(instanceId)) {
     return { success: false, error: 'Claude instance already running' };
@@ -132,7 +132,7 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
     const debugArgs = process.env.CLAUDE_DEBUG === 'true' ? ['--debug'] : [];
 
     let { command, args: commandArgs, useShell } = ClaudeDetector.getClaudeCommand(claudeInfo, debugArgs);
-    
+
     // Override with run config if provided
     if (runConfig) {
       if (runConfig.command) {
@@ -148,8 +148,8 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
         useShell = result.useShell;
       }
     }
-    
-  
+
+
     // Log settings file to verify it exists
     const settingsPath = join(homedir(), '.claude', 'settings.json');
     if (!existsSync(settingsPath)) {
@@ -169,8 +169,8 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
         FORCE_COLOR: '1',
         TERM: 'xterm-256color',
         HOME: process.env.HOME, // Ensure HOME is set so Claude can find ~/.claude/settings.json
-        USER: process.env.USER, // Ensure USER is set
-        SHELL: userShell, // Ensure SHELL is set
+        USER: process.env.USER, // Ensure USER is se
+        SHELL: userShell, // Ensure SHELL is se
         // Add instance-specific environment variables for hooks
         CLAUDE_INSTANCE_ID: instanceId,
         CLAUDE_INSTANCE_NAME: instanceName || `Claude-${instanceId.slice(7, 15)}`, // Use provided name or short ID
@@ -188,7 +188,7 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
       mainWindow?.webContents.send(`claude:output:${instanceId}`, data);
     });
 
-    // Handle exit
+    // Handle exi
     claudePty.onExit(({ exitCode, signal }) => {
       mainWindow?.webContents.send(`claude:exit:${instanceId}`, exitCode);
       claudeInstances.delete(instanceId);
@@ -212,7 +212,7 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
 ipcMain.handle('claude:send', async (event, instanceId: string, command: string) => {
   const claudePty = claudeInstances.get(instanceId);
   if (!claudePty) {
-    return { success: false, error: `Claude PTY not running for instance ${instanceId}` };
+    return { success: false, error: `Claude instance is not running. Please start a Claude instance in the terminal first.` };
   }
 
   try {
@@ -616,7 +616,7 @@ ipcMain.handle('claude:testHook', async (event, hook: any) => {
 
     const testCommand = claudeSettingsManager.createTestCommand(hook);
     const { stdout, stderr } = await execAsync(testCommand, {
-      timeout: 5000 // 5 second timeout
+      timeout: 5000 // 5 second timeou
     });
 
     return {
@@ -717,7 +717,7 @@ ipcMain.handle('fs:watchFile', async (event, filePath: string) => {
       return { success: true };
     }
 
-    
+
     const watcher = chokidarWatch(filePath, {
       persistent: true,
       ignoreInitial: true,
@@ -726,13 +726,13 @@ ipcMain.handle('fs:watchFile', async (event, filePath: string) => {
         pollInterval: 100
       }
     });
-    
+
     watcher.on('change', async (path) => {
-      
+
       try {
         // Read the new content immediately (chokidar already handles debouncing with awaitWriteFinish)
         const content = await readFile(filePath, 'utf-8');
-        
+
         // Send update to all windows
         console.log('[FileWatcher] Sending file:changed event for:', filePath);
         const windows = BrowserWindow.getAllWindows();
@@ -745,7 +745,7 @@ ipcMain.handle('fs:watchFile', async (event, filePath: string) => {
             });
           }
         });
-        
+
         // Also log if no windows are available
         if (windows.length === 0) {
           console.error('[FileWatcher] No windows available to send file:changed event');
@@ -754,7 +754,7 @@ ipcMain.handle('fs:watchFile', async (event, filePath: string) => {
         console.error('[FileWatcher] Error reading changed file:', error);
       }
     });
-    
+
     // Add error handler
     watcher.on('error', (error) => {
       console.error('[FileWatcher] Watcher error for', filePath, ':', error);
@@ -786,7 +786,7 @@ ipcMain.handle('fs:watchDirectory', async (event, dirPath: string) => {
         pollInterval: 100
       }
     });
-    
+
     watcher.on('all', (eventType, filePath) => {
       // Send update to renderer
       const windows = BrowserWindow.getAllWindows();
@@ -837,7 +837,7 @@ ipcMain.handle('fs:unwatchFile', async (event, filePath: string) => {
   }
 });
 
-// Clean up watchers on app quit
+// Clean up watchers on app qui
 app.on('before-quit', () => {
   for (const [path, watcher] of fileWatchers) {
     watcher.close();
@@ -878,12 +878,12 @@ ipcMain.handle('claude:sdk:updateTodo', async (event, todoId: string, newStatus:
 
 // Search operations
 ipcMain.handle('search:findInFiles', async (event, options) => {
-  
+
   // Add a response wrapper to ensure clean IPC communication
   const sendResponse = (data: any) => {
     return data;
   };
-  
+
   const { promisify } = await import('util');
   const { exec } = await import('child_process');
   const execAsync = promisify(exec);
@@ -907,24 +907,24 @@ ipcMain.handle('search:findInFiles', async (event, options) => {
     }
 
     try {
-      // Try ripgrep first
+      // Try ripgrep firs
       console.log('[Main] Attempting to use ripgrep...');
-      
-      // Check for bundled ripgrep first
+
+      // Check for bundled ripgrep firs
       const platform = process.platform;
       const arch = process.arch;
-      const platformKey = platform === 'darwin' 
+      const platformKey = platform === 'darwin'
         ? (arch === 'arm64' ? 'darwin-arm64' : 'darwin-x64')
-        : platform === 'linux' ? 'linux-x64' 
-        : platform === 'win32' ? 'win32-x64' 
+        : platform === 'linux' ? 'linux-x64'
+        : platform === 'win32' ? 'win32-x64'
         : null;
-      
+
       let rgPath = 'rg'; // Default to system rg
-      
+
       if (platformKey) {
         const rgBinary = platform === 'win32' ? 'rg.exe' : 'rg';
         const bundledRgPath = path.join(__dirname, '..', 'vendor', 'ripgrep', platformKey, rgBinary);
-        
+
         if (existsSync(bundledRgPath)) {
           rgPath = bundledRgPath;
           console.log('[Main] Using bundled ripgrep from:', rgPath);
@@ -941,7 +941,7 @@ ipcMain.handle('search:findInFiles', async (event, options) => {
         includePattern,
         excludePattern
       });
-      
+
       return sendResponse(results);
     } catch (error: any) {
       // Ripgrep failed (likely timeout), fallback to Node.js implementation
@@ -961,7 +961,7 @@ ipcMain.handle('search:findInFiles', async (event, options) => {
 // Fallback search implementation using Node.js
 async function fallbackSearch(workingDir: string, options: any) {
   const startTime = Date.now();
-  
+
   const { query, caseSensitive, wholeWord, useRegex, includePattern, excludePattern } = options;
   const path = await import('path');
   const fs = await import('fs/promises');
@@ -988,7 +988,7 @@ async function fallbackSearch(workingDir: string, options: any) {
 
   const searchInDirectory = async (dir: string) => {
     try {
-      
+
       const entries = await fs.readdir(dir, { withFileTypes: true });
 
       for (const entry of entries) {
@@ -1026,7 +1026,7 @@ async function fallbackSearch(workingDir: string, options: any) {
             if (stats.size > 5 * 1024 * 1024) {
               continue;
             }
-            
+
             const content = await fs.readFile(fullPath, 'utf-8');
             const lines = content.split('\n');
             const matches: any[] = [];
@@ -1064,10 +1064,10 @@ async function fallbackSearch(workingDir: string, options: any) {
   };
 
   await searchInDirectory(workingDir);
-  
-  
+
+
   const resultsArray = Array.from(results.values());
-  
+
   return resultsArray;
 }
 
@@ -1194,7 +1194,7 @@ ipcMain.handle('terminal:destroy', async (event, id: string) => {
   return { success: false, error: 'Terminal not found' };
 });
 
-// Clean up terminals on app quit
+// Clean up terminals on app qui
 app.on('before-quit', () => {
   for (const [id, terminal] of terminals) {
     terminal.kill();
@@ -1223,7 +1223,7 @@ ipcMain.handle('mcp:list', async (event, workspacePath?: string) => {
       env: process.env
     });
 
-    // Parse the text output
+    // Parse the text outpu
     const lines = stdout.trim().split('\n');
     const servers: any[] = [];
 
@@ -1242,7 +1242,7 @@ ipcMain.handle('mcp:list', async (event, workspacePath?: string) => {
         // Check if transport type is specified in parentheses
         const parenIndex = rest.lastIndexOf('(');
         let url = rest;
-        let transport = 'stdio'; // default
+        let transport = 'stdio'; // defaul
 
         if (parenIndex > -1) {
           url = rest.substring(0, parenIndex).trim();
@@ -1316,7 +1316,7 @@ ipcMain.handle('mcp:add', async (event, config) => {
         command += ` ${config.args.map((arg: string) => `"${arg}"`).join(' ')}`;
       }
     } else if (config.type === 'sse' || config.type === 'http') {
-      // For HTTP/SSE servers, the URL is the command argument
+      // For HTTP/SSE servers, the URL is the command argumen
       command += ` -- "${config.url}"`;
     }
 
@@ -1766,7 +1766,7 @@ ipcMain.handle('workspace:setPath', async (event, workspacePath: string) => {
   try {
     // Store the workspace path
     (store as any).set('workspacePath', workspacePath);
-    
+
     try {
       // Update the Git Service Manager with the new workspace
       const gitServiceManager = GitServiceManager.getInstance();
@@ -1774,7 +1774,7 @@ ipcMain.handle('workspace:setPath', async (event, workspacePath: string) => {
     } catch (error) {
       console.error('[Main] Error updating GitServiceManager:', error);
     }
-    
+
     try {
       // Update the Checkpoint Service Manager with the new workspace
       const checkpointServiceManager = CheckpointServiceManager.getInstance();
@@ -1782,7 +1782,7 @@ ipcMain.handle('workspace:setPath', async (event, workspacePath: string) => {
     } catch (error) {
       console.error('[Main] Error updating CheckpointServiceManager:', error);
     }
-    
+
     try {
       // Update the Worktree Manager with the new workspace
       const worktreeManagerGlobal = WorktreeManagerGlobal.getInstance();
@@ -1790,7 +1790,7 @@ ipcMain.handle('workspace:setPath', async (event, workspacePath: string) => {
     } catch (error) {
       console.error('[Main] Error updating WorktreeManagerGlobal:', error);
     }
-    
+
     try {
       // Update the Git Hooks Manager with the new workspace
       const gitHooksManagerGlobal = GitHooksManagerGlobal.getInstance();
@@ -1798,17 +1798,17 @@ ipcMain.handle('workspace:setPath', async (event, workspacePath: string) => {
     } catch (error) {
       console.error('[Main] Error updating GitHooksManagerGlobal:', error);
     }
-    
+
     return { success: true };
   } catch (error) {
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to set workspace path' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to set workspace path'
     };
   }
 });
 
-// Clean up git services on app quit
+// Clean up git services on app qui
 app.on('before-quit', () => {
   for (const [path, service] of gitServices) {
     service.cleanup();
