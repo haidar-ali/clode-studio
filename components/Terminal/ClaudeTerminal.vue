@@ -147,6 +147,64 @@ const initTerminal = () => {
     isAtBottom = scrollOffset >= scrollbackSize - 5;
   });
   
+  // Add Mac keyboard shortcuts
+  terminal.attachCustomKeyEventHandler((e: KeyboardEvent) => {
+    // Only handle on Mac
+    if (navigator.platform.toLowerCase().indexOf('mac') === -1) {
+      return true;
+    }
+    
+    // Cmd + Delete: Clear line before cursor
+    if (e.metaKey && e.key === 'Backspace') {
+      if (chatStore.claudeStatus === 'connected') {
+        window.electronAPI.claude.send('\x15'); // Ctrl+U clears line before cursor
+      }
+      return false;
+    }
+    
+    // Cmd + Left Arrow: Go to beginning of line
+    if (e.metaKey && e.key === 'ArrowLeft') {
+      if (chatStore.claudeStatus === 'connected') {
+        window.electronAPI.claude.send('\x01'); // Ctrl+A
+      }
+      return false;
+    }
+    
+    // Cmd + Right Arrow: Go to end of line
+    if (e.metaKey && e.key === 'ArrowRight') {
+      if (chatStore.claudeStatus === 'connected') {
+        window.electronAPI.claude.send('\x05'); // Ctrl+E
+      }
+      return false;
+    }
+    
+    // Option + Left Arrow: Move left one word
+    if (e.altKey && e.key === 'ArrowLeft') {
+      if (chatStore.claudeStatus === 'connected') {
+        window.electronAPI.claude.send('\x1bb'); // Alt+B
+      }
+      return false;
+    }
+    
+    // Option + Right Arrow: Move right one word
+    if (e.altKey && e.key === 'ArrowRight') {
+      if (chatStore.claudeStatus === 'connected') {
+        window.electronAPI.claude.send('\x1bf'); // Alt+F
+      }
+      return false;
+    }
+    
+    // Option + Delete: Delete word before cursor
+    if (e.altKey && e.key === 'Backspace') {
+      if (chatStore.claudeStatus === 'connected') {
+        window.electronAPI.claude.send('\x17'); // Ctrl+W
+      }
+      return false;
+    }
+    
+    return true;
+  });
+  
   // Handle terminal input
   terminal.onData((data: string) => {
     // Send input to Claude process
