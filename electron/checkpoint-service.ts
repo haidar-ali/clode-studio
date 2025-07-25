@@ -121,32 +121,66 @@ export class CheckpointService {
         await this.git.commit('Initialize checkpoint repository');
       }
 
-      // Update parent .gitignore (only if it exists - creation is handled by frontend)
-      const parentGitignore = path.join(path.dirname(this.shadowRepoPath), '.gitignore');
-      if (await fs.pathExists(parentGitignore)) {
+      // Update parent .gitignore only if directories are not already ignored
+      const parentDir = path.dirname(this.shadowRepoPath);
+      const parentGitignore = path.join(parentDir, '.gitignore');
+      
+      // Check if git is available and directories are already ignored
+      const checkIfIgnored = async (dirName: string): Promise<boolean> => {
+        try {
+          const git = simpleGit(parentDir);
+          // First check if this is a git repository
+          const isRepo = await git.checkIsRepo();
+          if (!isRepo) {
+            // Not a git repo, so we can't check if paths are ignored
+            return false;
+          }
+          
+          // Use check-ignore to see if the path is ignored
+          await git.raw(['check-ignore', dirName]);
+          // If check-ignore returns 0 (no error), the path is ignored
+          return true;
+        } catch (error) {
+          // If git command is not available or check-ignore returns non-zero
+          // Assume the path is not ignored
+          return false;
+        }
+      };
+      
+      // Check which directories need to be added
+      const directoriesToAdd: string[] = [];
+      
+      try {
+        if (!(await checkIfIgnored('.claude-checkpoints'))) {
+          directoriesToAdd.push('.claude-checkpoints/');
+        }
+        if (!(await checkIfIgnored('.worktrees'))) {
+          directoriesToAdd.push('.worktrees/');
+        }
+      } catch (error) {
+        // If git is not available, add all directories to be safe
+        console.log('Git not available, will add all Claude directories to .gitignore');
+        directoriesToAdd.push('.claude-checkpoints/', '.worktrees/');
+      }
+      
+      // Only update .gitignore if there are directories to add and the file exists
+      if (directoriesToAdd.length > 0 && await fs.pathExists(parentGitignore)) {
         let gitignoreContent = await fs.readFile(parentGitignore, 'utf-8');
-        let contentToAppend = '';
         
-        // Check for .claude-checkpoints
-        if (!gitignoreContent.includes('.claude-checkpoints')) {
+        // Double-check the file doesn't already contain these entries
+        const filteredDirs = directoriesToAdd.filter(dir => 
+          !gitignoreContent.includes(dir.replace('/', ''))
+        );
+        
+        if (filteredDirs.length > 0) {
+          let contentToAppend = '';
+          
           if (gitignoreContent.trim()) {
             contentToAppend += '\n';
           }
-          contentToAppend += '# Claude Code IDE generated directories\n.claude-checkpoints/\n';
-        }
-        
-        // Check for .worktrees
-        if (!gitignoreContent.includes('.worktrees')) {
-          if (!contentToAppend && gitignoreContent.trim()) {
-            contentToAppend += '\n';
-          }
-          if (!gitignoreContent.includes('.claude-checkpoints')) {
-            contentToAppend += '# Claude Code IDE generated directories\n';
-          }
-          contentToAppend += '.worktrees/\n';
-        }
-        
-        if (contentToAppend) {
+          contentToAppend += '# Claude Code IDE generated directories\n';
+          contentToAppend += filteredDirs.join('\n') + '\n';
+          
           await fs.writeFile(parentGitignore, gitignoreContent + contentToAppend);
         }
       }

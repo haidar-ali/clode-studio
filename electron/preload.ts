@@ -271,7 +271,8 @@ const electronAPI = {
     discardChanges: (files: string[]) => ipcRenderer.invoke('git:discardChanges', files),
     init: () => ipcRenderer.invoke('git:init'),
     clone: (url: string, localPath?: string) => ipcRenderer.invoke('git:clone', url, localPath),
-    checkIsRepo: () => ipcRenderer.invoke('git:checkIsRepo')
+    checkIsRepo: () => ipcRenderer.invoke('git:checkIsRepo'),
+    checkIgnore: (workspacePath: string, paths: string[]) => ipcRenderer.invoke('git:checkIgnore', workspacePath, paths)
   },
   checkpoint: {
     init: () => ipcRenderer.invoke('checkpoint:init'),

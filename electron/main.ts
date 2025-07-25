@@ -1808,6 +1808,51 @@ ipcMain.handle('workspace:setPath', async (event, workspacePath: string) => {
   }
 });
 
+// Check if a path is ignored by git
+ipcMain.handle('git:checkIgnore', async (event, workspacePath: string, paths: string[]) => {
+  try {
+    const git = await import('simple-git');
+    const gitInstance = git.default(workspacePath);
+    
+    // First check if this is a git repository
+    try {
+      const isRepo = await gitInstance.checkIsRepo();
+      if (!isRepo) {
+        // Not a git repo, return all paths as not ignored
+        const results: Record<string, boolean> = {};
+        paths.forEach(path => { results[path] = false; });
+        return { success: true, results, isGitRepo: false };
+      }
+    } catch (error) {
+      // Git command might not be available
+      console.log('Git command not available or error checking repo status');
+      const results: Record<string, boolean> = {};
+      paths.forEach(path => { results[path] = false; });
+      return { success: true, results, gitAvailable: false };
+    }
+    
+    const results: Record<string, boolean> = {};
+    
+    for (const path of paths) {
+      try {
+        await gitInstance.raw(['check-ignore', path]);
+        // If check-ignore returns 0 (no error), the path is ignored
+        results[path] = true;
+      } catch (error) {
+        // If check-ignore returns non-zero, the path is not ignored
+        results[path] = false;
+      }
+    }
+    
+    return { success: true, results, isGitRepo: true, gitAvailable: true };
+  } catch (error) {
+    // Return safe defaults if git is not available
+    const results: Record<string, boolean> = {};
+    paths.forEach(path => { results[path] = false; });
+    return { success: true, results, gitAvailable: false };
+  }
+});
+
 // Clean up git services on app quit
 app.on('before-quit', () => {
   for (const [path, service] of gitServices) {
