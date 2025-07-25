@@ -307,6 +307,26 @@ export class GitServiceManager {
   }
 
   private formatStatus(status: any): any {
+    // Collect all files from different status arrays
+    const allFiles = [
+      ...status.files.map((f: any) => {
+        // Handle case where f is already an object with path property
+        const filePath = typeof f === 'string' ? f : (f.path || f);
+        return { path: filePath, status: 'tracked' };
+      }),
+      ...status.staged.map((f: string) => ({ path: f, status: 'staged' })),
+      ...status.modified.map((f: string) => ({ path: f, status: 'modified' })),
+      ...status.deleted.map((f: string) => ({ path: f, status: 'deleted' })),
+      ...status.renamed.map((f: any) => ({ path: f.to || f, status: 'renamed' })),
+      ...status.not_added.map((f: string) => ({ path: f, status: 'untracked' })),
+      ...status.conflicted.map((f: string) => ({ path: f, status: 'conflicted' }))
+    ];
+
+    // Remove duplicates by keeping the first occurrence of each path
+    const uniqueFiles = allFiles.filter((file, index, self) => 
+      index === self.findIndex(f => f.path === file.path)
+    );
+
     return {
       current: status.current,
       tracking: status.tracking,
@@ -317,7 +337,9 @@ export class GitServiceManager {
       deleted: status.deleted,
       renamed: status.renamed,
       untracked: status.not_added,
-      conflicted: status.conflicted
+      conflicted: status.conflicted,
+      files: uniqueFiles,
+      not_added: status.not_added // Keep for backward compatibility
     };
   }
 

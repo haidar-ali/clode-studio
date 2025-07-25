@@ -113,27 +113,61 @@ export const useCheckpointV2Store = defineStore('checkpoint-v2', () => {
     const snapshots: FileSnapshot[] = [];
     
     try {
+      // Get workspace path
+      const workspacePath = shadowRepoPath.value.replace('/.claude-checkpoints', '');
+      if (!workspacePath) {
+        console.error('No workspace path available');
+        return snapshots;
+      }
+
       // Get all tracked files from git
       const gitStatus = await window.electronAPI.git.status();
       if (!gitStatus.success || !gitStatus.data) return snapshots;
+      
+      // Debug: log the git status structure
+      console.log('Git status data:', gitStatus.data);
       
       // Safely extract file paths
       const files = gitStatus.data.files || [];
       const notAdded = gitStatus.data.not_added || gitStatus.data.untracked || [];
       
-      const allFiles = [
-        ...(Array.isArray(files) ? files.map(f => typeof f === 'string' ? f : f.path) : []),
-        ...(Array.isArray(notAdded) ? notAdded.map(f => typeof f === 'string' ? f : f.path) : [])
-      ].filter(Boolean);
+      // The files array contains objects, not the file objects themselves
+      // We need to extract just the path strings
+      const filePaths: string[] = [];
+      
+      // Process files array - these are file objects from simple-git
+      if (Array.isArray(files)) {
+        files.forEach(f => {
+          if (typeof f === 'string') {
+            filePaths.push(f);
+          } else if (f && typeof f === 'object' && 'path' in f) {
+            filePaths.push(f.path);
+          }
+        });
+      }
+      
+      // Add untracked files (these should be strings)
+      if (Array.isArray(notAdded)) {
+        notAdded.forEach(f => {
+          if (typeof f === 'string') {
+            filePaths.push(f);
+          }
+        });
+      }
+      
+      // Remove duplicates
+      const allFiles = [...new Set(filePaths)];
       
       // Read each file
       for (const filePath of allFiles) {
         try {
-          const content = await window.electronAPI.fs.readFile(filePath);
+          // Make absolute path if relative
+          const absolutePath = filePath.startsWith('/') ? filePath : `${workspacePath}/${filePath}`;
+          const content = await window.electronAPI.fs.readFile(absolutePath);
           if (content.success && content.content) {
             const hash = await createHash(content.content);
             snapshots.push({
-              path: filePath,
+              path: filePath, // Store relative path
               content: content.content,
               modified: Date.now(),
               hash
@@ -312,9 +346,14 @@ export const useCheckpointV2Store = defineStore('checkpoint-v2', () => {
         'Automatic backup before checkpoint restoration'
       );
       
+      // Get workspace path
+      const workspacePath = shadowRepoPath.value.replace('/.claude-checkpoints', '');
+      
       // Restore files
       for (const file of checkpoint.files) {
-        await window.electronAPI.fs.writeFile(file.path, file.content);
+        // Make absolute path if relative
+        const absolutePath = file.path.startsWith('/') ? file.path : `${workspacePath}/${file.path}`;
+        await window.electronAPI.fs.writeFile(absolutePath, file.content);
       }
       
       // Restore IDE state

@@ -578,7 +578,7 @@ ${this.completedTasks.map(task => formatTask(task, true)).join('\n')}
         });
         
         this.tasks = allTasks;
-        this.saveToTasksFile();
+        this.saveTasksToProject();
       }
     },
     
