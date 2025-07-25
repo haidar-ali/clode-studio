@@ -1,21 +1,43 @@
-# IDEs
-.idea/
-
-# Nuxt.js build output
-.nuxt/
-
-# Electron generated files
-electron/*.js
-!electron/claude-sdk-service.js
-
 # Dependencies
 node_modules/
 package-lock.json
-
-# Environment variables
-.env
 
 # Clode Studio related files and directories
 .claude-checkpoints/
 .worktrees/
 .claude/
+
+# Nuxt dev/build outputs
+.output
+.data
+.nuxt
+.nitro
+.cache
+dist
+
+# Logs
+logs
+*.log
+
+# Misc
+.DS_Store
+.fleet
+.idea
+
+# Local env files
+.env
+.env.*
+!.env.example
+
+# Compiled Electron files
+electron/*.js
+electron/*.js.map
+!electron/tsconfig.json
+!electron/tsconfig.preload.json
+!electron/claude-sdk-service.js
+./node_modules/minipass-sized/package-lock.json
+./node_modules/@monaco-editor/loader/playground/package-lock.json
+package-lock.json
+
+# Bundled binaries
+vendor/ripgrep/
