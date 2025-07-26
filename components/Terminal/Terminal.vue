@@ -105,28 +105,8 @@ onMounted(async () => {
         return false;
       }
       
-      // Option + Left Arrow: Move left one word
-      if (e.altKey && e.key === 'ArrowLeft') {
-        e.preventDefault();
-        window.electronAPI.terminal.write(ptyProcess, '\x1bb'); // Alt+B
-        return false;
-      }
-      
-      // Option + Right Arrow: Move right one word
-      if (e.altKey && e.key === 'ArrowRight') {
-        e.preventDefault();
-        window.electronAPI.terminal.write(ptyProcess, '\x1bf'); // Alt+F
-        return false;
-      }
-      
-      // Option + Delete: Delete word before cursor
-      if (e.altKey && e.key === 'Backspace') {
-        e.preventDefault();
-        window.electronAPI.terminal.write(ptyProcess, '\x17'); // Ctrl+W
-        return false;
-      }
     } catch (error) {
-      console.error('Error handling keyboard shortcut:', error);
+      // Silently ignore errors
     }
     
     return true;

@@ -68,7 +68,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, nextTick } from 'vue';
+import { computed, onMounted, onUnmounted, ref, nextTick } from 'vue';
 import { useClaudeInstancesStore } from '~/stores/claude-instances';
 import ClaudeTerminalTab from './ClaudeTerminalTab.vue';
 
@@ -128,6 +128,28 @@ const cancelEdit = () => {
   editingName.value = '';
 };
 
+// Handle tab switching with keyboard shortcuts
+const handleKeyDown = (e: KeyboardEvent) => {
+  // Ctrl+Tab: Next tab
+  if (e.ctrlKey && e.key === 'Tab' && !e.shiftKey) {
+    e.preventDefault();
+    const currentIndex = instances.value.findIndex(i => i.id === activeInstanceId.value);
+    const nextIndex = (currentIndex + 1) % instances.value.length;
+    if (instances.value[nextIndex]) {
+      setActiveInstance(instances.value[nextIndex].id);
+    }
+  }
+  // Ctrl+Shift+Tab: Previous tab
+  else if (e.ctrlKey && e.shiftKey && e.key === 'Tab') {
+    e.preventDefault();
+    const currentIndex = instances.value.findIndex(i => i.id === activeInstanceId.value);
+    const prevIndex = currentIndex === 0 ? instances.value.length - 1 : currentIndex - 1;
+    if (instances.value[prevIndex]) {
+      setActiveInstance(instances.value[prevIndex].id);
+    }
+  }
+};
+
 onMounted(async () => {
   // Only initialize in client/electron context
   if (typeof window !== 'undefined' && window.electronAPI) {
@@ -140,8 +162,18 @@ onMounted(async () => {
     if (currentWorkspacePath.value) {
       await instancesStore.loadWorkspaceConfiguration(currentWorkspacePath.value);
     }
+    
+    // Add keyboard event listener
+    window.addEventListener('keydown', handleKeyDown);
   } else {
     console.warn('ClaudeTerminalTabs: Electron API not available');
+  }
+});
+
+onUnmounted(() => {
+  // Clean up event listener
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('keydown', handleKeyDown);
   }
 });
 </script>
