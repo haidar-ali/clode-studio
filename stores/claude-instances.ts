@@ -17,6 +17,7 @@ export interface ClaudeInstance {
   pid?: number;
   createdAt: string; // ISO string for IPC serialization
   lastActiveAt: string; // ISO string for IPC serialization
+  color?: string; // Tab color (hex code)
 }
 
 
