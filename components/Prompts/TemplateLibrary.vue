@@ -17,9 +17,9 @@
 
     <div class="search-box">
       <Icon name="heroicons:magnifying-glass" />
-      <input 
-        v-model="searchQuery" 
-        type="text" 
+      <input
+        v-model="searchQuery"
+        type="text"
         placeholder="Search templates..."
       >
     </div>
@@ -28,8 +28,8 @@
       <!-- Built-in Templates -->
       <div v-if="filteredBuiltInTemplates.length > 0" class="template-section">
         <h4>Built-in Templates</h4>
-        <div 
-          v-for="template in filteredBuiltInTemplates" 
+        <div
+          v-for="template in filteredBuiltInTemplates"
           :key="template.id"
           class="template-card"
           @click="loadTemplate(template)"
@@ -40,6 +40,10 @@
           </div>
           <p class="template-description">{{ template.description }}</p>
           <div class="template-meta">
+            <span class="meta-item category">
+              <Icon :name="getCategoryIcon(template.category)" />
+              {{ template.category }}
+            </span>
             <span class="meta-item">
               <Icon name="heroicons:calculator" />
               ~{{ template.metadata.estimatedTokens }} tokens
@@ -54,8 +58,8 @@
       <!-- User Templates -->
       <div v-if="filteredUserTemplates.length > 0" class="template-section">
         <h4>Your Templates</h4>
-        <div 
-          v-for="template in filteredUserTemplates" 
+        <div
+          v-for="template in filteredUserTemplates"
           :key="template.id"
           class="template-card user-template"
           @click="loadTemplate(template)"
@@ -69,6 +73,10 @@
           </div>
           <p class="template-description">{{ template.description }}</p>
           <div class="template-meta">
+            <span class="meta-item category">
+              <Icon :name="getCategoryIcon(template.category)" />
+              {{ template.category }}
+            </span>
             <span class="meta-item">
               <Icon name="heroicons:calculator" />
               ~{{ template.metadata.estimatedTokens }} tokens
@@ -76,6 +84,9 @@
             <span class="meta-item">
               <Icon name="heroicons:clock" />
               Used {{ template.metadata.usageCount }} times
+            </span>
+            <span class="meta-item complexity" :class="template.metadata.complexity">
+              {{ template.metadata.complexity }}
             </span>
           </div>
         </div>
@@ -91,7 +102,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, nextTick } from 'vue';
 import { usePromptEngineeringStore } from '~/stores/prompt-engineering';
 import type { PromptTemplate } from '~/stores/prompt-engineering';
 
@@ -245,26 +256,26 @@ const userTemplates = computed(() => promptStore.templates);
 
 const filteredBuiltInTemplates = computed(() => {
   return builtInTemplates.filter(template => {
-    const matchesSearch = !searchQuery.value || 
+    const matchesSearch = !searchQuery.value ||
       template.name.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
       template.description.toLowerCase().includes(searchQuery.value.toLowerCase());
-    
-    const matchesCategory = !filterCategory.value || 
+
+    const matchesCategory = !filterCategory.value ||
       template.category === filterCategory.value;
-    
+
     return matchesSearch && matchesCategory;
   });
 });
 
 const filteredUserTemplates = computed(() => {
   return userTemplates.value.filter(template => {
-    const matchesSearch = !searchQuery.value || 
+    const matchesSearch = !searchQuery.value ||
       template.name.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
       template.description.toLowerCase().includes(searchQuery.value.toLowerCase());
-    
-    const matchesCategory = !filterCategory.value || 
+
+    const matchesCategory = !filterCategory.value ||
       template.category === filterCategory.value;
-    
+
     return matchesSearch && matchesCategory;
   });
 });
@@ -288,21 +299,29 @@ function getCategoryIcon(category: string): string {
 
 async function loadTemplate(template: PromptTemplate) {
   if (template.id.startsWith('builtin-')) {
-    // Load built-in template directly
+    // For built-in templates, load them directly without adding to user templates
     promptStore.currentPrompt = {
       structure: JSON.parse(JSON.stringify(template.structure)),
       metadata: JSON.parse(JSON.stringify(template.metadata))
     };
+
+    // Set the current template ID for tracking
+    promptStore.currentTemplateId = template.id;
   } else {
-    // Load user template
+    // Load user template through the store
     await promptStore.loadTemplate(template.id);
   }
 }
 
 async function deleteTemplate(templateId: string) {
   if (confirm('Are you sure you want to delete this template?')) {
-    // TODO: Implement delete functionality
-    
+    const success = await promptStore.deleteTemplate(templateId);
+    if (success) {
+      // Force a re-render by triggering reactivity
+      await nextTick();
+    } else {
+      alert('Failed to delete template. Please try again.');
+    }
   }
 }
 </script>
@@ -462,6 +481,11 @@ async function deleteTemplate(templateId: string) {
 .complexity.simple { color: #10b981; }
 .complexity.moderate { color: #f59e0b; }
 .complexity.complex { color: #ef4444; }
+
+.meta-item.category {
+  color: #007acc;
+  text-transform: capitalize;
+}
 
 .empty-state {
   display: flex;
