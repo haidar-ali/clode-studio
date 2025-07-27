@@ -147,7 +147,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { useSnapshotsStore } from '~/stores/snapshots';
 import { useSourceControlStore } from '~/stores/source-control';
 import { format, formatDistanceToNow } from 'date-fns';
@@ -161,7 +161,7 @@ const snapshotsStore = useSnapshotsStore();
 
 const searchQuery = ref('');
 const filterBy = ref<'all' | ClaudeSnapshot['createdBy']>('all');
-const filterBranch = ref<string>('all');
+const filterBranch = ref<string>('current');
 const selectedSnapshotId = computed({
   get: () => snapshotsStore.selectedSnapshotId,
   set: (value) => snapshotsStore.selectedSnapshotId = value
@@ -291,6 +291,18 @@ function formatFilePath(path: string) {
   const parts = path.split('/');
   return parts.slice(-2).join('/');
 }
+
+// Watch for filter changes to reload snapshots if needed
+watch(filterBranch, async (newValue, oldValue) => {
+  // If switching to "all" from a branch filter, reload all snapshots
+  if (newValue === 'all' && oldValue !== 'all') {
+    await snapshotsStore.loadSnapshots(true);
+  }
+  // If switching from "all" to a specific branch, reload only that branch
+  else if (oldValue === 'all' && newValue !== 'all') {
+    await snapshotsStore.loadSnapshots(false);
+  }
+});
 </script>
 
 <style scoped>

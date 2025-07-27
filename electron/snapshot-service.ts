@@ -15,25 +15,37 @@ export class SnapshotService {
   private baseDir: string;
   private projectPath: string;
   private projectName: string;
-  private snapshotsDir: string;
-  private contentDir: string;
-  private diffDir: string;
+  private projectSnapshotsDir: string;
+  private currentBranch: string = 'main';
 
   constructor(projectPath: string) {
     this.projectPath = projectPath;
     this.projectName = path.basename(projectPath);
     this.baseDir = path.join(homedir(), '.claude-snapshots');
-    this.snapshotsDir = path.join(this.baseDir, this.projectName);
-    this.contentDir = path.join(this.snapshotsDir, 'content');
-    this.diffDir = path.join(this.snapshotsDir, 'diffs');
+    this.projectSnapshotsDir = path.join(this.baseDir, this.projectName);
     this.initialize();
+  }
+
+  private getBranchDir(branch?: string): string {
+    const branchName = (branch || this.currentBranch).replace(/\//g, '-');
+    return path.join(this.projectSnapshotsDir, branchName);
+  }
+
+  private getSnapshotsDir(branch?: string): string {
+    return path.join(this.getBranchDir(branch), 'snapshots');
+  }
+
+  private getContentDir(branch?: string): string {
+    return path.join(this.getBranchDir(branch), 'content');
+  }
+
+  private getDiffDir(branch?: string): string {
+    return path.join(this.getBranchDir(branch), 'diffs');
   }
 
   private async initialize() {
     try {
-      await fs.ensureDir(this.snapshotsDir);
-      await fs.ensureDir(this.contentDir);
-      await fs.ensureDir(this.diffDir);
+      await fs.ensureDir(this.projectSnapshotsDir);
       
       // Ensure .claude-snapshots is in .gitignore
       await this.ensureGitignore();
@@ -45,24 +57,37 @@ export class SnapshotService {
   /**
    * Generate content-addressable path (2-level directory structure)
    */
-  private getContentPath(hash: string): string {
+  private getContentPath(hash: string, branch?: string): string {
     const prefix = hash.substring(0, 2);
     const suffix = hash.substring(2);
-    return path.join(this.contentDir, prefix, suffix + '.json');
+    return path.join(this.getContentDir(branch), prefix, suffix + '.json');
   }
 
-  private getDiffPath(hash: string): string {
+  private getDiffPath(hash: string, branch?: string): string {
     const prefix = hash.substring(0, 2);
     const suffix = hash.substring(2);
-    return path.join(this.diffDir, prefix, suffix + '.json');
+    return path.join(this.getDiffDir(branch), prefix, suffix + '.json');
+  }
+
+  public setCurrentBranch(branch: string) {
+    this.currentBranch = branch;
   }
 
   setupIpcHandlers() {
+    
     // Save snapshot
     ipcMain.handle('snapshots:save', async (_, snapshot: ClaudeSnapshot) => {
       try {
+        const branch = snapshot.gitBranch || 'main';
+        const snapshotsDir = this.getSnapshotsDir(branch);
+        
+        // Ensure branch directories exist
+        await fs.ensureDir(snapshotsDir);
+        await fs.ensureDir(this.getContentDir(branch));
+        await fs.ensureDir(this.getDiffDir(branch));
+        
         const filename = `${snapshot.id}.json`;
-        const filepath = path.join(this.snapshotsDir, filename);
+        const filepath = path.join(snapshotsDir, filename);
         
         // Calculate actual size
         const content = JSON.stringify(snapshot, null, 2);
@@ -78,39 +103,40 @@ export class SnapshotService {
     });
 
     // List snapshots
-    ipcMain.handle('snapshots:list', async () => {
+    ipcMain.handle('snapshots:list', async (_, options?: { branch?: string; allBranches?: boolean }) => {
+      return this.handleListSnapshots(_, options);
+    });
+
+    // Delete snapshot
+    ipcMain.handle('snapshots:delete', async (_, snapshotId: string, branch?: string) => {
       try {
-        const files = await fs.readdir(this.snapshotsDir);
-        const snapshots: ClaudeSnapshot[] = [];
+        // If branch is provided, use it directly
+        if (branch) {
+          const filename = `${snapshotId}.json`;
+          const filepath = path.join(this.getSnapshotsDir(branch), filename);
+          await fs.remove(filepath);
+          return { success: true };
+        }
         
-        for (const file of files) {
-          if (file.endsWith('.json')) {
-            const filepath = path.join(this.snapshotsDir, file);
-            try {
-              const snapshot = await fs.readJson(filepath);
-              snapshots.push(snapshot);
-            } catch (error) {
-              console.error(`Failed to read snapshot ${file}:`, error);
+        // Otherwise, search for the snapshot in all branches
+        const branchDirs = await fs.readdir(this.projectSnapshotsDir);
+        
+        for (const branchDir of branchDirs) {
+          const branchPath = path.join(this.projectSnapshotsDir, branchDir);
+          const stat = await fs.stat(branchPath);
+          
+          if (stat.isDirectory()) {
+            const filename = `${snapshotId}.json`;
+            const filepath = path.join(branchPath, 'snapshots', filename);
+            
+            if (await fs.pathExists(filepath)) {
+              await fs.remove(filepath);
+              return { success: true };
             }
           }
         }
         
-        return { success: true, data: snapshots };
-      } catch (error: any) {
-        console.error('Failed to list snapshots:', error);
-        return { success: false, error: error.message, data: [] };
-      }
-    });
-
-    // Delete snapshot
-    ipcMain.handle('snapshots:delete', async (_, snapshotId: string) => {
-      try {
-        const filename = `${snapshotId}.json`;
-        const filepath = path.join(this.snapshotsDir, filename);
-        
-        await fs.remove(filepath);
-        
-        return { success: true };
+        return { success: false, error: 'Snapshot not found' };
       } catch (error: any) {
         console.error('Failed to delete snapshot:', error);
         return { success: false, error: error.message };
@@ -120,8 +146,9 @@ export class SnapshotService {
     // Update snapshot (for tags)
     ipcMain.handle('snapshots:update', async (_, snapshot: ClaudeSnapshot) => {
       try {
+        const branch = snapshot.gitBranch || 'main';
         const filename = `${snapshot.id}.json`;
-        const filepath = path.join(this.snapshotsDir, filename);
+        const filepath = path.join(this.getSnapshotsDir(branch), filename);
         
         await fs.writeJson(filepath, snapshot, { spaces: 2 });
         
@@ -164,7 +191,8 @@ export class SnapshotService {
         let imported = 0;
         for (const snapshot of data.snapshots) {
           const filename = `${snapshot.id}.json`;
-          const filepath = path.join(this.snapshotsDir, filename);
+          const branch = snapshot.gitBranch || 'main';
+          const filepath = path.join(this.getSnapshotsDir(branch), filename);
           
           // Don't overwrite existing snapshots
           if (!await fs.pathExists(filepath)) {
@@ -194,9 +222,9 @@ export class SnapshotService {
     });
 
     // Content storage
-    ipcMain.handle('snapshots:storeContent', async (_, params: { hash: string; content: string; mimeType: string; encoding: string; projectPath: string }) => {
+    ipcMain.handle('snapshots:storeContent', async (_, params: { hash: string; content: string; mimeType: string; encoding: string; projectPath: string; branch?: string }) => {
       try {
-        const success = await this.storeContentObject(params.hash, params.content, params.mimeType, params.encoding);
+        const success = await this.storeContentObject(params.hash, params.content, params.mimeType, params.encoding, params.branch);
         return { success };
       } catch (error: any) {
         console.error('Failed to store content:', error);
@@ -205,9 +233,9 @@ export class SnapshotService {
     });
 
     // Content retrieval
-    ipcMain.handle('snapshots:getContent', async (_, params: { hash: string; projectPath: string }) => {
+    ipcMain.handle('snapshots:getContent', async (_, params: { hash: string; projectPath: string; branch?: string }) => {
       try {
-        const content = await this.getContentObject(params.hash);
+        const content = await this.getContentObject(params.hash, params.branch);
         return { success: true, content };
       } catch (error: any) {
         console.error('Failed to get content:', error);
@@ -216,9 +244,9 @@ export class SnapshotService {
     });
 
     // Diff storage
-    ipcMain.handle('snapshots:storeDiff', async (_, params: { hash: string; diffObject: DiffObject; projectPath: string }) => {
+    ipcMain.handle('snapshots:storeDiff', async (_, params: { hash: string; diffObject: DiffObject; projectPath: string; branch?: string }) => {
       try {
-        const success = await this.storeDiffObject(params.hash, params.diffObject);
+        const success = await this.storeDiffObject(params.hash, params.diffObject, params.branch);
         return { success };
       } catch (error: any) {
         console.error('Failed to store diff:', error);
@@ -227,9 +255,9 @@ export class SnapshotService {
     });
 
     // Diff retrieval
-    ipcMain.handle('snapshots:getDiff', async (_, params: { hash: string; projectPath: string }) => {
+    ipcMain.handle('snapshots:getDiff', async (_, params: { hash: string; projectPath: string; branch?: string }) => {
       try {
-        const diffObject = await this.getDiffObject(params.hash);
+        const diffObject = await this.getDiffObject(params.hash, params.branch);
         return { success: true, diffObject };
       } catch (error: any) {
         console.error('Failed to get diff:', error);
@@ -247,6 +275,17 @@ export class SnapshotService {
         return { success: false, error: error.message, files: [] };
       }
     });
+    
+    // Update current branch
+    ipcMain.handle('snapshots:setCurrentBranch', async (_, branch: string) => {
+      try {
+        this.setCurrentBranch(branch);
+        return { success: true };
+      } catch (error: any) {
+        console.error('Failed to set current branch:', error);
+        return { success: false, error: error.message };
+      }
+    });
 
     // File restoration
     ipcMain.handle('snapshots:restoreFiles', async (_, params: { fileChanges: any; projectPath: string }) => {
@@ -262,7 +301,12 @@ export class SnapshotService {
     // Enhanced storage info
     ipcMain.handle('snapshots:getStorageInfo', async (_, params?: { projectPath: string }) => {
       try {
-        const stats = await fs.stat(this.snapshotsDir);
+        // Calculate stats for all branch directories
+        let totalSize = 0;
+        if (await fs.pathExists(this.projectSnapshotsDir)) {
+          const stats = await fs.stat(this.projectSnapshotsDir);
+          totalSize = stats.size;
+        }
         
         // Calculate content storage stats
         let contentSize = 0;
@@ -277,13 +321,13 @@ export class SnapshotService {
         
         const storageInfo = {
           totalSnapshots: 0, // Will be filled by snapshots store
-          totalSizeKb: stats.size / 1024,
+          totalSizeKb: totalSize / 1024,
           totalContentSizeKb: contentSize / 1024,
           compressionRatio: 0, // Calculate based on stored objects
           deduplicationSavings: 0, // Calculate based on content hash duplicates
           oldestSnapshot: new Date().toISOString(),
           newestSnapshot: new Date().toISOString(),
-          storageDirectory: this.snapshotsDir
+          storageDirectory: this.projectSnapshotsDir
         };
         
         return { success: true, storageInfo };
@@ -300,7 +344,7 @@ export class SnapshotService {
             deduplicationSavings: 0,
             oldestSnapshot: new Date().toISOString(),
             newestSnapshot: new Date().toISOString(),
-            storageDirectory: this.snapshotsDir
+            storageDirectory: this.projectSnapshotsDir
           }
         };
       }
@@ -342,8 +386,27 @@ export class SnapshotService {
       }
     }
     
-    await walkContentDir(this.contentDir);
-    await walkContentDir(this.diffDir);
+    // Walk through all branch directories
+    if (await fs.pathExists(this.projectSnapshotsDir)) {
+      const branchDirs = await fs.readdir(this.projectSnapshotsDir);
+      
+      for (const branchDir of branchDirs) {
+        const branchPath = path.join(this.projectSnapshotsDir, branchDir);
+        const stat = await fs.stat(branchPath);
+        
+        if (stat.isDirectory()) {
+          const contentDir = path.join(branchPath, 'content');
+          const diffDir = path.join(branchPath, 'diffs');
+          
+          if (await fs.pathExists(contentDir)) {
+            await walkContentDir(contentDir);
+          }
+          if (await fs.pathExists(diffDir)) {
+            await walkContentDir(diffDir);
+          }
+        }
+      }
+    }
     
     return { size: totalSize, count };
   }
@@ -472,23 +535,75 @@ export class SnapshotService {
     return false;
   }
 
-  private async listAllSnapshots(): Promise<ClaudeSnapshot[]> {
-    const files = await fs.readdir(this.snapshotsDir);
-    const snapshots: ClaudeSnapshot[] = [];
-    
-    for (const file of files) {
-      if (file.endsWith('.json')) {
-        const filepath = path.join(this.snapshotsDir, file);
-        try {
-          const snapshot = await fs.readJson(filepath);
-          snapshots.push(snapshot);
-        } catch (error) {
-          console.error(`Failed to read snapshot ${file}:`, error);
+  private async listAllSnapshots(): Promise<{ success: boolean; data: ClaudeSnapshot[] }> {
+    // Use the existing list handler with allBranches option
+    return this.handleListSnapshots(null, { allBranches: true });
+  }
+  
+  private async handleListSnapshots(_: any, options?: { branch?: string; allBranches?: boolean }) {
+    try {
+      const snapshots: ClaudeSnapshot[] = [];
+      
+      // Check if project directory exists
+      if (!await fs.pathExists(this.projectSnapshotsDir)) {
+        return { success: true, data: snapshots };
+      }
+      
+      if (options?.allBranches) {
+        // List all branch directories
+        const branchDirs = await fs.readdir(this.projectSnapshotsDir);
+        
+        for (const branchDir of branchDirs) {
+          const branchPath = path.join(this.projectSnapshotsDir, branchDir);
+          const stat = await fs.stat(branchPath);
+          
+          if (stat.isDirectory()) {
+            const snapshotsDir = path.join(branchPath, 'snapshots');
+            
+            if (await fs.pathExists(snapshotsDir)) {
+              const files = await fs.readdir(snapshotsDir);
+              
+              for (const file of files) {
+                if (file.endsWith('.json')) {
+                  const filepath = path.join(snapshotsDir, file);
+                  try {
+                    const snapshot = await fs.readJson(filepath);
+                    snapshots.push(snapshot);
+                  } catch (error) {
+                    console.error(`Failed to read snapshot ${file}:`, error);
+                  }
+                }
+              }
+            }
+          }
+        }
+      } else {
+        // List snapshots for specific branch only
+        const branch = options?.branch || this.currentBranch;
+        const snapshotsDir = this.getSnapshotsDir(branch);
+        
+        if (await fs.pathExists(snapshotsDir)) {
+          const files = await fs.readdir(snapshotsDir);
+          
+          for (const file of files) {
+            if (file.endsWith('.json')) {
+              const filepath = path.join(snapshotsDir, file);
+              try {
+                const snapshot = await fs.readJson(filepath);
+                snapshots.push(snapshot);
+              } catch (error) {
+                console.error(`Failed to read snapshot ${file}:`, error);
+              }
+            }
+          }
         }
       }
+      
+      return { success: true, data: snapshots };
+    } catch (error: any) {
+      console.error('Failed to list snapshots:', error);
+      return { success: false, error: error.message, data: [] };
     }
-    
-    return snapshots;
   }
 
   // Clean up old snapshots
@@ -497,17 +612,34 @@ export class SnapshotService {
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - daysToKeep);
       
-      const files = await fs.readdir(this.snapshotsDir);
       let deleted = 0;
       
-      for (const file of files) {
-        if (file.endsWith('.json')) {
-          const filepath = path.join(this.snapshotsDir, file);
-          const stats = await fs.stat(filepath);
+      // Clean up snapshots in all branch directories
+      if (await fs.pathExists(this.projectSnapshotsDir)) {
+        const branchDirs = await fs.readdir(this.projectSnapshotsDir);
+        
+        for (const branchDir of branchDirs) {
+          const branchPath = path.join(this.projectSnapshotsDir, branchDir);
+          const stat = await fs.stat(branchPath);
           
-          if (stats.mtime < cutoffDate) {
-            await fs.remove(filepath);
-            deleted++;
+          if (stat.isDirectory()) {
+            const snapshotsDir = path.join(branchPath, 'snapshots');
+            
+            if (await fs.pathExists(snapshotsDir)) {
+              const files = await fs.readdir(snapshotsDir);
+              
+              for (const file of files) {
+                if (file.endsWith('.json')) {
+                  const filepath = path.join(snapshotsDir, file);
+                  const stats = await fs.stat(filepath);
+                  
+                  if (stats.mtime < cutoffDate) {
+                    await fs.remove(filepath);
+                    deleted++;
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -665,8 +797,8 @@ export class SnapshotService {
   }
 
   // Content storage
-  private async storeContentObject(hash: string, content: string, mimeType: string, encoding: string): Promise<boolean> {
-    const contentPath = this.getContentPath(hash);
+  private async storeContentObject(hash: string, content: string, mimeType: string, encoding: string, branch?: string): Promise<boolean> {
+    const contentPath = this.getContentPath(hash, branch);
     
     // Check if content already exists (deduplication)
     if (await fs.pathExists(contentPath)) {
@@ -701,8 +833,8 @@ export class SnapshotService {
     }
   }
 
-  private async getContentObject(hash: string): Promise<string | null> {
-    const contentPath = this.getContentPath(hash);
+  private async getContentObject(hash: string, branch?: string): Promise<string | null> {
+    const contentPath = this.getContentPath(hash, branch);
     
     if (!await fs.pathExists(contentPath)) {
       return null;
@@ -728,8 +860,8 @@ export class SnapshotService {
   }
 
   // Diff storage
-  private async storeDiffObject(hash: string, diffObject: DiffObject): Promise<boolean> {
-    const diffPath = this.getDiffPath(hash);
+  private async storeDiffObject(hash: string, diffObject: DiffObject, branch?: string): Promise<boolean> {
+    const diffPath = this.getDiffPath(hash, branch);
     
     try {
       await fs.ensureDir(path.dirname(diffPath));
@@ -741,8 +873,8 @@ export class SnapshotService {
     }
   }
 
-  private async getDiffObject(hash: string): Promise<DiffObject | null> {
-    const diffPath = this.getDiffPath(hash);
+  private async getDiffObject(hash: string, branch?: string): Promise<DiffObject | null> {
+    const diffPath = this.getDiffPath(hash, branch);
     
     if (!await fs.pathExists(diffPath)) {
       return null;

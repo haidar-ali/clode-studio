@@ -263,10 +263,10 @@ const electronAPI = {
   snapshots: {
     save: (snapshot: any) =>
       ipcRenderer.invoke('snapshots:save', snapshot),
-    list: () =>
-      ipcRenderer.invoke('snapshots:list'),
-    delete: (snapshotId: string) =>
-      ipcRenderer.invoke('snapshots:delete', snapshotId),
+    list: (options?: { branch?: string; allBranches?: boolean }) =>
+      ipcRenderer.invoke('snapshots:list', options),
+    delete: (snapshotId: string, branch?: string) =>
+      ipcRenderer.invoke('snapshots:delete', snapshotId, branch),
     update: (snapshot: any) =>
       ipcRenderer.invoke('snapshots:update', snapshot),
     getStorageInfo: () =>
@@ -292,7 +292,9 @@ const electronAPI = {
     restoreFiles: (params: { fileChanges: any; projectPath: string }) =>
       ipcRenderer.invoke('snapshots:restoreFiles', params),
     cleanup: (params: { projectPath: string; olderThanDays: number }) =>
-      ipcRenderer.invoke('snapshots:cleanup', params)
+      ipcRenderer.invoke('snapshots:cleanup', params),
+    setCurrentBranch: (branch: string) =>
+      ipcRenderer.invoke('snapshots:setCurrentBranch', branch)
   },
   git: {
     status: () => ipcRenderer.invoke('git:status'),

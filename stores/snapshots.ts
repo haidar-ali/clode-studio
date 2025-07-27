@@ -319,14 +319,25 @@ export const useSnapshotsStore = defineStore('snapshots', () => {
     const index = snapshots.value.findIndex(s => s.id === snapshotId);
     if (index === -1) return;
     
-    const result = await window.electronAPI.snapshots.delete(snapshotId);
+    const snapshot = snapshots.value[index];
+    const result = await window.electronAPI.snapshots.delete(snapshotId, snapshot.gitBranch);
     if (result.success) {
       snapshots.value.splice(index, 1);
     }
   }
 
-  async function loadSnapshots() {
-    const result = await window.electronAPI.snapshots.list();
+  async function loadSnapshots(allBranches: boolean = false) {
+    const gitStore = useSourceControlStore();
+    const currentBranch = gitStore.currentBranch || 'main';
+    
+    // Update the current branch in the snapshot service
+    await window.electronAPI.snapshots.setCurrentBranch(currentBranch);
+    
+    const options = allBranches 
+      ? { allBranches: true }
+      : { branch: currentBranch };
+    
+    const result = await window.electronAPI.snapshots.list(options);
     if (result.success && result.data) {
       snapshots.value = result.data;
     }

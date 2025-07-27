@@ -11,7 +11,11 @@ export function useSnapshotTriggers() {
   let lastBranch = gitStore.currentBranch;
   let lastTaskCount = tasksStore.tasks?.length || 0;
   
-  // Watch for branch changes
+  // Watch for branch changes - DISABLED
+  // Auto-snapshot on branch switch is now disabled to avoid creating snapshots
+  // every time we switch worktrees. Snapshots are only created when explicitly
+  // creating a new worktree.
+  /*
   watch(() => gitStore.currentBranch, async (newBranch) => {
     if (newBranch && newBranch !== lastBranch) {
       try {
@@ -26,6 +30,7 @@ export function useSnapshotTriggers() {
       lastBranch = newBranch;
     }
   });
+  */
   
   // Watch for significant task changes
   watch(() => tasksStore.tasks?.length || 0, async (newCount) => {

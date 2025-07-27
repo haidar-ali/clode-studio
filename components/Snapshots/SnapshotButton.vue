@@ -100,7 +100,8 @@ function handleKeyboard(e: KeyboardEvent) {
 
 onMounted(() => {
   document.addEventListener('keydown', handleKeyboard);
-  snapshotsStore.loadSnapshots();
+  // Load only snapshots for current branch by default
+  snapshotsStore.loadSnapshots(false);
   if (config.value.enableAutoSnapshots) {
     snapshotsStore.startAutoSnapshots();
   }

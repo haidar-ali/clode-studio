@@ -303,6 +303,7 @@ import { ref, computed, watch, onMounted } from 'vue';
 import { useSourceControlStore } from '~/stores/source-control';
 import { useSnapshotsStore } from '~/stores/snapshots';
 import { useWorkspaceStore } from '~/stores/workspace';
+import { useWorkspaceManager } from '~/composables/useWorkspaceManager';
 import { useDialogs } from '~/composables/useDialogs';
 import FileItem from './FileItem.vue';
 import EnhancedSnapshotItem from './EnhancedSnapshotItem.vue';
@@ -315,6 +316,7 @@ import { vClickOutside } from '~/directives/clickOutside';
 const sourceControl = useSourceControlStore();
 const snapshots = useSnapshotsStore();
 const workspace = useWorkspaceStore();
+const workspaceManager = useWorkspaceManager();
 
 // State
 const isCommitting = ref(false);
@@ -577,6 +579,12 @@ async function createWorktree(data: {
     );
     
     if (result.success) {
+      // Create a snapshot for the new worktree branch
+      await snapshots.captureSnapshot(
+        `New worktree: ${data.branchName}`,
+        'auto-branch'
+      );
+      
       // If checkout is requested, switch to the new worktree
       if (data.checkout && result.worktree) {
         await switchWorkspace(result.worktree.path);
@@ -742,14 +750,35 @@ async function handleOpenInTerminal() {
 // Watch for workspace changes
 watch(() => workspace.currentPath, async (newPath) => {
   if (newPath) {
-    await sourceControl.initialize(newPath);
+    // Use active worktree path if available, otherwise use workspace path
+    const pathToUse = workspaceManager.activeWorktreePath.value || newPath;
+    await sourceControl.initialize(pathToUse);
+  }
+});
+
+// Watch for worktree changes
+watch(() => workspaceManager.activeWorktreePath.value, async (newWorktreePath) => {
+  if (newWorktreePath) {
+    await sourceControl.initialize(newWorktreePath);
+    // Reload snapshots for the new branch
+    await snapshots.loadSnapshots(false);
+  }
+});
+
+// Watch for branch changes
+watch(() => sourceControl.currentBranch, async (newBranch, oldBranch) => {
+  if (newBranch && newBranch !== oldBranch) {
+    // Reload snapshots for the new branch
+    await snapshots.loadSnapshots(false);
   }
 });
 
 // Initialize
 onMounted(async () => {
-  if (workspace.currentPath) {
-    await sourceControl.initialize(workspace.currentPath);
+  // Use active worktree path if available, otherwise use workspace path
+  const pathToUse = workspaceManager.activeWorktreePath.value || workspace.currentPath;
+  if (pathToUse) {
+    await sourceControl.initialize(pathToUse);
   }
 });
 </script>

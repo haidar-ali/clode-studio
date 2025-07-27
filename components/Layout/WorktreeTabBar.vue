@@ -101,6 +101,15 @@ const showCreateWorktreeDialog = () => {
 const handleCreateWorktree = async (branchName: string, sessionName?: string, description?: string) => {
   try {
     await workspaceManager.createWorktree(branchName, sessionName, description);
+    
+    // Create a snapshot for the new worktree branch
+    const { useSnapshotsStore } = await import('~/stores/snapshots');
+    const snapshotsStore = useSnapshotsStore();
+    await snapshotsStore.captureSnapshot(
+      `New worktree: ${branchName}`,
+      'auto-branch'
+    );
+    
     // Close dialog
     showCreateDialog.value = false;
     // Refresh worktrees to show the new one

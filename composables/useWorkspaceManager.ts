@@ -273,6 +273,10 @@ export function useWorkspaceManager() {
     // Update tasks path to the worktree
     tasksStore.setProjectPath(worktreePath);
     
+    // Refresh source control to get the correct branch for the worktree
+    const sourceControlStore = useSourceControlStore();
+    await sourceControlStore.refreshStatus();
+    
     // Restore worktree state if exists
     await restoreWorktreeState(worktreePath);
     
@@ -288,7 +292,6 @@ export function useWorkspaceManager() {
     }
     
     // Update source control to use worktree path
-    const sourceControlStore = useSourceControlStore();
     await sourceControlStore.initialize(worktreePath);
     
     // Reload MCP servers for the worktree context
