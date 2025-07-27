@@ -194,10 +194,38 @@ const cancelEdit = () => {
 
 // Context menu methods
 const showContextMenu = (event: MouseEvent, instance: any) => {
+  // Calculate position to keep menu within viewport
+  const menuWidth = 180; // Approximate width of context menu
+  const menuHeight = 200; // Approximate height of context menu
+  const padding = 8; // Padding from edge
+  
+  let x = event.clientX;
+  let y = event.clientY;
+  
+  // Check if menu would go off right edge
+  if (x + menuWidth > window.innerWidth - padding) {
+    x = window.innerWidth - menuWidth - padding;
+  }
+  
+  // Check if menu would go off bottom edge
+  if (y + menuHeight > window.innerHeight - padding) {
+    y = window.innerHeight - menuHeight - padding;
+  }
+  
+  // Check if menu would go off left edge (unlikely but safe)
+  if (x < padding) {
+    x = padding;
+  }
+  
+  // Check if menu would go off top edge (unlikely but safe)
+  if (y < padding) {
+    y = padding;
+  }
+  
   contextMenu.value = {
     visible: true,
-    x: event.clientX,
-    y: event.clientY,
+    x,
+    y,
     targetInstance: instance
   };
 };
@@ -542,43 +570,44 @@ onUnmounted(() => {
 /* Context Menu Styles */
 .context-menu {
   position: fixed;
-  background: #3c3c3c;
-  border: 1px solid #505050;
-  border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  background: #252526;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
   z-index: 9999;
   min-width: 160px;
   padding: 4px 0;
   font-size: 13px;
-  color: #d4d4d4;
+  color: #cccccc;
 }
 
 .context-menu-item {
-  padding: 8px 16px;
+  padding: 6px 20px;
   cursor: pointer;
-  transition: background-color 0.15s ease;
+  transition: background-color 0.1s ease;
   user-select: none;
 }
 
 .context-menu-item:hover:not(.disabled) {
-  background: #505050;
+  background: #094771;
+  color: #ffffff;
 }
 
 .context-menu-item.disabled {
-  color: #666;
+  color: #5a5a5a;
   cursor: not-allowed;
 }
 
 .context-menu-separator {
   height: 1px;
-  background: #505050;
+  background: #3e3e42;
   margin: 4px 0;
 }
 
 .context-menu-colors {
   display: flex;
   gap: 8px;
-  padding: 8px 16px;
+  padding: 8px 20px;
   justify-content: center;
 }
 
@@ -592,7 +621,7 @@ onUnmounted(() => {
 }
 
 .color-dot:hover {
-  border-color: #fff;
+  border-color: #cccccc;
   transform: scale(1.1);
 }
 </style>
