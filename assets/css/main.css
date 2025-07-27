@@ -41,23 +41,39 @@ a,
   overflow: hidden;
 }
 
-.splitpanes__splitter {
-  background-color: #2d2d30;
+/* Override splitpanes default theme with higher specificity */
+.splitpanes .splitpanes__splitter,
+.default-theme.splitpanes .splitpanes__splitter,
+.default-theme .splitpanes__splitter {
+  background-color: #3c3c3c !important;
   position: relative;
+  transition: background-color 0.2s ease;
+  border: none !important;
+  margin: 0 !important;
 }
 
-.splitpanes--vertical > .splitpanes__splitter {
-  width: 4px;
+.splitpanes--vertical > .splitpanes__splitter,
+.default-theme.splitpanes--vertical > .splitpanes__splitter,
+.default-theme .splitpanes--vertical > .splitpanes__splitter {
+  width: 2px !important;
   cursor: col-resize;
+  border-left: none !important;
+  margin-left: 0 !important;
 }
 
-.splitpanes--horizontal > .splitpanes__splitter {
-  height: 4px;
+.splitpanes--horizontal > .splitpanes__splitter,
+.default-theme.splitpanes--horizontal > .splitpanes__splitter,
+.default-theme .splitpanes--horizontal > .splitpanes__splitter {
+  height: 2px !important;
   cursor: row-resize;
+  border-top: none !important;
+  margin-top: 0 !important;
 }
 
-.splitpanes__splitter:hover {
-  background-color: #007acc;
+.splitpanes__splitter:hover,
+.default-theme.splitpanes .splitpanes__splitter:hover,
+.default-theme .splitpanes__splitter:hover {
+  background-color: #5a5a5a !important;
 }
 
 .monaco-editor-wrapper {
@@ -226,4 +242,36 @@ body .modal-overlay :is(p, div, span, label, li, td, th):not([class*="color-"]) 
 /* Ensure headings are white */
 body .modal-overlay :is(h1, h2, h3, h4, h5, h6) {
   color: #ffffff !important;
+}
+
+/* Minimal dark scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #454545 transparent;
+}
+
+/* Webkit scrollbars (Chrome, Safari, Edge) */
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: #454545;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background-clip: content-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: #5a5a5a;
+  background-clip: content-box;
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
 }
