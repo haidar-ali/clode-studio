@@ -25,6 +25,8 @@ import { WorktreeManager } from './worktree-manager.js';
 import { WorktreeManagerGlobal } from './worktree-manager-global.js';
 import { GitHooksManagerGlobal } from './git-hooks-manager-global.js';
 import { GitHooksManager } from './git-hooks.js';
+import { SnapshotService } from './snapshot-service.js';
+import { setupGitTimelineHandlers } from './git-timeline-handlers.js';
 
 // Load environment variables from .env file
 import { config } from 'dotenv';
@@ -54,6 +56,9 @@ const worktreeManagers: Map<string, WorktreeManager> = new Map();
 
 // Git hooks manager instances per workspace - now handled by GitHooksManagerGlobal
 // const gitHooksManagers: Map<string, GitHooksManager> = new Map();
+
+// Snapshot service instances per workspace
+const snapshotServices: Map<string, SnapshotService> = new Map();
 
 const isDev = process.env.NODE_ENV !== 'production';
 const nuxtURL = isDev ? 'http://localhost:3000' : `file://${join(__dirname, '../.output/public/index.html')}`;
@@ -103,6 +108,9 @@ app.whenReady().then(() => {
   WorktreeManagerGlobal.getInstance();
   GitHooksManagerGlobal.getInstance();
   
+  // Setup Git Timeline handlers
+  setupGitTimelineHandlers();
+
   createWindow();
 
   app.on('activate', () => {
@@ -132,7 +140,7 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
     const debugArgs = process.env.CLAUDE_DEBUG === 'true' ? ['--debug'] : [];
 
     let { command, args: commandArgs, useShell } = ClaudeDetector.getClaudeCommand(claudeInfo, debugArgs);
-    
+
     // Override with run config if provided
     if (runConfig) {
       if (runConfig.command) {
@@ -148,8 +156,8 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
         useShell = result.useShell;
       }
     }
-    
-  
+
+
     // Log settings file to verify it exists
     const settingsPath = join(homedir(), '.claude', 'settings.json');
     if (!existsSync(settingsPath)) {
@@ -212,7 +220,7 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
 ipcMain.handle('claude:send', async (event, instanceId: string, command: string) => {
   const claudePty = claudeInstances.get(instanceId);
   if (!claudePty) {
-    return { success: false, error: `Claude PTY not running for instance ${instanceId}` };
+    return { success: false, error: `Claude instance is not running. Please start a Claude instance in the terminal first.` };
   }
 
   try {
@@ -253,6 +261,15 @@ ipcMain.handle('claude:resize', async (event, instanceId: string, cols: number, 
 // Get home directory
 ipcMain.handle('getHomeDir', () => {
   return homedir();
+});
+
+// Show notification
+ipcMain.handle('showNotification', async (event, options: { title: string; body: string }) => {
+  const { Notification } = await import('electron');
+  if (Notification.isSupported()) {
+    new Notification(options).show();
+  }
+  return { success: true };
 });
 
 // File Watcher operations
@@ -699,6 +716,25 @@ ipcMain.handle('dialog:showSaveDialog', async (event, options) => {
   }
 });
 
+ipcMain.handle('dialog:showInputBox', async (event, options) => {
+  try {
+    // Electron doesn't have a built-in input box, so we'll use a custom implementation
+    // For now, return a simple response indicating this needs to be handled in the renderer
+    return { canceled: true, value: '' };
+  } catch (error) {
+    return { canceled: true, value: '' };
+  }
+});
+
+ipcMain.handle('dialog:showMessageBox', async (event, options) => {
+  try {
+    const result = await dialog.showMessageBox(mainWindow!, options);
+    return result;
+  } catch (error) {
+    return { response: 0, checkboxChecked: false };
+  }
+});
+
 // Claude installation detection
 ipcMain.handle('claude:detectInstallation', async () => {
   try {
@@ -717,7 +753,7 @@ ipcMain.handle('fs:watchFile', async (event, filePath: string) => {
       return { success: true };
     }
 
-    
+
     const watcher = chokidarWatch(filePath, {
       persistent: true,
       ignoreInitial: true,
@@ -726,13 +762,13 @@ ipcMain.handle('fs:watchFile', async (event, filePath: string) => {
         pollInterval: 100
       }
     });
-    
+
     watcher.on('change', async (path) => {
-      
+
       try {
         // Read the new content immediately (chokidar already handles debouncing with awaitWriteFinish)
         const content = await readFile(filePath, 'utf-8');
-        
+
         // Send update to all windows
         console.log('[FileWatcher] Sending file:changed event for:', filePath);
         const windows = BrowserWindow.getAllWindows();
@@ -745,7 +781,7 @@ ipcMain.handle('fs:watchFile', async (event, filePath: string) => {
             });
           }
         });
-        
+
         // Also log if no windows are available
         if (windows.length === 0) {
           console.error('[FileWatcher] No windows available to send file:changed event');
@@ -754,7 +790,7 @@ ipcMain.handle('fs:watchFile', async (event, filePath: string) => {
         console.error('[FileWatcher] Error reading changed file:', error);
       }
     });
-    
+
     // Add error handler
     watcher.on('error', (error) => {
       console.error('[FileWatcher] Watcher error for', filePath, ':', error);
@@ -786,7 +822,7 @@ ipcMain.handle('fs:watchDirectory', async (event, dirPath: string) => {
         pollInterval: 100
       }
     });
-    
+
     watcher.on('all', (eventType, filePath) => {
       // Send update to renderer
       const windows = BrowserWindow.getAllWindows();
@@ -878,12 +914,12 @@ ipcMain.handle('claude:sdk:updateTodo', async (event, todoId: string, newStatus:
 
 // Search operations
 ipcMain.handle('search:findInFiles', async (event, options) => {
-  
+
   // Add a response wrapper to ensure clean IPC communication
   const sendResponse = (data: any) => {
     return data;
   };
-  
+
   const { promisify } = await import('util');
   const { exec } = await import('child_process');
   const execAsync = promisify(exec);
@@ -909,22 +945,22 @@ ipcMain.handle('search:findInFiles', async (event, options) => {
     try {
       // Try ripgrep first
       console.log('[Main] Attempting to use ripgrep...');
-      
+
       // Check for bundled ripgrep first
       const platform = process.platform;
       const arch = process.arch;
-      const platformKey = platform === 'darwin' 
+      const platformKey = platform === 'darwin'
         ? (arch === 'arm64' ? 'darwin-arm64' : 'darwin-x64')
-        : platform === 'linux' ? 'linux-x64' 
-        : platform === 'win32' ? 'win32-x64' 
+        : platform === 'linux' ? 'linux-x64'
+        : platform === 'win32' ? 'win32-x64'
         : null;
-      
+
       let rgPath = 'rg'; // Default to system rg
-      
+
       if (platformKey) {
         const rgBinary = platform === 'win32' ? 'rg.exe' : 'rg';
         const bundledRgPath = path.join(__dirname, '..', 'vendor', 'ripgrep', platformKey, rgBinary);
-        
+
         if (existsSync(bundledRgPath)) {
           rgPath = bundledRgPath;
           console.log('[Main] Using bundled ripgrep from:', rgPath);
@@ -941,7 +977,7 @@ ipcMain.handle('search:findInFiles', async (event, options) => {
         includePattern,
         excludePattern
       });
-      
+
       return sendResponse(results);
     } catch (error: any) {
       // Ripgrep failed (likely timeout), fallback to Node.js implementation
@@ -961,7 +997,7 @@ ipcMain.handle('search:findInFiles', async (event, options) => {
 // Fallback search implementation using Node.js
 async function fallbackSearch(workingDir: string, options: any) {
   const startTime = Date.now();
-  
+
   const { query, caseSensitive, wholeWord, useRegex, includePattern, excludePattern } = options;
   const path = await import('path');
   const fs = await import('fs/promises');
@@ -988,7 +1024,7 @@ async function fallbackSearch(workingDir: string, options: any) {
 
   const searchInDirectory = async (dir: string) => {
     try {
-      
+
       const entries = await fs.readdir(dir, { withFileTypes: true });
 
       for (const entry of entries) {
@@ -1026,7 +1062,7 @@ async function fallbackSearch(workingDir: string, options: any) {
             if (stats.size > 5 * 1024 * 1024) {
               continue;
             }
-            
+
             const content = await fs.readFile(fullPath, 'utf-8');
             const lines = content.split('\n');
             const matches: any[] = [];
@@ -1064,10 +1100,10 @@ async function fallbackSearch(workingDir: string, options: any) {
   };
 
   await searchInDirectory(workingDir);
-  
-  
+
+
   const resultsArray = Array.from(results.values());
-  
+
   return resultsArray;
 }
 
@@ -1761,12 +1797,17 @@ let currentCheckpointService: CheckpointService | null = null;
 let currentWorktreeManager: WorktreeManager | null = null;
 // let currentGitHooksManager: GitHooksManager | null = null; - now handled by GitHooksManagerGlobal
 
+// Get current workspace path
+ipcMain.handle('workspace:getCurrentPath', async () => {
+  return (store as any).get('workspacePath') || process.cwd();
+});
+
 // Git service initialization when workspace changes
 ipcMain.handle('workspace:setPath', async (event, workspacePath: string) => {
   try {
     // Store the workspace path
     (store as any).set('workspacePath', workspacePath);
-    
+
     try {
       // Update the Git Service Manager with the new workspace
       const gitServiceManager = GitServiceManager.getInstance();
@@ -1774,7 +1815,7 @@ ipcMain.handle('workspace:setPath', async (event, workspacePath: string) => {
     } catch (error) {
       console.error('[Main] Error updating GitServiceManager:', error);
     }
-    
+
     try {
       // Update the Checkpoint Service Manager with the new workspace
       const checkpointServiceManager = CheckpointServiceManager.getInstance();
@@ -1782,7 +1823,7 @@ ipcMain.handle('workspace:setPath', async (event, workspacePath: string) => {
     } catch (error) {
       console.error('[Main] Error updating CheckpointServiceManager:', error);
     }
-    
+
     try {
       // Update the Worktree Manager with the new workspace
       const worktreeManagerGlobal = WorktreeManagerGlobal.getInstance();
@@ -1790,7 +1831,7 @@ ipcMain.handle('workspace:setPath', async (event, workspacePath: string) => {
     } catch (error) {
       console.error('[Main] Error updating WorktreeManagerGlobal:', error);
     }
-    
+
     try {
       // Update the Git Hooks Manager with the new workspace
       const gitHooksManagerGlobal = GitHooksManagerGlobal.getInstance();
@@ -1799,12 +1840,64 @@ ipcMain.handle('workspace:setPath', async (event, workspacePath: string) => {
       console.error('[Main] Error updating GitHooksManagerGlobal:', error);
     }
     
+    // Initialize snapshot service for workspace
+    if (!snapshotServices.has(workspacePath)) {
+      const snapshotService = new SnapshotService(workspacePath);
+      snapshotService.setupIpcHandlers();
+      snapshotServices.set(workspacePath, snapshotService);
+    }
+
     return { success: true };
   } catch (error) {
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Failed to set workspace path' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to set workspace path'
     };
+  }
+});
+
+// Check if a path is ignored by git
+ipcMain.handle('git:checkIgnore', async (event, workspacePath: string, paths: string[]) => {
+  try {
+    const git = await import('simple-git');
+    const gitInstance = git.default(workspacePath);
+    
+    // First check if this is a git repository
+    try {
+      const isRepo = await gitInstance.checkIsRepo();
+      if (!isRepo) {
+        // Not a git repo, return all paths as not ignored
+        const results: Record<string, boolean> = {};
+        paths.forEach(path => { results[path] = false; });
+        return { success: true, results, isGitRepo: false };
+      }
+    } catch (error) {
+      // Git command might not be available
+      console.log('Git command not available or error checking repo status');
+      const results: Record<string, boolean> = {};
+      paths.forEach(path => { results[path] = false; });
+      return { success: true, results, gitAvailable: false };
+    }
+    
+    const results: Record<string, boolean> = {};
+    
+    for (const path of paths) {
+      try {
+        await gitInstance.raw(['check-ignore', path]);
+        // If check-ignore returns 0 (no error), the path is ignored
+        results[path] = true;
+      } catch (error) {
+        // If check-ignore returns non-zero, the path is not ignored
+        results[path] = false;
+      }
+    }
+    
+    return { success: true, results, isGitRepo: true, gitAvailable: true };
+  } catch (error) {
+    // Return safe defaults if git is not available
+    const results: Record<string, boolean> = {};
+    paths.forEach(path => { results[path] = false; });
+    return { success: true, results, gitAvailable: false };
   }
 });
 

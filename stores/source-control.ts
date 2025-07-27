@@ -93,6 +93,11 @@ export const useSourceControlStore = defineStore('source-control', () => {
     return files;
   });
   
+  const branchStatus = computed(() => ({
+    ahead: ahead.value,
+    behind: behind.value
+  }));
+  
   // Actions
   async function initialize(repoPath: string) {
     isLoading.value = true;
@@ -343,6 +348,33 @@ export const useSourceControlStore = defineStore('source-control', () => {
     }
   }
   
+  // Convenience methods for single files
+  async function stageFile(path: string) {
+    await stageFiles([path]);
+  }
+  
+  async function unstageFile(path: string) {
+    await unstageFiles([path]);
+  }
+  
+  async function stash(message?: string) {
+    isLoading.value = true;
+    lastError.value = null;
+    
+    try {
+      const result = await window.electronAPI.git.stash(message);
+      if (result.success) {
+        await refreshStatus();
+      } else {
+        lastError.value = result.error || 'Failed to stash changes';
+      }
+    } catch (error) {
+      lastError.value = error instanceof Error ? error.message : 'Stash operation failed';
+    } finally {
+      isLoading.value = false;
+    }
+  }
+  
   async function commit() {
     if (!canCommit.value) return;
     
@@ -499,6 +531,49 @@ export const useSourceControlStore = defineStore('source-control', () => {
     selectedFiles.value = [];
   }
   
+  async function fetch() {
+    try {
+      const result = await window.electronAPI.git.fetch();
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to fetch');
+      }
+      // Refresh status after fetch
+      await refreshStatus();
+      await refreshBranches();
+    } catch (error) {
+      lastError.value = error instanceof Error ? error.message : String(error);
+      throw error;
+    }
+  }
+  
+  async function popStash() {
+    try {
+      const result = await window.electronAPI.git.stashPop();
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to pop stash');
+      }
+      // Refresh status after popping stash
+      await refreshStatus();
+    } catch (error) {
+      lastError.value = error instanceof Error ? error.message : String(error);
+      throw error;
+    }
+  }
+  
+  async function initializeRepo() {
+    try {
+      const result = await window.electronAPI.git.init();
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to initialize repository');
+      }
+      // Re-initialize the store after creating repo
+      await initialize(window.electronAPI.workspace.getCurrentPath());
+    } catch (error) {
+      lastError.value = error instanceof Error ? error.message : String(error);
+      throw error;
+    }
+  }
+  
   return {
     // State
     initialized,
@@ -527,6 +602,7 @@ export const useSourceControlStore = defineStore('source-control', () => {
     canCommit,
     totalChanges,
     allFiles,
+    branchStatus,
     
     // Actions
     initialize,
@@ -537,6 +613,9 @@ export const useSourceControlStore = defineStore('source-control', () => {
     unstageFiles,
     stageAll,
     unstageAll,
+    stageFile,
+    unstageFile,
+    stash,
     commit,
     push,
     pull,
@@ -547,6 +626,9 @@ export const useSourceControlStore = defineStore('source-control', () => {
     getStagedDiff,
     clearState,
     selectFile,
-    clearSelection
+    clearSelection,
+    fetch,
+    popStash,
+    initializeRepo
   };
 });

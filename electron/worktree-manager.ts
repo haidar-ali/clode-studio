@@ -67,8 +67,8 @@ export class WorktreeManager {
     });
     
     // Create new worktree
-    ipcMain.handle('worktree:create', async (event, branchName: string, sessionName?: string) => {
-      return await this.createWorktree(branchName, sessionName);
+    ipcMain.handle('worktree:create', async (event, branchName: string, sessionName?: string, sessionDescription?: string, metadata?: any) => {
+      return await this.createWorktree(branchName, sessionName, sessionDescription, metadata);
     });
     
     // Remove worktree
@@ -178,7 +178,8 @@ export class WorktreeManager {
   async createWorktree(
     branchName: string, 
     sessionName?: string,
-    sessionDescription?: string
+    sessionDescription?: string,
+    metadata?: any
   ): Promise<{ success: boolean; worktree?: Worktree; error?: string }> {
     try {
       // Check if repository has any commits
@@ -230,7 +231,8 @@ export class WorktreeManager {
         worktreePath,
         branchName,
         metadata: {
-          description: sessionDescription
+          description: sessionDescription,
+          ...(metadata || {})
         }
       });
       

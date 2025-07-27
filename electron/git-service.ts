@@ -96,6 +96,19 @@ export class GitService {
       }
     });
 
+    // Git hard reset to commit
+    ipcMain.handle('git:resetHard', async (_, commitHash: string) => {
+      try {
+        if (!this.initialized) {
+          return { success: false, error: 'Not a git repository' };
+        }
+        await this.git.reset(['--hard', commitHash]);
+        return { success: true };
+      } catch (error: any) {
+        return { success: false, error: error.message };
+      }
+    });
+
     // Git commit
     ipcMain.handle('git:commit', async (_, message: string) => {
       try {
