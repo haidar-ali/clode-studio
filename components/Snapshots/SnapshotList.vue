@@ -19,8 +19,17 @@
         placeholder="Search snapshots..."
         class="search-input"
       />
+      <select v-model="filterBranch" class="filter-select">
+        <option value="all">All Branches</option>
+        <option value="current">Current ({{ currentBranch }})</option>
+        <optgroup label="Branches">
+          <option v-for="branch in availableBranches" :key="branch" :value="branch">
+            {{ branch }}
+          </option>
+        </optgroup>
+      </select>
       <select v-model="filterBy" class="filter-select">
-        <option value="all">All Snapshots</option>
+        <option value="all">All Types</option>
         <option value="manual">Manual</option>
         <option value="auto-branch">Auto (Branch)</option>
         <option value="auto-timer">Auto (Timer)</option>
@@ -29,14 +38,25 @@
     </div>
     
     <div class="snapshots-container">
-      <TransitionGroup name="list" tag="div" class="snapshot-grid">
-        <div
-          v-for="snapshot in filteredSnapshots"
-          :key="snapshot.id"
-          class="snapshot-card"
-          :class="{ selected: selectedSnapshotId === snapshot.id }"
-          @click="selectSnapshot(snapshot.id)"
-        >
+      <!-- Branch groups -->
+      <div v-for="[branch, branchSnapshots] in snapshotsByBranch" :key="branch" class="branch-group">
+        <div class="branch-header">
+          <div class="branch-info">
+            <Icon name="mdi:source-branch" />
+            <h4>{{ branch }}</h4>
+            <span v-if="branch === currentBranch" class="current-badge">current</span>
+            <span class="count">{{ branchSnapshots.length }}</span>
+          </div>
+        </div>
+        
+        <TransitionGroup name="list" tag="div" class="snapshot-grid">
+          <div
+            v-for="snapshot in branchSnapshots"
+            :key="snapshot.id"
+            class="snapshot-card"
+            :class="{ selected: selectedSnapshotId === snapshot.id }"
+            @click="selectSnapshot(snapshot.id)"
+          >
           <div class="card-header">
             <h4>{{ snapshot.name }}</h4>
             <div class="card-actions">
@@ -116,6 +136,7 @@
           </div>
         </div>
       </TransitionGroup>
+      </div>
       
       <div v-if="filteredSnapshots.length === 0" class="empty-state">
         <Icon name="camera-off" />
@@ -128,6 +149,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { useSnapshotsStore } from '~/stores/snapshots';
+import { useSourceControlStore } from '~/stores/source-control';
 import { format, formatDistanceToNow } from 'date-fns';
 import type { ClaudeSnapshot } from '~/types/snapshot';
 
@@ -139,6 +161,7 @@ const snapshotsStore = useSnapshotsStore();
 
 const searchQuery = ref('');
 const filterBy = ref<'all' | ClaudeSnapshot['createdBy']>('all');
+const filterBranch = ref<string>('all');
 const selectedSnapshotId = computed({
   get: () => snapshotsStore.selectedSnapshotId,
   set: (value) => snapshotsStore.selectedSnapshotId = value
@@ -147,8 +170,34 @@ const selectedSnapshotId = computed({
 const snapshots = computed(() => snapshotsStore.sortedSnapshots);
 const totalSizeMb = computed(() => snapshotsStore.totalSizeMb);
 
+// Get current branch from source control
+const currentBranch = computed(() => {
+  const sourceControlStore = useSourceControlStore();
+  return sourceControlStore.currentBranch || 'main';
+});
+
+// Get all unique branches from snapshots
+const availableBranches = computed(() => {
+  const branches = new Set<string>();
+  snapshots.value.forEach(snapshot => {
+    if (snapshot.gitBranch) {
+      branches.add(snapshot.gitBranch);
+    }
+  });
+  return Array.from(branches).sort();
+});
+
 const filteredSnapshots = computed(() => {
   let filtered = snapshots.value;
+  
+  // Filter by branch
+  if (filterBranch.value !== 'all') {
+    if (filterBranch.value === 'current') {
+      filtered = filtered.filter(s => s.gitBranch === currentBranch.value);
+    } else {
+      filtered = filtered.filter(s => s.gitBranch === filterBranch.value);
+    }
+  }
   
   // Filter by trigger type
   if (filterBy.value !== 'all') {
@@ -166,6 +215,28 @@ const filteredSnapshots = computed(() => {
   }
   
   return filtered;
+});
+
+// Group snapshots by branch
+const snapshotsByBranch = computed(() => {
+  const groups = new Map<string, ClaudeSnapshot[]>();
+  
+  filteredSnapshots.value.forEach(snapshot => {
+    const branch = snapshot.gitBranch || 'unknown';
+    if (!groups.has(branch)) {
+      groups.set(branch, []);
+    }
+    groups.get(branch)!.push(snapshot);
+  });
+  
+  // Sort branches by most recent activity
+  const sortedGroups = new Map([...groups.entries()].sort((a, b) => {
+    const latestA = a[1][0]?.timestamp || '';
+    const latestB = b[1][0]?.timestamp || '';
+    return latestB.localeCompare(latestA);
+  }));
+  
+  return sortedGroups;
 });
 
 function selectSnapshot(id: string) {
@@ -516,6 +587,51 @@ function formatFilePath(path: string) {
   font-size: 48px;
   margin-bottom: 16px;
   opacity: 0.5;
+}
+
+/* Branch grouping styles */
+.branch-group {
+  margin-bottom: 32px;
+}
+
+.branch-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.branch-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.branch-info h4 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.branch-info .count {
+  padding: 2px 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  font-size: 12px;
+  color: #999;
+}
+
+.current-badge {
+  padding: 2px 8px;
+  background: rgba(34, 197, 94, 0.2);
+  color: #22c55e;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
 }
 
 .list-enter-active,

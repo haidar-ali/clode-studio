@@ -82,8 +82,10 @@ export const useSnapshotsStore = defineStore('snapshots', () => {
       // Initialize file content manager
       const fileContentManager = useFileContentManager(currentPath);
       
-      // Get previous snapshot for comparison (most recent one)
-      const previousSnapshot = sortedSnapshots.value[0];
+      // Get previous snapshot for comparison (most recent from same branch)
+      const previousSnapshot = sortedSnapshots.value.find(s => 
+        s.gitBranch === gitStore.currentBranch
+      );
       
       // Scan for file changes
       console.log('📸 Scanning file changes for snapshot...');
@@ -106,7 +108,7 @@ export const useSnapshotsStore = defineStore('snapshots', () => {
       // Create enhanced snapshot
       const snapshot: ClaudeSnapshot = {
         id: `snap_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        name: name || `Snapshot ${new Date().toLocaleString()}`,
+        name: name || `${gitStore.currentBranch || 'main'} - ${new Date().toLocaleString()}`,
         timestamp: new Date().toISOString(),
         projectPath: currentPath,
         
