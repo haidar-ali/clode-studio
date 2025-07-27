@@ -221,6 +221,59 @@ const initTerminal = () => {
 
   terminal.attachCustomKeyEventHandler((event: KeyboardEvent) => {
 
+    
+    // Only handle on Mac
+    if (navigator.platform.toLowerCase().indexOf('mac') !== -1) {
+      // Only process if Claude is connected
+      if (props.instance.status === 'connected') {
+        try {
+          // Cmd + Delete: Clear line before cursor
+          if (event.metaKey && event.key === 'Backspace') {
+            event.preventDefault();
+            window.electronAPI.claude.send(props.instance.id, '\x15'); // Ctrl+U
+            return false;
+          }
+          
+          // Cmd + Left Arrow: Go to beginning of line
+          if (event.metaKey && event.key === 'ArrowLeft') {
+            event.preventDefault();
+            window.electronAPI.claude.send(props.instance.id, '\x01'); // Ctrl+A
+            return false;
+          }
+          
+          // Cmd + Right Arrow: Go to end of line
+          if (event.metaKey && event.key === 'ArrowRight') {
+            event.preventDefault();
+            window.electronAPI.claude.send(props.instance.id, '\x05'); // Ctrl+E
+            return false;
+          }
+          
+          // Option + Left Arrow: Move left one word
+          if (event.altKey && event.key === 'ArrowLeft') {
+            event.preventDefault();
+            window.electronAPI.claude.send(props.instance.id, '\x1bb'); // Alt+B
+            return false;
+          }
+          
+          // Option + Right Arrow: Move right one word
+          if (event.altKey && event.key === 'ArrowRight') {
+            event.preventDefault();
+            window.electronAPI.claude.send(props.instance.id, '\x1bf'); // Alt+F
+            return false;
+          }
+          
+          // Option + Delete: Delete word before cursor
+          if (event.altKey && event.key === 'Backspace') {
+            event.preventDefault();
+            window.electronAPI.claude.send(props.instance.id, '\x17'); // Ctrl+W
+            return false;
+          }
+        } catch (error) {
+          // Silently ignore errors
+        }
+      }
+    }
+    
     // Block Option+Enter (Alt+Enter) - prevent xterm's default behavior
     if (event.type === 'keydown' && event.key === 'Enter' && event.altKey) {
       return false;

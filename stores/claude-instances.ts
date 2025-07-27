@@ -18,6 +18,7 @@ export interface ClaudeInstance {
   sessionId?: string; // Claude session ID for hook integration
   createdAt: string; // ISO string for IPC serialization
   lastActiveAt: string; // ISO string for IPC serialization
+  color?: string; // Tab color (hex code)
 }
 
 
@@ -330,7 +331,9 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
           ...inst,
           // Ensure dates are strings
           createdAt: typeof inst.createdAt === 'string' ? inst.createdAt : new Date(inst.createdAt).toISOString(),
-          lastActiveAt: typeof inst.lastActiveAt === 'string' ? inst.lastActiveAt : new Date(inst.lastActiveAt).toISOString()
+          lastActiveAt: typeof inst.lastActiveAt === 'string' ? inst.lastActiveAt : new Date(inst.lastActiveAt).toISOString(),
+          // Preserve color if it exists
+          color: inst.color
         }));
         await window.electronAPI.store.set('claudeInstances', serializableInstances);
       } catch (error) {
@@ -384,7 +387,8 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
           name: instance.name,
           personalityId: instance.personalityId,
           workingDirectory: instance.workingDirectory,
-          createdAt: instance.createdAt
+          createdAt: instance.createdAt,
+          color: instance.color
         })),
         activeInstanceId: this.activeInstanceId
       };
@@ -425,7 +429,8 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
                 personalityId: instanceData.personalityId,
                 workingDirectory: workspacePath, // Use new workspace path
                 createdAt: instanceData.createdAt,
-                lastActiveAt: new Date().toISOString()
+                lastActiveAt: new Date().toISOString(),
+                color: instanceData.color
               };
               this.instances.set(instance.id, instance);
             });
