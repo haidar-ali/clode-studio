@@ -2,7 +2,13 @@
   <div class="prompt-builder">
     <!-- Header with actions -->
     <div class="builder-header">
-      <h2>Prompt Builder</h2>
+      <div>
+        <h2>Prompt Builder</h2>
+        <div v-if="currentTemplate" class="current-template">
+          <Icon name="heroicons:bookmark-solid" />
+          <span>{{ currentTemplate.name }}</span>
+        </div>
+      </div>
       <div class="header-actions">
         <button class="action-btn" @click="$emit('open-resources')">
           <Icon name="heroicons:folder-plus" />
@@ -12,9 +18,13 @@
           <Icon name="heroicons:trash" />
           Clear
         </button>
+        <button v-if="promptStore.currentTemplateId && !isBuiltInTemplate" class="action-btn primary" @click="showUpdateDialog = true">
+          <Icon name="heroicons:arrow-path" />
+          Update Template
+        </button>
         <button class="action-btn primary" @click="showSaveDialog = true">
           <Icon name="heroicons:bookmark" />
-          Save Template
+          Save as Template
         </button>
         <button class="action-btn success" @click="executePrompt">
           <Icon name="heroicons:play" />
@@ -39,8 +49,8 @@
 
     <!-- Section buttons -->
     <div class="section-buttons">
-      <button 
-        v-for="type in sectionTypes" 
+      <button
+        v-for="type in sectionTypes"
         :key="type.value"
         class="add-section-btn"
         @click="addSection(type.value)"
@@ -72,8 +82,8 @@
     <div v-if="resources.length > 0" class="resources-summary">
       <h3>Attached Resources</h3>
       <div class="resource-list">
-        <div 
-          v-for="(resource, index) in resources" 
+        <div
+          v-for="(resource, index) in resources"
           :key="`${resource.type}-${resource.id}`"
           class="resource-item"
         >
@@ -92,17 +102,17 @@
         <h3>Save as Template</h3>
         <div class="form-group">
           <label>Template Name</label>
-          <input 
-            v-model="templateName" 
-            type="text" 
+          <input
+            v-model="templateName"
+            type="text"
             placeholder="e.g., Smart Refactoring"
             class="form-input"
           >
         </div>
         <div class="form-group">
           <label>Description</label>
-          <textarea 
-            v-model="templateDescription" 
+          <textarea
+            v-model="templateDescription"
             placeholder="Describe what this template does"
             class="form-textarea"
             rows="3"
@@ -125,20 +135,75 @@
         </div>
       </div>
     </div>
+
+    <!-- Notification Toast -->
+    <Transition name="notification">
+      <div v-if="notification.show" :class="['notification-toast', notification.type]">
+        <Icon :name="getNotificationIcon(notification.type)" />
+        <span>{{ notification.message }}</span>
+      </div>
+    </Transition>
+
+    <!-- Update Template Dialog -->
+    <div v-if="showUpdateDialog" class="modal-overlay" @click.self="showUpdateDialog = false">
+      <div class="modal-content">
+        <h3>Update Template</h3>
+        <div class="form-group">
+          <label>Template Name</label>
+          <input
+            v-model="templateName"
+            type="text"
+            placeholder="e.g., Smart Refactoring"
+            class="form-input"
+          >
+        </div>
+        <div class="form-group">
+          <label>Description</label>
+          <textarea
+            v-model="templateDescription"
+            placeholder="Describe what this template does"
+            class="form-textarea"
+            rows="3"
+          ></textarea>
+        </div>
+        <div class="form-group">
+          <label>Category</label>
+          <select v-model="templateCategory" class="form-select">
+            <option value="coding">Coding</option>
+            <option value="research">Research</option>
+            <option value="analysis">Analysis</option>
+            <option value="refactoring">Refactoring</option>
+            <option value="debugging">Debugging</option>
+            <option value="custom">Custom</option>
+          </select>
+        </div>
+        <div class="modal-actions">
+          <button class="btn-secondary" @click="showUpdateDialog = false">Cancel</button>
+          <button class="btn-primary" @click="updateTemplate">Update</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { usePromptEngineeringStore } from '~/stores/prompt-engineering';
 import PromptSection from './PromptSection.vue';
 
 const promptStore = usePromptEngineeringStore();
 
 const showSaveDialog = ref(false);
+const showUpdateDialog = ref(false);
 const templateName = ref('');
 const templateDescription = ref('');
 const templateCategory = ref<'coding' | 'research' | 'analysis' | 'refactoring' | 'debugging' | 'custom'>('coding');
+
+const notification = ref({
+  show: false,
+  message: '',
+  type: 'info' as 'success' | 'error' | 'info'
+});
 
 const sections = computed({
   get: () => promptStore.currentPrompt.structure?.sections || [],
@@ -150,6 +215,15 @@ const sections = computed({
 });
 
 const resources = computed(() => promptStore.currentPrompt.structure?.resources || []);
+
+const currentTemplate = computed(() => {
+  if (!promptStore.currentTemplateId) return null;
+  return promptStore.templates.find(t => t.id === promptStore.currentTemplateId);
+});
+
+const isBuiltInTemplate = computed(() => {
+  return promptStore.currentTemplateId?.startsWith('builtin-');
+});
 
 const sectionTypes = [
   { value: 'system', label: 'System Prompt', icon: 'heroicons:cog' },
@@ -212,17 +286,72 @@ async function saveTemplate() {
   showSaveDialog.value = false;
 }
 
+async function updateTemplate() {
+  if (!templateName.value || !templateDescription.value) {
+    alert('Please provide a name and description for the template');
+    return;
+  }
+
+  await promptStore.updateTemplate(
+    templateName.value,
+    templateDescription.value,
+    templateCategory.value
+  );
+
+  // Reset form
+  templateName.value = '';
+  templateDescription.value = '';
+  templateCategory.value = 'coding';
+  showUpdateDialog.value = false;
+}
+
+// Watch for update dialog open to populate form
+watch(showUpdateDialog, (newValue) => {
+  if (newValue && promptStore.currentTemplateId) {
+    // Find the current template
+    const currentTemplate = promptStore.templates.find(t => t.id === promptStore.currentTemplateId);
+    if (currentTemplate) {
+      templateName.value = currentTemplate.name;
+      templateDescription.value = currentTemplate.description;
+      templateCategory.value = currentTemplate.category;
+    }
+  }
+});
+
 async function executePrompt() {
   try {
     const result = await promptStore.executePrompt();
     if (result) {
-      
-      // Optionally show success message or switch to terminal view
+      // Show success notification
+      showNotification('Prompt sent successfully to Claude terminal', 'success');
     }
   } catch (error: any) {
     console.error('Failed to execute prompt:', error);
-    alert(error.message || 'Failed to send prompt to Claude terminal');
+    showNotification(error.message || 'Failed to send prompt to Claude terminal', 'error');
   }
+}
+
+// Notification helper
+function showNotification(message: string, type: 'success' | 'error' | 'info' = 'info') {
+  notification.value = {
+    show: true,
+    message,
+    type
+  };
+
+  // Auto-hide after 4 seconds
+  setTimeout(() => {
+    notification.value.show = false;
+  }, 4000);
+}
+
+function getNotificationIcon(type: string): string {
+  const icons: Record<string, string> = {
+    success: 'heroicons:check-circle',
+    error: 'heroicons:x-circle',
+    info: 'heroicons:information-circle'
+  };
+  return icons[type] || icons.info;
 }
 
 async function sendToChat() {
@@ -236,7 +365,7 @@ async function sendToChat() {
   const { useClaudeInstancesStore } = await import('~/stores/claude-instances');
   const claudeInstancesStore = useClaudeInstancesStore();
   const activeInstanceId = claudeInstancesStore.activeInstanceId;
-  
+
   if (!activeInstanceId) {
     alert('Please start a Claude instance first');
     return;
@@ -257,6 +386,11 @@ async function sendToChat() {
         text: prompt
       }
     }));
+
+    // Track template usage if this was from a template
+    if (promptStore.currentTemplateId) {
+      promptStore.trackTemplateUsage(promptStore.currentTemplateId);
+    }
   }, 100);
 }
 </script>
@@ -281,6 +415,21 @@ async function sendToChat() {
   font-size: 18px;
   font-weight: 600;
   color: #cccccc;
+}
+
+.current-template {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 13px;
+  color: #999;
+}
+
+.current-template svg {
+  width: 14px;
+  height: 14px;
+  color: #569cd6;
 }
 
 .header-actions {
@@ -558,5 +707,54 @@ async function sendToChat() {
 
 .btn-primary:hover {
   background-color: #1a7dc4;
+}
+
+/* Notification Toast */
+.notification-toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-radius: 8px;
+  background-color: #3c3c3c;
+  color: #cccccc;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  z-index: 1001;
+  max-width: 400px;
+}
+
+.notification-toast.success {
+  background-color: #10b981;
+  color: white;
+}
+
+.notification-toast.error {
+  background-color: #ef4444;
+  color: white;
+}
+
+.notification-toast svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+/* Notification transition */
+.notification-enter-active,
+.notification-leave-active {
+  transition: all 0.3s ease;
+}
+
+.notification-enter-from {
+  transform: translateX(100%);
+  opacity: 0;
+}
+
+.notification-leave-to {
+  transform: translateX(100%);
+  opacity: 0;
 }
 </style>

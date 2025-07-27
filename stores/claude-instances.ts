@@ -15,6 +15,7 @@ export interface ClaudeInstance {
   personalityId?: string;
   workingDirectory: string;
   pid?: number;
+  sessionId?: string; // Claude session ID for hook integration
   createdAt: string; // ISO string for IPC serialization
   lastActiveAt: string; // ISO string for IPC serialization
   color?: string; // Tab color (hex code)

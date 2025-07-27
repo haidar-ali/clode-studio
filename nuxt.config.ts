@@ -35,7 +35,7 @@ export default defineNuxtConfig({
   },
   vite: {
     optimizeDeps: {
-      include: ['naive-ui', 'vueuc', 'date-fns-tz/formatInTimeZone', 'monaco-editor', '@iconify/vue']
+      include: ['naive-ui', 'vueuc', 'date-fns-tz/formatInTimeZone', '@iconify/vue']
     },
     define: {
       global: 'globalThis'

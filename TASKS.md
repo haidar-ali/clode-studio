@@ -1,9 +1,21 @@
 # Project Tasks
 
 *This file is synced with Clode Studio and Claude's native TodoWrite system.*  
-*Last updated: 2025-01-22T16:30:00.000Z*
+*Last updated: 2025-07-26*
 
-## Backlog (9)
+## Backlog (11)
+
+- [ ] **Replace remaining alert/confirm dialogs throughout the app**
+  - Type: refactor
+  - Priority: medium
+  - Description: Multiple components still use browser dialogs that need to be replaced with Electron-compatible dialogs
+  - Files: Multiple components listed in grep results
+
+- [ ] **Remove old checkpoint system and backends**
+  - Type: cleanup
+  - Priority: low
+  - Description: Clean up deprecated checkpoint code after new system is stable
+  - Files: electron/checkpoint-service.ts, stores/checkpoint-v2.ts, components/Checkpoint/*
 
 - [ ] **Implement Autonomous Multi-File Editing (Agent Mode)**
   - Assignee: Claude
@@ -154,7 +166,21 @@
 
 ## In Progress (0)
 
-## Completed (68)
+## Completed (70)
+
+- [x] ~~Fix input modal not showing and Claude Time Machine integration~~
+  - ~~Assignee: Claude~~
+  - ~~Type: bugfix~~
+  - ~~Priority: high~~
+  - ~~Description: Fixed modal system and Claude Time Machine session creation. Modal wasn't imported in layout, sessions weren't properly marked as Claude sessions in metadata~~
+  - ~~Files: components/Layout/IDELayout.vue (added InputModal import), stores/worktree.ts (pass metadata to backend), electron/worktree-manager.ts (handle metadata), stores/snapshots.ts (fix undefined errors), composables/useDialogs.ts (enhanced logging)~~
+
+- [x] ~~Replace browser dialogs (prompt/alert/confirm) with Electron-compatible dialogs~~
+  - ~~Assignee: Claude~~
+  - ~~Type: bugfix~~
+  - ~~Priority: high~~
+  - ~~Description: Fixed runtime errors caused by browser dialogs not being supported in Electron renderer~~
+  - ~~Files: composables/useDialogs.ts (created), components/Common/InputModal.vue (created), components/SourceControlV2/SourceControlV2.vue (updated), components/TimeMachine/ClaudeTimeline.vue (updated)~~
 
 - [x] ~~Create git hooks integration~~
   - ~~ID: GIT-010~~

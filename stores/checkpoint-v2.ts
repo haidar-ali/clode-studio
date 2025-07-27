@@ -471,53 +471,54 @@ export const useCheckpointV2Store = defineStore('checkpoint-v2', () => {
       // Create .claude-checkpoints directory
       await window.electronAPI.fs.ensureDir(shadowRepoPath.value);
       
-      // Update .gitignore in parent directory to ignore our directories
+      // Update .gitignore in parent directory to ignore our directories (only if not already ignored)
       const workspacePath = shadowRepoPath.value.replace('/.claude-checkpoints', '');
-      const gitignorePath = `${workspacePath}/.gitignore`;
-      const gitignoreContent = await window.electronAPI.fs.readFile(gitignorePath);
       
-      // Entries we need to add
-      const claudeEntries = [
-        '# Claude Code IDE generated directories',
-        '.claude-checkpoints/',
-        '.worktrees/',
-        '.claude/'
-      ];
+      // Check which paths are already ignored by git
+      const pathsToCheck = ['.claude-checkpoints', '.worktrees', '.claude'];
+      let dirsToAdd = pathsToCheck;
       
-      if (gitignoreContent.success && gitignoreContent.content) {
-        // File exists, check if it includes our entries
-        let contentToAppend = '';
+      try {
+        const ignoreResults = await window.electronAPI.git.checkIgnore(workspacePath, pathsToCheck);
         
-        if (!gitignoreContent.content.includes('.claude-checkpoints')) {
-          if (!contentToAppend && gitignoreContent.content.trim()) {
-            contentToAppend += '\n'; // Add newline if file has content
+        if (ignoreResults.success) {
+          // If git is available and it's a git repo, only add directories that are not already ignored
+          if (ignoreResults.isGitRepo !== false && ignoreResults.gitAvailable !== false) {
+            dirsToAdd = pathsToCheck.filter(path => !ignoreResults.results[path]);
           }
-          contentToAppend += claudeEntries[0] + '\n' + claudeEntries[1] + '\n';
+          // Otherwise (not a git repo or git not available), add all directories to be safe
         }
-        
-        if (!gitignoreContent.content.includes('.worktrees')) {
-          if (!contentToAppend && !gitignoreContent.content.includes('.claude-checkpoints')) {
-            contentToAppend += '\n' + claudeEntries[0] + '\n';
-          }
-          contentToAppend += claudeEntries[2] + '\n';
-        }
-        
-        if (!gitignoreContent.content.includes('.claude/')) {
-          if (!contentToAppend && !gitignoreContent.content.includes('.claude-checkpoints') && !gitignoreContent.content.includes('.worktrees')) {
-            contentToAppend += '\n' + claudeEntries[0] + '\n';
-          }
-          contentToAppend += claudeEntries[3] + '\n';
-        }
-        
-        if (contentToAppend) {
-          await window.electronAPI.fs.writeFile(
-            gitignorePath,
-            gitignoreContent.content + contentToAppend
-          );
-        }
-      } else {
-        // File doesn't exist, create it with common defaults + our entries
-        const defaultGitignore = `# Dependencies
+      } catch (error) {
+        // If check fails, add all directories to be safe
+        console.log('Failed to check git ignore status, will add all directories');
+      }
+      
+      if (dirsToAdd.length > 0) {
+          const gitignorePath = `${workspacePath}/.gitignore`;
+          const gitignoreContent = await window.electronAPI.fs.readFile(gitignorePath);
+          
+          // Entries we need to add
+          const claudeEntries = [
+            '# Claude Code IDE generated directories',
+            ...dirsToAdd.map(dir => dir + '/')
+          ];
+          
+          if (gitignoreContent.success && gitignoreContent.content) {
+            // File exists, append our entries
+            let contentToAppend = '';
+            
+            if (gitignoreContent.content.trim()) {
+              contentToAppend += '\n'; // Add newline if file has content
+            }
+            contentToAppend += claudeEntries.join('\n') + '\n';
+            
+            await window.electronAPI.fs.writeFile(
+              gitignorePath,
+              gitignoreContent.content + contentToAppend
+            );
+          } else {
+            // File doesn't exist, create it with common defaults + our entries
+            const defaultGitignore = `# Dependencies
 node_modules/
 npm-debug.log*
 yarn-debug.log*
@@ -549,10 +550,11 @@ coverage/
 
 ${claudeEntries.join('\n')}
 `;
-        await window.electronAPI.fs.writeFile(
-          gitignorePath,
-          defaultGitignore
-        );
+            await window.electronAPI.fs.writeFile(
+              gitignorePath,
+              defaultGitignore
+            );
+          }
       }
       
       // Initialize shadow repo through checkpoint service

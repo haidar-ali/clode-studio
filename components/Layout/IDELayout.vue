@@ -68,13 +68,6 @@
                 Terminal
               </button>
               <button
-                :class="{ active: bottomTab === 'mcp' }"
-                @click="bottomTab = 'mcp'"
-              >
-                MCP
-                <span v-if="mcpStore.connectedCount > 0" class="mcp-badge">{{ mcpStore.connectedCount }}</span>
-              </button>
-              <button
                 :class="{ active: bottomTab === 'context' }"
                 @click="bottomTab = 'context'"
               >
@@ -86,13 +79,6 @@
                 @click="bottomTab = 'knowledge'"
               >
                 Knowledge
-              </button>
-              <button
-                :class="{ active: bottomTab === 'commands' }"
-                @click="bottomTab = 'commands'"
-              >
-                <Icon name="mdi:slash-forward" size="16" />
-                Commands
               </button>
               <button
                 :class="{ active: bottomTab === 'prompts' }"
@@ -126,14 +112,12 @@
             <div class="tab-content">
               <KanbanBoard v-if="bottomTab === 'tasks'" />
               <Terminal v-else-if="bottomTab === 'terminal'" :project-path="projectPath" />
-              <MCPManager v-else-if="bottomTab === 'mcp'" />
               <ContextPanel v-else-if="bottomTab === 'context'" />
               <KnowledgePanel v-else-if="bottomTab === 'knowledge'" />
-              <CommandStudio v-else-if="bottomTab === 'commands'" />
               <PromptStudio v-else-if="bottomTab === 'prompts'" />
-              <SourceControlPanel v-else-if="bottomTab === 'source-control'" />
+              <SourceControlV2 v-else-if="bottomTab === 'source-control'" />
               <CheckpointPanel v-else-if="bottomTab === 'checkpoints'" />
-              <WorktreePanel v-else />
+              <WorktreePanel v-else-if="bottomTab === 'worktrees'" />
             </div>
           </div>
         </Pane>
@@ -176,13 +160,6 @@
                 Terminal
               </button>
               <button
-                :class="{ active: bottomTab === 'mcp' }"
-                @click="bottomTab = 'mcp'"
-              >
-                MCP
-                <span v-if="mcpStore.connectedCount > 0" class="mcp-badge">{{ mcpStore.connectedCount }}</span>
-              </button>
-              <button
                 :class="{ active: bottomTab === 'context' }"
                 @click="bottomTab = 'context'"
               >
@@ -194,13 +171,6 @@
                 @click="bottomTab = 'knowledge'"
               >
                 Knowledge
-              </button>
-              <button
-                :class="{ active: bottomTab === 'commands' }"
-                @click="bottomTab = 'commands'"
-              >
-                <Icon name="mdi:slash-forward" size="16" />
-                Commands
               </button>
               <button
                 :class="{ active: bottomTab === 'prompts' }"
@@ -234,14 +204,12 @@
             <div class="tab-content">
               <KanbanBoard v-if="bottomTab === 'tasks'" />
               <Terminal v-else-if="bottomTab === 'terminal'" :project-path="projectPath" />
-              <MCPManager v-else-if="bottomTab === 'mcp'" />
               <ContextPanel v-else-if="bottomTab === 'context'" />
               <KnowledgePanel v-else-if="bottomTab === 'knowledge'" />
-              <CommandStudio v-else-if="bottomTab === 'commands'" />
               <PromptStudio v-else-if="bottomTab === 'prompts'" />
-              <SourceControlPanel v-else-if="bottomTab === 'source-control'" />
+              <SourceControlV2 v-else-if="bottomTab === 'source-control'" />
               <CheckpointPanel v-else-if="bottomTab === 'checkpoints'" />
-              <WorktreePanel v-else />
+              <WorktreePanel v-else-if="bottomTab === 'worktrees'" />
             </div>
           </div>
         </Pane>
@@ -279,13 +247,6 @@
                 Terminal
               </button>
               <button
-                :class="{ active: bottomTab === 'mcp' }"
-                @click="bottomTab = 'mcp'"
-              >
-                MCP
-                <span v-if="mcpStore.connectedCount > 0" class="mcp-badge">{{ mcpStore.connectedCount }}</span>
-              </button>
-              <button
                 :class="{ active: bottomTab === 'context' }"
                 @click="bottomTab = 'context'"
               >
@@ -297,13 +258,6 @@
                 @click="bottomTab = 'knowledge'"
               >
                 Knowledge
-              </button>
-              <button
-                :class="{ active: bottomTab === 'commands' }"
-                @click="bottomTab = 'commands'"
-              >
-                <Icon name="mdi:slash-forward" size="16" />
-                Commands
               </button>
               <button
                 :class="{ active: bottomTab === 'prompts' }"
@@ -337,14 +291,12 @@
             <div class="tab-content">
               <KanbanBoard v-if="bottomTab === 'tasks'" />
               <Terminal v-else-if="bottomTab === 'terminal'" :project-path="projectPath" />
-              <MCPManager v-else-if="bottomTab === 'mcp'" />
               <ContextPanel v-else-if="bottomTab === 'context'" />
               <KnowledgePanel v-else-if="bottomTab === 'knowledge'" />
-              <CommandStudio v-else-if="bottomTab === 'commands'" />
               <PromptStudio v-else-if="bottomTab === 'prompts'" />
-              <SourceControlPanel v-else-if="bottomTab === 'source-control'" />
+              <SourceControlV2 v-else-if="bottomTab === 'source-control'" />
               <CheckpointPanel v-else-if="bottomTab === 'checkpoints'" />
-              <WorktreePanel v-else />
+              <WorktreePanel v-else-if="bottomTab === 'worktrees'" />
             </div>
           </div>
         </Pane>
@@ -382,12 +334,21 @@
     <!-- Settings Modal -->
     <SettingsModal />
     
+    <!-- MCP Manager Modal -->
+    <MCPManagerModal v-model="showMCPModal" />
+    
+    <!-- Command Studio Modal -->
+    <CommandStudioModal v-model="showCommandsModal" />
+    
     <!-- Persistent Claude Terminals (rendered once, teleported to appropriate location) -->
     <ClientOnly>
       <Teleport :to="claudeTerminalTarget" :disabled="!claudeTerminalTarget">
         <ClaudeTerminalTabs v-if="shouldShowClaude" />
       </Teleport>
     </ClientOnly>
+    
+    <!-- Global Input Modal -->
+    <InputModal />
     
   </div>
 </template>
@@ -403,6 +364,7 @@ import { useMCPStore } from '~/stores/mcp';
 import { useFileWatcher } from '~/composables/useFileWatcher';
 import { useTasksFileWatcher } from '~/composables/useTasksFileWatcher';
 import { useContextManager } from '~/composables/useContextManager';
+import { useSnapshotTriggers } from '~/composables/useSnapshotTriggers';
 import { useCommandsStore } from '~/stores/commands';
 import CommandPalette from '~/components/Commands/CommandPalette.vue';
 import MemoryEditorModal from '~/components/Memory/MemoryEditorModal.vue';
@@ -413,10 +375,13 @@ import SettingsModal from '~/components/Settings/SettingsModal.vue';
 import KnowledgePanel from '~/components/Knowledge/KnowledgePanel.vue';
 import CommandStudio from '~/components/Commands/CommandStudio.vue';
 import PromptStudio from '~/components/Prompts/PromptStudio.vue';
-import SourceControlPanel from '~/components/SourceControl/SourceControlPanel.vue';
+import InputModal from '~/components/Common/InputModal.vue';
 import CheckpointPanel from '~/components/Checkpoint/CheckpointPanel.vue';
 import WorktreePanel from '~/components/Worktree/WorktreePanel.vue';
 import WorktreeTabBar from '~/components/Layout/WorktreeTabBar.vue';
+import SourceControlV2 from '~/components/SourceControlV2/SourceControlV2.vue';
+import MCPManagerModal from '~/components/MCP/MCPManagerModal.vue';
+import CommandStudioModal from '~/components/Commands/CommandStudioModal.vue';
 
 const editorStore = useEditorStore();
 const tasksStore = useTasksStore();
@@ -424,8 +389,11 @@ const layoutStore = useLayoutStore();
 const mcpStore = useMCPStore();
 const contextManager = useContextManager();
 const commandsStore = useCommandsStore();
-const bottomTab = ref<'tasks' | 'terminal' | 'mcp' | 'context' | 'knowledge' | 'prompts' | 'commands' | 'source-control' | 'checkpoints' | 'worktrees'>('tasks');
+const snapshotTriggers = useSnapshotTriggers();
+const bottomTab = ref<'tasks' | 'terminal' | 'context' | 'knowledge' | 'prompts' | 'source-control' | 'checkpoints' | 'worktrees'>('tasks');
 const showGlobalSearch = ref(false);
+const showMCPModal = ref(false);
+const showCommandsModal = ref(false);
 
 const activeTab = computed(() => editorStore.activeTab);
 const taskCount = computed(() => tasksStore.taskCount);
@@ -453,6 +421,7 @@ useTasksFileWatcher();
 // Set up auto-checkpoint
 const { useAutoCheckpoint } = await import('~/composables/useAutoCheckpoint');
 useAutoCheckpoint();
+
 
 const handleResize = (event: any) => {
   // Handle resize events if needed
@@ -533,9 +502,6 @@ onMounted(async () => {
     bottomTab.value = 'tasks';
   });
   
-  window.addEventListener('show-mcp-panel', () => {
-    bottomTab.value = 'mcp';
-  });
   
   window.addEventListener('show-knowledge-panel', () => {
     bottomTab.value = 'knowledge';
@@ -550,6 +516,15 @@ onMounted(async () => {
     if (contextModal) {
       contextModal.dispatchEvent(new Event('open'));
     }
+  });
+  
+  // Modal event listeners
+  window.addEventListener('open-mcp-manager', () => {
+    showMCPModal.value = true;
+  });
+  
+  window.addEventListener('open-slash-commands', () => {
+    showCommandsModal.value = true;
   });
   
   // Save workspace configuration before app closes
@@ -569,6 +544,12 @@ onUnmounted(() => {
   document.removeEventListener('keydown', handleKeydown);
   window.removeEventListener('open-global-search', handleOpenGlobalSearch);
   window.removeEventListener('switch-bottom-tab', handleSwitchBottomTab as EventListener);
+  window.removeEventListener('open-mcp-manager', () => {
+    showMCPModal.value = true;
+  });
+  window.removeEventListener('open-slash-commands', () => {
+    showCommandsModal.value = true;
+  });
 });
 </script>
 

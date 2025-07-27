@@ -18,6 +18,7 @@
     </div>
     
     <div class="status-bar-right">
+      <SnapshotButton />
       <QuickAccessToolbar />
       <span class="status-item" v-if="activeTab">
         Ln {{ cursorLine }}, Col {{ cursorColumn }}
@@ -32,6 +33,7 @@ import { useEditorStore } from '~/stores/editor';
 import { useChatStore } from '~/stores/chat';
 import { useClaudeInstancesStore } from '~/stores/claude-instances';
 import QuickAccessToolbar from '~/components/Layout/QuickAccessToolbar.vue';
+import SnapshotButton from '~/components/Snapshots/SnapshotButton.vue';
 
 const editorStore = useEditorStore();
 const chatStore = useChatStore();
@@ -95,7 +97,7 @@ const claudeStatusIcon = computed(() => {
 .status-bar-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   flex: 1;
   justify-content: flex-end;
 }
