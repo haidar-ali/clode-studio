@@ -38,6 +38,25 @@
     
     <button 
       class="toolbar-button"
+      @click="openMCPManager"
+      title="MCP Connections"
+    >
+      <Icon name="mdi:server-network" size="16" />
+      <span class="toolbar-label">MCP</span>
+      <span v-if="mcpStore.connectedCount > 0" class="badge">{{ mcpStore.connectedCount }}</span>
+    </button>
+    
+    <button 
+      class="toolbar-button"
+      @click="openSlashCommands"
+      title="Slash Command Studio"
+    >
+      <Icon name="mdi:slash-forward" size="16" />
+      <span class="toolbar-label">Commands</span>
+    </button>
+    
+    <button 
+      class="toolbar-button"
       @click="openSettings"
       title="Settings"
     >
@@ -49,8 +68,10 @@
 
 <script setup lang="ts">
 import { useCommandsStore } from '~/stores/commands';
+import { useMCPStore } from '~/stores/mcp';
 
 const commandsStore = useCommandsStore();
+const mcpStore = useMCPStore();
 
 const openCommandPalette = () => {
   commandsStore.openCommandPalette();
@@ -70,6 +91,14 @@ const openGlobalSearch = () => {
 
 const openSettings = () => {
   window.dispatchEvent(new CustomEvent('open-settings'));
+};
+
+const openMCPManager = () => {
+  window.dispatchEvent(new CustomEvent('open-mcp-manager'));
+};
+
+const openSlashCommands = () => {
+  window.dispatchEvent(new CustomEvent('open-slash-commands'));
 };
 </script>
 
@@ -94,6 +123,7 @@ const openSettings = () => {
   font-size: 12px;
   transition: all 0.2s;
   white-space: nowrap;
+  position: relative;
 }
 
 .toolbar-button:hover {
@@ -119,5 +149,18 @@ const openSettings = () => {
   .toolbar-label {
     display: inline;
   }
+}
+
+.badge {
+  background: #28a745;
+  color: white;
+  padding: 1px 5px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  margin-left: 2px;
+  min-width: 16px;
+  text-align: center;
+  line-height: 1.2;
 }
 </style>
