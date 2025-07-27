@@ -30,61 +30,33 @@ export class FileContentManager {
   }
 
   /**
-   * Detect MIME type and encoding for file
+   * Simple fallback file detection (mainly for frontend use)
+   * Note: Primary detection is done on backend using istextorbinary
    */
   private detectFileInfo(filePath: string): {
     mimeType: string;
     encoding: 'utf8' | 'binary';
     isTextFile: boolean;
   } {
-    // Simple MIME type detection based on extension
+    const fileName = filePath.split('/').pop() || '';
     const ext = filePath.split('.').pop()?.toLowerCase() || '';
     
+    // Common text file patterns (simplified fallback)
+    const textFiles = new Set([
+      '.gitignore', '.babelrc', '.eslintrc', '.prettierrc', '.npmrc', '.nvmrc',
+      '.editorconfig', '.firebaserc', 'Dockerfile', 'Makefile', 'LICENSE', 'README'
+    ]);
+    
     const textExtensions = new Set([
-      'txt', 'md', 'js', 'ts', 'jsx', 'tsx', 'vue', 'html', 'css', 'scss', 'less',
-      'json', 'xml', 'yaml', 'yml', 'py', 'java', 'cpp', 'c', 'h', 'cs', 'php',
-      'rb', 'go', 'rs', 'swift', 'kt', 'sql', 'sh', 'bash', 'ps1', 'dockerfile',
-      'gitignore', 'config', 'ini', 'toml', 'cfg', 'properties', 'log'
+      'txt', 'md', 'js', 'ts', 'jsx', 'tsx', 'vue', 'html', 'css', 'scss',
+      'json', 'xml', 'yaml', 'yml', 'py', 'java', 'cpp', 'c', 'h', 'php',
+      'rb', 'go', 'rs', 'sh', 'sql', 'toml', 'ini', 'cfg', 'log', 'env'
     ]);
 
-    const mimeTypeMap: Record<string, string> = {
-      'js': 'application/javascript',
-      'ts': 'application/typescript',
-      'jsx': 'application/javascript',
-      'tsx': 'application/typescript',
-      'vue': 'text/html',
-      'html': 'text/html',
-      'css': 'text/css',
-      'scss': 'text/scss',
-      'less': 'text/less',
-      'json': 'application/json',
-      'xml': 'application/xml',
-      'yaml': 'application/yaml',
-      'yml': 'application/yaml',
-      'md': 'text/markdown',
-      'txt': 'text/plain',
-      'py': 'text/x-python',
-      'java': 'text/x-java',
-      'cpp': 'text/x-c++',
-      'c': 'text/x-c',
-      'h': 'text/x-c',
-      'cs': 'text/x-csharp',
-      'php': 'text/x-php',
-      'rb': 'text/x-ruby',
-      'go': 'text/x-go',
-      'rs': 'text/x-rust',
-      'swift': 'text/x-swift',
-      'kt': 'text/x-kotlin',
-      'sql': 'text/x-sql',
-      'sh': 'text/x-shellscript',
-      'bash': 'text/x-shellscript'
-    };
-
-    const isTextFile = textExtensions.has(ext);
-    const mimeType = mimeTypeMap[ext] || (isTextFile ? 'text/plain' : 'application/octet-stream');
+    const isTextFile = textFiles.has(fileName) || textExtensions.has(ext);
     
     return {
-      mimeType,
+      mimeType: isTextFile ? 'text/plain' : 'application/octet-stream',
       encoding: isTextFile ? 'utf8' : 'binary',
       isTextFile
     };
@@ -134,8 +106,6 @@ export class FileContentManager {
         hash,
         projectPath: this.projectPath
       });
-      
-      console.log('[FileContentManager] IPC result:', { success: result.success, contentType: typeof result.content, hasContent: !!result.content });
       
       if (result.success && result.content) {
         return result.content;
@@ -276,13 +246,19 @@ export class FileContentManager {
       
       // Build map of previous files
       if (previousSnapshot?.fileChanges) {
+        // Include ALL files from previous snapshot, not just added/modified
         [...previousSnapshot.fileChanges.added, ...previousSnapshot.fileChanges.modified]
           .forEach(file => previousFiles.set(file.path, file));
+        
+        // IMPORTANT: Also include files that were unchanged in the previous snapshot
+        // These would have been in the snapshot before that
+        // For now, we'll need to track these separately in future snapshots
       }
 
       const added: FileChange[] = [];
       const modified: FileChange[] = [];
       const removed: FileChange[] = [];
+      const unchanged: FileChange[] = [];
       
       let totalLinesAdded = 0;
       let totalLinesRemoved = 0;
@@ -296,46 +272,61 @@ export class FileContentManager {
         const previousFile = previousFiles.get(relativePath);
         
         try {
-          const fileMetadata = this.detectFileInfo(fileInfo.fullPath);
-          const contentHash = await this.generateHash(fileInfo.content);
+          // Use the backend's istextorbinary detection results (from scanProjectFiles)
+          // Don't override with frontend fallback detection
+          
+          // For binary files, convert base64 back to binary for hashing
+          let contentForHash: string | Uint8Array;
+          if (fileInfo.isTextFile) {
+            contentForHash = fileInfo.content;
+          } else {
+            // Convert base64 to Uint8Array for binary files
+            const binaryString = atob(fileInfo.content);
+            contentForHash = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+              contentForHash[i] = binaryString.charCodeAt(i);
+            }
+          }
+          
+          const contentHash = await this.generateHash(contentForHash);
 
           if (!previousFile) {
-            // New file
+            // New file - use backend detection results
             const fileChange: FileChange = {
               path: relativePath,
               status: 'added',
               contentHash,
               size: fileInfo.size,
-              mimeType: fileMetadata.mimeType,
-              encoding: fileMetadata.encoding,
-              isTextFile: fileMetadata.isTextFile
+              mimeType: 'text/plain', // Will be properly set by backend during storage
+              encoding: fileInfo.encoding,
+              isTextFile: fileInfo.isTextFile // Use backend's istextorbinary result
             };
             
             added.push(fileChange);
-            await this.storeContent(fileInfo.content, fileMetadata.mimeType, fileMetadata.encoding);
+            await this.storeContent(fileInfo.content, 'text/plain', fileInfo.encoding);
             
             totalBytesChanged += fileInfo.size;
-            if (fileMetadata.isTextFile) {
+            if (fileInfo.isTextFile) {
               textFileCount++;
               totalLinesAdded += fileInfo.content.split('\n').length;
             } else {
               binaryFileCount++;
             }
           } else if (previousFile.contentHash !== contentHash) {
-            // Modified file
+            // Modified file - use backend detection results
             const fileChange: FileChange = {
               path: relativePath,
               status: 'modified',
               contentHash,
               previousHash: previousFile.contentHash,
               size: fileInfo.size,
-              mimeType: fileMetadata.mimeType,
-              encoding: fileMetadata.encoding,
-              isTextFile: fileMetadata.isTextFile
+              mimeType: 'text/plain', // Will be properly set by backend during storage
+              encoding: fileInfo.encoding,
+              isTextFile: fileInfo.isTextFile // Use backend's istextorbinary result
             };
 
             // Create diff for text files
-            if (fileMetadata.isTextFile && previousFile.contentHash) {
+            if (fileInfo.isTextFile && previousFile.contentHash) {
               try {
                 // First check if we can get the previous content
                 const prevContent = await this.getContent(previousFile.contentHash);
@@ -359,14 +350,29 @@ export class FileContentManager {
             }
             
             modified.push(fileChange);
-            await this.storeContent(fileInfo.content, fileMetadata.mimeType, fileMetadata.encoding);
+            await this.storeContent(fileInfo.content, 'text/plain', fileInfo.encoding);
             
             totalBytesChanged += Math.abs(fileInfo.size - (previousFile.size || 0));
-            if (fileMetadata.isTextFile) {
+            if (fileInfo.isTextFile) {
               textFileCount++;
             } else {
               binaryFileCount++;
             }
+          } else {
+            // Unchanged file - track it with 'unchanged' status
+            const fileChange: FileChange = {
+              path: relativePath,
+              status: 'unchanged',
+              contentHash: previousFile.contentHash, // Use the existing hash
+              previousHash: previousFile.contentHash,
+              size: fileInfo.size,
+              mimeType: 'text/plain', // Use simple default since unchanged
+              encoding: fileInfo.encoding,
+              isTextFile: fileInfo.isTextFile // Use backend's istextorbinary result
+            };
+            
+            unchanged.push(fileChange);
+            // Note: We don't need to store content again since it hasn't changed
           }
           
           // Remove from previous files map
@@ -399,7 +405,7 @@ export class FileContentManager {
       }
 
       const summary: ChangeSummary = {
-        filesChanged: added.length + modified.length + removed.length,
+        filesChanged: added.length + modified.length + removed.length, // Only count actual changes
         linesAdded: totalLinesAdded,
         linesRemoved: totalLinesRemoved,
         bytesChanged: totalBytesChanged,
@@ -407,7 +413,10 @@ export class FileContentManager {
         binaryFiles: binaryFileCount
       };
 
-      return { added, modified, removed, summary };
+      // Include unchanged files in modified array for complete snapshot data
+      const allModified = [...modified, ...unchanged];
+
+      return { added, modified: allModified, removed, summary };
     } catch (error) {
       console.error('Failed to scan file changes:', error);
       throw error;
@@ -448,8 +457,45 @@ export class FileContentManager {
    */
   async restoreFiles(fileChanges: { added: FileChange[]; modified: FileChange[]; removed: FileChange[] }): Promise<void> {
     try {
+      // Create a clean serializable copy of fileChanges
+      const serializedFileChanges = {
+        added: fileChanges.added.map(f => ({
+          path: f.path,
+          status: f.status,
+          contentHash: f.contentHash,
+          previousHash: f.previousHash,
+          diffHash: f.diffHash,
+          size: f.size,
+          mimeType: f.mimeType,
+          encoding: f.encoding,
+          isTextFile: f.isTextFile
+        })),
+        modified: fileChanges.modified.map(f => ({
+          path: f.path,
+          status: f.status,
+          contentHash: f.contentHash,
+          previousHash: f.previousHash,
+          diffHash: f.diffHash,
+          size: f.size,
+          mimeType: f.mimeType,
+          encoding: f.encoding,
+          isTextFile: f.isTextFile
+        })),
+        removed: fileChanges.removed.map(f => ({
+          path: f.path,
+          status: f.status,
+          contentHash: f.contentHash,
+          previousHash: f.previousHash,
+          diffHash: f.diffHash,
+          size: f.size,
+          mimeType: f.mimeType,
+          encoding: f.encoding,
+          isTextFile: f.isTextFile
+        }))
+      };
+      
       const result = await window.electronAPI.snapshots.restoreFiles({
-        fileChanges,
+        fileChanges: serializedFileChanges,
         projectPath: this.projectPath
       });
       

@@ -677,15 +677,18 @@ export class SnapshotService {
       // Ensure directory exists
       await fs.ensureDir(path.dirname(contentPath));
       
+      // Determine if content is text or binary based on encoding
+      const isTextContent = encoding === 'utf8';
+      
       // Compress content
       const { compressed, ratio } = await this.compressContent(content);
       
       const contentObject = {
         hash,
         content: compressed.toString('base64'), // Convert Buffer to base64 string for JSON storage
-        originalSize: Buffer.byteLength(content, 'utf8'),
+        originalSize: Buffer.byteLength(content, isTextContent ? 'utf8' : 'binary'),
         compressionAlgorithm: ratio < 0.95 ? 'gzip' : 'none',
-        mimeType,
+        mimeType: isTextContent ? 'text/plain' : 'application/octet-stream', // Use encoding to determine MIME type
         encoding: encoding as 'utf8' | 'binary',
         createdAt: new Date().toISOString()
       };
@@ -709,7 +712,15 @@ export class SnapshotService {
       const contentObject = await fs.readJson(contentPath);
       // Convert base64 string back to Buffer for decompression
       const contentBuffer = Buffer.from(contentObject.content, 'base64');
-      return await this.decompressContent(contentBuffer);
+      const decompressed = await this.decompressContent(contentBuffer);
+      
+      // Debug log for problematic files
+      if (contentPath.includes('eslint') || contentPath.includes('yarn') || contentPath.includes('babel')) {
+        console.log(`🔍 [restore] ${contentPath.split('/').pop()}: encoding=${contentObject.encoding}, compression=${contentObject.compressionAlgorithm}, size=${decompressed.length}`);
+        console.log(`🔍 [content preview]:`, decompressed.substring(0, 50));
+      }
+      
+      return decompressed;
     } catch (error) {
       console.error(`Failed to read content ${hash}:`, error);
       return null;
@@ -853,8 +864,16 @@ export class SnapshotService {
     try {
       const allFiles = [...fileChanges.added, ...fileChanges.modified];
       
+      // Debug: Log files being restored
+      console.log(`🔧 [restore] Processing ${allFiles.length} files for restoration`);
+      
       for (const fileChange of allFiles) {
         const fullPath = path.join(projectPath, fileChange.path);
+        
+        // Debug log for problematic files
+        if (fileChange.path.includes('eslint') || fileChange.path.includes('yarn') || fileChange.path.includes('babel')) {
+          console.log(`🔧 [restore] Processing file: ${fileChange.path}, contentHash: ${fileChange.contentHash}, isTextFile: ${fileChange.isTextFile}`);
+        }
         
         if (fileChange.contentHash) {
           const content = await this.getContentObject(fileChange.contentHash);
@@ -864,11 +883,31 @@ export class SnapshotService {
             // Write file with appropriate encoding
             if (fileChange.isTextFile) {
               await fs.writeFile(fullPath, content, 'utf8');
+              
+              // Debug log after writing
+              if (fileChange.path.includes('eslint') || fileChange.path.includes('yarn') || fileChange.path.includes('babel')) {
+                console.log(`✅ [restore] Successfully wrote text file: ${fileChange.path}`);
+              }
             } else {
               // For binary files, convert base64 back to buffer
               const buffer = Buffer.from(content, 'base64');
               await fs.writeFile(fullPath, buffer);
+              
+              // Debug log after writing
+              if (fileChange.path.includes('eslint') || fileChange.path.includes('yarn') || fileChange.path.includes('babel')) {
+                console.log(`✅ [restore] Successfully wrote binary file: ${fileChange.path}`);
+              }
             }
+          } else {
+            // Debug log for missing content
+            if (fileChange.path.includes('eslint') || fileChange.path.includes('yarn') || fileChange.path.includes('babel')) {
+              console.log(`❌ [restore] No content found for: ${fileChange.path} (hash: ${fileChange.contentHash})`);
+            }
+          }
+        } else {
+          // Debug log for missing hash
+          if (fileChange.path.includes('eslint') || fileChange.path.includes('yarn') || fileChange.path.includes('babel')) {
+            console.log(`❌ [restore] No contentHash for: ${fileChange.path}`);
           }
         }
       }
