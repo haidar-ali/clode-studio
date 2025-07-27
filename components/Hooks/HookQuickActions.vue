@@ -108,6 +108,15 @@ const saveStatus = ref('');
 
 const hookTemplates: HookTemplate[] = [
   {
+    id: 'time-machine',
+    name: 'Time Machine (Advanced)',
+    description: 'Track all tool usage with full details for time travel',
+    icon: 'mdi:history',
+    event: 'PostToolUse',
+    matcher: '',
+    command: 'python3 ~/clode-ide/claude-code-ide-vue/scripts/claude-hook-processor.py || ~/clode-ide/claude-code-ide-vue/scripts/claude-hook-processor.sh'
+  },
+  {
     id: 'auto-format',
     name: 'Auto-format on Save',
     description: 'Run prettier when files are edited',

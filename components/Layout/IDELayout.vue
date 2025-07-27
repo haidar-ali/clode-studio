@@ -131,9 +131,9 @@
               <KnowledgePanel v-else-if="bottomTab === 'knowledge'" />
               <CommandStudio v-else-if="bottomTab === 'commands'" />
               <PromptStudio v-else-if="bottomTab === 'prompts'" />
-              <SourceControlPanel v-else-if="bottomTab === 'source-control'" />
+              <SourceControlV2 v-else-if="bottomTab === 'source-control'" />
               <CheckpointPanel v-else-if="bottomTab === 'checkpoints'" />
-              <WorktreePanel v-else />
+              <WorktreePanel v-else-if="bottomTab === 'worktrees'" />
             </div>
           </div>
         </Pane>
@@ -239,9 +239,9 @@
               <KnowledgePanel v-else-if="bottomTab === 'knowledge'" />
               <CommandStudio v-else-if="bottomTab === 'commands'" />
               <PromptStudio v-else-if="bottomTab === 'prompts'" />
-              <SourceControlPanel v-else-if="bottomTab === 'source-control'" />
+              <SourceControlV2 v-else-if="bottomTab === 'source-control'" />
               <CheckpointPanel v-else-if="bottomTab === 'checkpoints'" />
-              <WorktreePanel v-else />
+              <WorktreePanel v-else-if="bottomTab === 'worktrees'" />
             </div>
           </div>
         </Pane>
@@ -342,9 +342,9 @@
               <KnowledgePanel v-else-if="bottomTab === 'knowledge'" />
               <CommandStudio v-else-if="bottomTab === 'commands'" />
               <PromptStudio v-else-if="bottomTab === 'prompts'" />
-              <SourceControlPanel v-else-if="bottomTab === 'source-control'" />
+              <SourceControlV2 v-else-if="bottomTab === 'source-control'" />
               <CheckpointPanel v-else-if="bottomTab === 'checkpoints'" />
-              <WorktreePanel v-else />
+              <WorktreePanel v-else-if="bottomTab === 'worktrees'" />
             </div>
           </div>
         </Pane>
@@ -389,6 +389,9 @@
       </Teleport>
     </ClientOnly>
     
+    <!-- Global Input Modal -->
+    <InputModal />
+    
   </div>
 </template>
 
@@ -403,6 +406,7 @@ import { useMCPStore } from '~/stores/mcp';
 import { useFileWatcher } from '~/composables/useFileWatcher';
 import { useTasksFileWatcher } from '~/composables/useTasksFileWatcher';
 import { useContextManager } from '~/composables/useContextManager';
+import { useSnapshotTriggers } from '~/composables/useSnapshotTriggers';
 import { useCommandsStore } from '~/stores/commands';
 import CommandPalette from '~/components/Commands/CommandPalette.vue';
 import MemoryEditorModal from '~/components/Memory/MemoryEditorModal.vue';
@@ -413,10 +417,11 @@ import SettingsModal from '~/components/Settings/SettingsModal.vue';
 import KnowledgePanel from '~/components/Knowledge/KnowledgePanel.vue';
 import CommandStudio from '~/components/Commands/CommandStudio.vue';
 import PromptStudio from '~/components/Prompts/PromptStudio.vue';
-import SourceControlPanel from '~/components/SourceControl/SourceControlPanel.vue';
+import InputModal from '~/components/Common/InputModal.vue';
 import CheckpointPanel from '~/components/Checkpoint/CheckpointPanel.vue';
 import WorktreePanel from '~/components/Worktree/WorktreePanel.vue';
 import WorktreeTabBar from '~/components/Layout/WorktreeTabBar.vue';
+import SourceControlV2 from '~/components/SourceControlV2/SourceControlV2.vue';
 
 const editorStore = useEditorStore();
 const tasksStore = useTasksStore();
@@ -424,6 +429,7 @@ const layoutStore = useLayoutStore();
 const mcpStore = useMCPStore();
 const contextManager = useContextManager();
 const commandsStore = useCommandsStore();
+const snapshotTriggers = useSnapshotTriggers();
 const bottomTab = ref<'tasks' | 'terminal' | 'mcp' | 'context' | 'knowledge' | 'prompts' | 'commands' | 'source-control' | 'checkpoints' | 'worktrees'>('tasks');
 const showGlobalSearch = ref(false);
 
@@ -453,6 +459,7 @@ useTasksFileWatcher();
 // Set up auto-checkpoint
 const { useAutoCheckpoint } = await import('~/composables/useAutoCheckpoint');
 useAutoCheckpoint();
+
 
 const handleResize = (event: any) => {
   // Handle resize events if needed

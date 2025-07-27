@@ -87,6 +87,21 @@ export class GitServiceManager {
       }
     });
 
+    // Git hard reset to commit
+    ipcMain.handle('git:resetHard', async (_, commitHash: string) => {
+      if (!this.currentService) {
+        return { success: false, error: 'No workspace selected' };
+      }
+      
+      try {
+        const git = simpleGit(this.currentWorkspacePath);
+        await git.reset(['--hard', commitHash]);
+        return { success: true };
+      } catch (error: any) {
+        return { success: false, error: error.message };
+      }
+    });
+
     // Git commit
     ipcMain.handle('git:commit', async (_, message: string, customPath?: string) => {
       if (!this.currentService && !customPath) {
@@ -264,6 +279,29 @@ export class GitServiceManager {
       }
     });
 
+    // Git stash
+    ipcMain.handle('git:stash', async (_, message?: string) => {
+      if (!this.currentService) {
+        return { success: false, error: 'No workspace selected' };
+      }
+      
+      try {
+        const git = simpleGit(this.currentWorkspacePath);
+        
+        if (message) {
+          // Stash with a message
+          await git.stash(['push', '-m', message]);
+        } else {
+          // Simple stash
+          await git.stash();
+        }
+        
+        return { success: true };
+      } catch (error: any) {
+        return { success: false, error: error.message };
+      }
+    });
+
     // Initialize repository
     ipcMain.handle('git:init', async () => {
       if (!this.currentWorkspacePath) {
@@ -286,6 +324,25 @@ export class GitServiceManager {
         await simpleGit().clone(url, targetPath);
         return { success: true };
       } catch (error: any) {
+        return { success: false, error: error.message };
+      }
+    });
+
+    // Get file content at HEAD
+    ipcMain.handle('git:getFileAtHead', async (_, filePath: string) => {
+      if (!this.currentService) {
+        return { success: false, error: 'No workspace selected' };
+      }
+      
+      try {
+        const git = simpleGit(this.currentWorkspacePath);
+        const content = await git.show([`HEAD:${filePath}`]);
+        return { success: true, data: content };
+      } catch (error: any) {
+        // If file doesn't exist at HEAD (new file), return empty string
+        if (error.message.includes('does not exist')) {
+          return { success: true, data: '' };
+        }
         return { success: false, error: error.message };
       }
     });

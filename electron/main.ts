@@ -25,6 +25,8 @@ import { WorktreeManager } from './worktree-manager.js';
 import { WorktreeManagerGlobal } from './worktree-manager-global.js';
 import { GitHooksManagerGlobal } from './git-hooks-manager-global.js';
 import { GitHooksManager } from './git-hooks.js';
+import { SnapshotService } from './snapshot-service.js';
+import { setupGitTimelineHandlers } from './git-timeline-handlers.js';
 
 // Load environment variables from .env file
 import { config } from 'dotenv';
@@ -54,6 +56,9 @@ const worktreeManagers: Map<string, WorktreeManager> = new Map();
 
 // Git hooks manager instances per workspace - now handled by GitHooksManagerGlobal
 // const gitHooksManagers: Map<string, GitHooksManager> = new Map();
+
+// Snapshot service instances per workspace
+const snapshotServices: Map<string, SnapshotService> = new Map();
 
 const isDev = process.env.NODE_ENV !== 'production';
 const nuxtURL = isDev ? 'http://localhost:3000' : `file://${join(__dirname, '../.output/public/index.html')}`;
@@ -102,6 +107,9 @@ app.whenReady().then(() => {
   CheckpointServiceManager.getInstance();
   WorktreeManagerGlobal.getInstance();
   GitHooksManagerGlobal.getInstance();
+  
+  // Setup Git Timeline handlers
+  setupGitTimelineHandlers();
 
   createWindow();
 
@@ -253,6 +261,15 @@ ipcMain.handle('claude:resize', async (event, instanceId: string, cols: number, 
 // Get home directory
 ipcMain.handle('getHomeDir', () => {
   return homedir();
+});
+
+// Show notification
+ipcMain.handle('showNotification', async (event, options: { title: string; body: string }) => {
+  const { Notification } = await import('electron');
+  if (Notification.isSupported()) {
+    new Notification(options).show();
+  }
+  return { success: true };
 });
 
 // File Watcher operations
@@ -696,6 +713,25 @@ ipcMain.handle('dialog:showSaveDialog', async (event, options) => {
     return result;
   } catch (error) {
     return { canceled: true, filePath: undefined };
+  }
+});
+
+ipcMain.handle('dialog:showInputBox', async (event, options) => {
+  try {
+    // Electron doesn't have a built-in input box, so we'll use a custom implementation
+    // For now, return a simple response indicating this needs to be handled in the renderer
+    return { canceled: true, value: '' };
+  } catch (error) {
+    return { canceled: true, value: '' };
+  }
+});
+
+ipcMain.handle('dialog:showMessageBox', async (event, options) => {
+  try {
+    const result = await dialog.showMessageBox(mainWindow!, options);
+    return result;
+  } catch (error) {
+    return { response: 0, checkboxChecked: false };
   }
 });
 
@@ -1761,6 +1797,11 @@ let currentCheckpointService: CheckpointService | null = null;
 let currentWorktreeManager: WorktreeManager | null = null;
 // let currentGitHooksManager: GitHooksManager | null = null; - now handled by GitHooksManagerGlobal
 
+// Get current workspace path
+ipcMain.handle('workspace:getCurrentPath', async () => {
+  return (store as any).get('workspacePath') || process.cwd();
+});
+
 // Git service initialization when workspace changes
 ipcMain.handle('workspace:setPath', async (event, workspacePath: string) => {
   try {
@@ -1797,6 +1838,13 @@ ipcMain.handle('workspace:setPath', async (event, workspacePath: string) => {
       const result = gitHooksManagerGlobal.setWorkspace(workspacePath);
     } catch (error) {
       console.error('[Main] Error updating GitHooksManagerGlobal:', error);
+    }
+    
+    // Initialize snapshot service for workspace
+    if (!snapshotServices.has(workspacePath)) {
+      const snapshotService = new SnapshotService(workspacePath);
+      snapshotService.setupIpcHandlers();
+      snapshotServices.set(workspacePath, snapshotService);
     }
 
     return { success: true };

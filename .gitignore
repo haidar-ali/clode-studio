@@ -41,3 +41,9 @@ package-lock.json
 
 # Bundled binaries
 vendor/ripgrep/
+
+# Claude Code IDE specific
+.claude-snapshots
+
+# Test files
+test-snapshot-system.md

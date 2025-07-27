@@ -114,8 +114,12 @@ const electronAPI = {
     selectFolder: () => ipcRenderer.invoke('dialog:selectFolder'),
     selectFile: () => ipcRenderer.invoke('dialog:selectFile'),
     showOpenDialog: (options: any) => ipcRenderer.invoke('dialog:showOpenDialog', options),
-    showSaveDialog: (options: any) => ipcRenderer.invoke('dialog:showSaveDialog', options)
+    showSaveDialog: (options: any) => ipcRenderer.invoke('dialog:showSaveDialog', options),
+    showInputBox: (options: any) => ipcRenderer.invoke('dialog:showInputBox', options),
+    showMessageBox: (options: any) => ipcRenderer.invoke('dialog:showMessageBox', options)
   },
+  showNotification: (options: { title: string; body: string }) => 
+    ipcRenderer.invoke('showNotification', options),
   getHomeDir: () => ipcRenderer.invoke('getHomeDir'),
   
   // File Watcher operations
@@ -252,12 +256,49 @@ const electronAPI = {
     importContext: (workspacePath: string, jsonData: string) =>
       ipcRenderer.invoke('workspace:importContext', workspacePath, jsonData),
     setPath: (workspacePath: string) =>
-      ipcRenderer.invoke('workspace:setPath', workspacePath)
+      ipcRenderer.invoke('workspace:setPath', workspacePath),
+    getCurrentPath: () => 
+      ipcRenderer.invoke('workspace:getCurrentPath')
+  },
+  snapshots: {
+    save: (snapshot: any) =>
+      ipcRenderer.invoke('snapshots:save', snapshot),
+    list: () =>
+      ipcRenderer.invoke('snapshots:list'),
+    delete: (snapshotId: string) =>
+      ipcRenderer.invoke('snapshots:delete', snapshotId),
+    update: (snapshot: any) =>
+      ipcRenderer.invoke('snapshots:update', snapshot),
+    getStorageInfo: () =>
+      ipcRenderer.invoke('snapshots:getStorageInfo'),
+    export: (exportPath: string) =>
+      ipcRenderer.invoke('snapshots:export', exportPath),
+    import: (importPath: string) =>
+      ipcRenderer.invoke('snapshots:import', importPath),
+    
+    // Enhanced snapshot operations
+    compressContent: (content: string) =>
+      ipcRenderer.invoke('snapshots:compressContent', content),
+    storeContent: (params: { hash: string; content: string; mimeType: string; encoding: string; projectPath: string }) =>
+      ipcRenderer.invoke('snapshots:storeContent', params),
+    getContent: (params: { hash: string; projectPath: string }) =>
+      ipcRenderer.invoke('snapshots:getContent', params),
+    storeDiff: (params: { hash: string; diffObject: any; projectPath: string }) =>
+      ipcRenderer.invoke('snapshots:storeDiff', params),
+    getDiff: (params: { hash: string; projectPath: string }) =>
+      ipcRenderer.invoke('snapshots:getDiff', params),
+    scanProjectFiles: (params: { projectPath: string }) =>
+      ipcRenderer.invoke('snapshots:scanProjectFiles', params),
+    restoreFiles: (params: { fileChanges: any; projectPath: string }) =>
+      ipcRenderer.invoke('snapshots:restoreFiles', params),
+    cleanup: (params: { projectPath: string; olderThanDays: number }) =>
+      ipcRenderer.invoke('snapshots:cleanup', params)
   },
   git: {
     status: () => ipcRenderer.invoke('git:status'),
     add: (files: string[], customPath?: string) => ipcRenderer.invoke('git:add', files, customPath),
     reset: (files: string[]) => ipcRenderer.invoke('git:reset', files),
+    resetHard: (commitHash: string) => ipcRenderer.invoke('git:resetHard', commitHash),
     commit: (message: string, customPath?: string) => ipcRenderer.invoke('git:commit', message, customPath),
     push: (remote?: string, branch?: string) => ipcRenderer.invoke('git:push', remote, branch),
     pull: (remote?: string, branch?: string) => ipcRenderer.invoke('git:pull', remote, branch),
@@ -269,6 +310,8 @@ const electronAPI = {
     diff: (file?: string) => ipcRenderer.invoke('git:diff', file),
     diffStaged: (file?: string) => ipcRenderer.invoke('git:diffStaged', file),
     discardChanges: (files: string[]) => ipcRenderer.invoke('git:discardChanges', files),
+    stash: (message?: string) => ipcRenderer.invoke('git:stash', message),
+    getFileAtHead: (filePath: string) => ipcRenderer.invoke('git:getFileAtHead', filePath),
     init: () => ipcRenderer.invoke('git:init'),
     clone: (url: string, localPath?: string) => ipcRenderer.invoke('git:clone', url, localPath),
     checkIsRepo: () => ipcRenderer.invoke('git:checkIsRepo'),
@@ -291,8 +334,8 @@ const electronAPI = {
   },
   worktree: {
     list: () => ipcRenderer.invoke('worktree:list'),
-    create: (branchName: string, sessionName?: string, sessionDescription?: string) => 
-      ipcRenderer.invoke('worktree:create', branchName, sessionName, sessionDescription),
+    create: (branchName: string, sessionName?: string, sessionDescription?: string, metadata?: any) => 
+      ipcRenderer.invoke('worktree:create', branchName, sessionName, sessionDescription, metadata),
     remove: (worktreePath: string, force?: boolean) => 
       ipcRenderer.invoke('worktree:remove', worktreePath, force),
     switch: (worktreePath: string) => 
@@ -315,6 +358,29 @@ const electronAPI = {
     update: (hookName: string, options: any) => 
       ipcRenderer.invoke('git-hooks:update', hookName, options),
     test: (hookName: string) => ipcRenderer.invoke('git-hooks:test', hookName)
+  },
+  gitTimeline: {
+    getData: (workspacePath: string, filter?: any) =>
+      ipcRenderer.invoke('git-timeline:getData', workspacePath, filter),
+    getCommitDetails: (workspacePath: string, hash: string) =>
+      ipcRenderer.invoke('git-timeline:getCommitDetails', workspacePath, hash),
+    clearCache: (workspacePath: string) =>
+      ipcRenderer.invoke('git-timeline:clearCache', workspacePath),
+    checkoutBranch: (workspacePath: string, branchName: string) =>
+      ipcRenderer.invoke('git-timeline:checkoutBranch', workspacePath, branchName),
+    createBranch: (workspacePath: string, branchName: string, startPoint?: string) =>
+      ipcRenderer.invoke('git-timeline:createBranch', workspacePath, branchName, startPoint)
+  },
+  
+  // Time Machine events
+  onTimeMachineFileOperation: (callback: (data: any) => void) => {
+    const channel = 'time-machine:first-file-operation';
+    const handler = (_: any, data: any) => callback(data);
+    ipcRenderer.on(channel, handler);
+    return () => ipcRenderer.removeListener(channel, handler);
+  },
+  removeTimeMachineListener: () => {
+    ipcRenderer.removeAllListeners('time-machine:first-file-operation');
   }
 };
 

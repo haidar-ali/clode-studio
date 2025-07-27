@@ -1,7 +1,23 @@
 <template>
   <div class="terminal-container">
     <div class="terminal-header">
-      <h3>{{ instance.name }}</h3>
+      <div class="header-left">
+        <h3>{{ instance.name }}</h3>
+        <div class="worktree-indicator">
+          <Icon 
+            :name="isWorktree ? 'mdi:git-branch' : 'mdi:source-branch'" 
+            size="14"
+            :class="{ 'worktree-icon': isWorktree, 'main-icon': !isWorktree }"
+          />
+          <span 
+            class="branch-name" 
+            :class="{ 'worktree-name': isWorktree, 'main-name': !isWorktree }"
+            :title="isWorktree ? `Worktree: ${currentBranch}` : `Main branch: ${currentBranch}`"
+          >
+            {{ currentBranch }}
+          </span>
+        </div>
+      </div>
       <div class="terminal-actions">
         <PersonalitySelector
           :instanceId="instance.id"
@@ -39,6 +55,15 @@
           <Icon name="heroicons:chat-bubble-left-right" size="16" />
         </button>
         <button
+          v-if="hasUndo"
+          @click="undoLastCheckpoint"
+          class="icon-button undo-button"
+          :disabled="isUndoing"
+          :title="checkpointInfo ? `Undo to checkpoint: ${checkpointInfo.message.substring(0, 30)}... (${checkpointInfo.time})` : 'Undo last Claude action'"
+        >
+          <Icon name="mdi:undo" size="16" />
+        </button>
+        <button
           @click="clearTerminal"
           class="icon-button"
           :title="instance.status === 'connected' ? 'Clear screen (Ctrl+L)' : 'Clear terminal'"
@@ -71,6 +96,8 @@ import PersonalitySelector from './PersonalitySelector.vue';
 import TerminalChatInput from './TerminalChatInput.vue';
 import ClaudeRunConfigSelector from './ClaudeRunConfigSelector.vue';
 import type { ClaudeRunConfig } from '~/stores/claude-run-configs';
+import { useGitBranch } from '~/composables/useGitBranch';
+import { useCheckpoints } from '~/composables/useCheckpoints';
 import 'xterm/css/xterm.css';
 
 const props = defineProps<{
@@ -84,6 +111,8 @@ const emit = defineEmits<{
 const instancesStore = useClaudeInstancesStore();
 const contextManager = useContextManager();
 const commandsStore = useCommandsStore();
+const { currentBranch, isWorktree } = useGitBranch();
+const { hasUndo, undoLastCheckpoint, isUndoing, checkpointInfo } = useCheckpoints();
 const terminalElement = ref<HTMLElement>();
 const showChatInput = ref(false);
 const selectedRunConfig = ref<ClaudeRunConfig | null>(null);
@@ -603,12 +632,50 @@ onUnmounted(() => {
   z-index: 10;
 }
 
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .terminal-header h3 {
   margin: 0;
   font-size: 13px;
   font-weight: normal;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+.worktree-indicator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.worktree-icon {
+  color: #569cd6;
+}
+
+.main-icon {
+  color: #cccccc;
+}
+
+.branch-name {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+.worktree-name {
+  color: #569cd6;
+}
+
+.main-name {
+  color: #cccccc;
 }
 
 .terminal-actions {
@@ -637,6 +704,20 @@ onUnmounted(() => {
 
 .icon-button:hover {
   background: #3e3e42;
+}
+
+.undo-button {
+  color: #f9c23c;
+}
+
+.undo-button:hover {
+  background: rgba(249, 194, 60, 0.1);
+  color: #ffd700;
+}
+
+.undo-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .start-button {

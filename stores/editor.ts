@@ -189,6 +189,12 @@ export const useEditorStore = defineStore('editor', {
     restoreCursorPositions(positions: Record<string, { line: number; column: number }>) {
       // This would need to be implemented based on your editor integration
       
+    },
+    
+    setActiveTab(tabId: string) {
+      if (this.tabs.find(t => t.id === tabId)) {
+        this.activeTabId = tabId;
+      }
     }
   }
 });

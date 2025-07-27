@@ -516,7 +516,6 @@ export const useCheckpointV2Store = defineStore('checkpoint-v2', () => {
               gitignorePath,
               gitignoreContent.content + contentToAppend
             );
-          }
           } else {
             // File doesn't exist, create it with common defaults + our entries
             const defaultGitignore = `# Dependencies
@@ -556,7 +555,6 @@ ${claudeEntries.join('\n')}
               defaultGitignore
             );
           }
-        }
       }
       
       // Initialize shadow repo through checkpoint service
