@@ -71,6 +71,47 @@ onMounted(async () => {
   });
   resizeObserver.observe(terminalElement.value);
   
+  // Add Mac keyboard shortcuts
+  terminal.attachCustomKeyEventHandler((e: KeyboardEvent) => {
+    // Only handle on Mac
+    if (navigator.platform.toLowerCase().indexOf('mac') === -1) {
+      return true;
+    }
+    
+    // Only process if we have a PTY process
+    if (!ptyProcess) {
+      return true;
+    }
+    
+    try {
+      // Cmd + Delete: Clear line before cursor
+      if (e.metaKey && e.key === 'Backspace') {
+        e.preventDefault();
+        window.electronAPI.terminal.write(ptyProcess, '\x15'); // Ctrl+U clears line before cursor
+        return false;
+      }
+      
+      // Cmd + Left Arrow: Go to beginning of line
+      if (e.metaKey && e.key === 'ArrowLeft') {
+        e.preventDefault();
+        window.electronAPI.terminal.write(ptyProcess, '\x01'); // Ctrl+A
+        return false;
+      }
+      
+      // Cmd + Right Arrow: Go to end of line
+      if (e.metaKey && e.key === 'ArrowRight') {
+        e.preventDefault();
+        window.electronAPI.terminal.write(ptyProcess, '\x05'); // Ctrl+E
+        return false;
+      }
+      
+    } catch (error) {
+      // Silently ignore errors
+    }
+    
+    return true;
+  });
+  
   // Start PTY process
   try {
     // Check if terminal API is available
