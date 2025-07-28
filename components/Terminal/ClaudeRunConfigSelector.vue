@@ -334,9 +334,9 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 10px;
-  background: #383838;
-  border: 1px solid #505050;
+  padding: 4px 8px;
+  background: none;
+  border: none;
   border-radius: 4px;
   cursor: pointer;
   font-size: 13px;
@@ -346,8 +346,7 @@ onUnmounted(() => {
 }
 
 .dropdown-trigger:hover {
-  background: #404040;
-  border-color: #606060;
+  background: #3e3e42;
 }
 
 .dropdown-menu {

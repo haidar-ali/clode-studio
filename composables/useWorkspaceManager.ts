@@ -75,8 +75,11 @@ export function useWorkspaceManager() {
       await chatStore.stopClaude();
       chatStore.clearMessages();
       
-      // 3. Clear all Claude instances from current workspace
-      await claudeInstancesStore.clearAllInstances();
+      // 3. Don't clear all Claude instances - they're managed per worktree
+      // Just save current configurations
+      if (activeWorktreePath.value) {
+        await claudeInstancesStore.saveWorkspaceConfiguration(activeWorktreePath.value);
+      }
       
       // 4. Update workspace path
       currentWorkspacePath.value = path;
@@ -87,10 +90,28 @@ export function useWorkspaceManager() {
       // 6. Update chat store with new workspace path
       await chatStore.updateWorkingDirectory(path);
       
-      // 7. Load workspace-specific Claude instances configuration
-      await claudeInstancesStore.loadWorkspaceConfiguration(path);
+      // 7. Initialize source control to detect if it's a git repository
+      const sourceControlStore = useSourceControlStore();
+      await sourceControlStore.initialize(path);
       
-      // 8. Set project path FIRST, then load existing tasks (don't clear until after loading)
+      // Small delay to ensure source control is fully initialized
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // 8. Initialize worktrees for this workspace BEFORE loading Claude instances
+      console.log('[WorkspaceManager] Before initializeWorktrees - activeWorktreePath:', activeWorktreePath.value);
+      await initializeWorktrees();
+      console.log('[WorkspaceManager] After initializeWorktrees - activeWorktreePath:', activeWorktreePath.value);
+      
+      // 9. Load workspace-specific Claude instances configuration using the activeWorktreePath
+      // For non-git projects, activeWorktreePath will be set to currentWorkspacePath
+      if (activeWorktreePath.value) {
+        console.log('[WorkspaceManager] Loading Claude config for worktree:', activeWorktreePath.value);
+        await claudeInstancesStore.loadWorkspaceConfiguration(activeWorktreePath.value);
+      } else {
+        console.log('[WorkspaceManager] No activeWorktreePath, skipping Claude config load');
+      }
+      
+      // 10. Set project path FIRST, then load existing tasks (don't clear until after loading)
       tasksStore.setProjectPath(path);
       
       // 8.5. Initialize context store with persisted data
@@ -123,16 +144,6 @@ export function useWorkspaceManager() {
         await updateRecentWorkspaces(path);
       }
       
-      // Initialize source control to detect if it's a git repository
-      const sourceControlStore = useSourceControlStore();
-      
-      await sourceControlStore.initialize(path);
-      
-      // Small delay to ensure source control is fully initialized
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      // NEW: Initialize worktrees for this workspace
-      await initializeWorktrees();
       
       // Load MCP servers for the workspace
       const { useMCPStore } = await import('~/stores/mcp');
@@ -249,8 +260,11 @@ export function useWorkspaceManager() {
     
     
     // Save current worktree state if we have one
-    if (activeWorktreePath.value && activeWorktreePath.value !== worktreePath) {
-      await saveWorktreeState(activeWorktreePath.value);
+    const previousWorktreePath = activeWorktreePath.value;
+    if (previousWorktreePath && previousWorktreePath !== worktreePath) {
+      await saveWorktreeState(previousWorktreePath);
+      // Save Claude instances configuration for old worktree
+      await claudeInstancesStore.saveWorkspaceConfiguration(previousWorktreePath);
     }
     
     // Update active worktree path
@@ -264,11 +278,17 @@ export function useWorkspaceManager() {
       await window.electronAPI.fs.unwatchDirectory(currentWorkspacePath.value);
     }
     
+    // Update current workspace path to the new worktree
+    currentWorkspacePath.value = worktreePath;
+    
     // Start watching the new worktree directory
     await window.electronAPI.fs.watchDirectory(worktreePath);
     
-    // Update chat working directory
-    await chatStore.updateWorkingDirectory(worktreePath);
+    // Don't update chat store - it's for the old single-instance approach
+    // await chatStore.updateWorkingDirectory(worktreePath);
+    
+    // Load Claude instances configuration for new worktree
+    await claudeInstancesStore.loadWorkspaceConfiguration(worktreePath);
     
     // Update tasks path to the worktree
     tasksStore.setProjectPath(worktreePath);
@@ -307,7 +327,7 @@ export function useWorkspaceManager() {
   const initializeWorktrees = async () => {
     if (!currentWorkspacePath.value) return;
     
-    
+    console.log('[initializeWorktrees] Starting for workspace:', currentWorkspacePath.value);
     
     // Clear existing worktrees first
     activeWorktrees.value.clear();
@@ -315,9 +335,23 @@ export function useWorkspaceManager() {
     
     // Get list of worktrees
     const result = await window.electronAPI.worktree.list();
+    console.log('[initializeWorktrees] Worktree list result:', result);
+    
     if (!result.success || !result.worktrees) {
       // Check if it's because this is not a git repository
       if (result.error && (result.error.includes('not a git repository') || result.error.includes('Not a git repository'))) {
+        console.log('[initializeWorktrees] Not a git repo, setting activeWorktreePath to:', currentWorkspacePath.value);
+        
+        // Add a worktree session for non-git projects
+        const nonGitWorktree: WorktreeSession = {
+          path: currentWorkspacePath.value,
+          branch: 'main', // Default branch name for non-git
+          isMainWorktree: true,
+          hasChanges: false,
+          ahead: 0,
+          behind: 0
+        };
+        activeWorktrees.value.set(currentWorkspacePath.value, nonGitWorktree);
         
         // Set the main workspace path as the active worktree for non-git repos
         activeWorktreePath.value = currentWorkspacePath.value;
@@ -367,6 +401,7 @@ export function useWorkspaceManager() {
     // Set active worktree if not set
     if (!activeWorktreePath.value) {
       activeWorktreePath.value = currentWorkspacePath.value;
+      console.log('[initializeWorktrees] Setting activeWorktreePath to:', activeWorktreePath.value);
       // Update the backend's active worktree path
       await window.electronAPI.workspace.setPath(activeWorktreePath.value);
     }

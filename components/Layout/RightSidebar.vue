@@ -47,12 +47,24 @@
         @drop="handleDrop"
       >
         <!-- Keep all modules mounted but hidden to preserve state -->
-        <component 
-          v-for="moduleId in rightDockModules"
-          :key="`single-${moduleId}`"
-          :is="getModuleComponent(moduleId)" 
-          v-show="moduleId === activeRightModule"
-        />
+        <template v-for="moduleId in rightDockModules" :key="`single-${moduleId}`">
+          <!-- Special handling for Claude module - one per worktree -->
+          <template v-if="moduleId === 'claude'">
+            <component
+              v-for="[worktreePath, worktree] in activeWorktrees"
+              :key="getClaudeComponentKey(worktreePath)"
+              :is="getModuleComponent('claude')"
+              v-show="moduleId === activeRightModule && worktreePath === activeWorktreePath"
+              :worktree-path="worktreePath"
+            />
+          </template>
+          <!-- Regular modules -->
+          <component 
+            v-else
+            :is="getModuleComponent(moduleId)" 
+            v-show="moduleId === activeRightModule"
+          />
+        </template>
       </div>
       
       <!-- Split View Mode -->
@@ -76,13 +88,25 @@
               @drop="handleSplitDrop($event, 'top')"
             >
               <!-- Keep all modules mounted but hidden to preserve state -->
-              <component 
-                v-for="moduleId in rightDockModules"
-                :key="`split-primary-${moduleId}`"
-                :is="getModuleComponent(moduleId)" 
-                v-show="moduleId === activeRightModule"
-                :instance-group="moduleId === 'claude' ? 'primary' : undefined"
-              />
+              <template v-for="moduleId in rightDockModules" :key="`split-primary-${moduleId}`">
+                <!-- Special handling for Claude module - one per worktree -->
+                <template v-if="moduleId === 'claude'">
+                  <component
+                    v-for="[worktreePath, worktree] in activeWorktrees"
+                    :key="`split-primary-${getClaudeComponentKey(worktreePath)}`"
+                    :is="getModuleComponent('claude')"
+                    v-show="moduleId === activeRightModule && worktreePath === activeWorktreePath"
+                    :worktree-path="worktreePath"
+                    :instance-group="'primary'"
+                  />
+                </template>
+                <!-- Regular modules -->
+                <component 
+                  v-else
+                  :is="getModuleComponent(moduleId)" 
+                  v-show="moduleId === activeRightModule"
+                />
+              </template>
             </div>
           </Pane>
           <Pane :size="50" :min-size="30" :max-size="70">
@@ -96,12 +120,25 @@
               @dragleave="handleSplitDragLeave"
               @drop="handleSplitDrop($event, 'bottom')"
             >
-              <component 
-                :is="getModuleComponent(secondaryModule)" 
-                v-if="secondaryModule"
-                :instance-group="secondaryModule === 'claude' ? 'secondary' : undefined"
-                :key="`split-secondary-${secondaryModule}`"
-              />
+              <template v-if="secondaryModule">
+                <!-- Special handling for Claude module - one per worktree -->
+                <template v-if="secondaryModule === 'claude'">
+                  <component
+                    v-for="[worktreePath, worktree] in activeWorktrees"
+                    :key="`split-secondary-${getClaudeComponentKey(worktreePath)}`"
+                    :is="getModuleComponent('claude')"
+                    v-show="worktreePath === activeWorktreePath"
+                    :worktree-path="worktreePath"
+                    :instance-group="'secondary'"
+                  />
+                </template>
+                <!-- Regular modules -->
+                <component 
+                  v-else
+                  :is="getModuleComponent(secondaryModule)"
+                  :key="`split-secondary-${secondaryModule}`"
+                />
+              </template>
             </div>
           </Pane>
         </Splitpanes>
@@ -115,13 +152,27 @@ import { computed, defineAsyncComponent, nextTick, ref } from 'vue';
 import { Splitpanes, Pane } from 'splitpanes';
 import { useLayoutStore, type ModuleId } from '~/stores/layout';
 import { useModuleDragDrop } from '~/composables/useModuleDragDrop';
+import { useWorkspaceManager } from '~/composables/useWorkspaceManager';
 import Icon from '~/components/Icon.vue';
 
 const layoutStore = useLayoutStore();
 const { dragDropState, canDropInDock, handleDrop: handleDropModule, setDropTarget, startDrag, endDrag } = useModuleDragDrop();
+const workspaceManager = useWorkspaceManager();
 
 // Split panel drag and drop state
 const splitDropTarget = ref<'top' | 'bottom' | null>(null);
+
+// Get worktree information
+const activeWorktrees = computed(() => {
+  const worktrees = workspaceManager.activeWorktrees.value;
+  console.log('[RightSidebar] activeWorktrees:', worktrees.size, Array.from(worktrees.keys()));
+  return worktrees;
+});
+const activeWorktreePath = computed(() => {
+  const path = workspaceManager.activeWorktreePath.value;
+  console.log('[RightSidebar] activeWorktreePath:', path);
+  return path;
+});
 
 // Module components mapping
 const moduleComponents = {
@@ -187,6 +238,12 @@ const getModuleIcon = (moduleId: ModuleId) => moduleConfig[moduleId]?.icon || 'm
 const getModuleComponent = (moduleId: ModuleId | undefined) => {
   if (!moduleId) return null;
   return moduleComponents[moduleId];
+};
+
+// Special handling for Claude module to support per-worktree instances
+const getClaudeComponentKey = (worktreePath: string) => {
+  // Create a unique key for each worktree's Claude instance
+  return `claude-${worktreePath.replace(/[^a-zA-Z0-9]/g, '_')}`;
 };
 
 const toggleSplitView = async () => {

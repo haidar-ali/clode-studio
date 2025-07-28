@@ -506,6 +506,10 @@ ipcMain.handle('store:delete', (event, key: string) => {
   return { success: true };
 });
 
+ipcMain.handle('store:getAll', () => {
+  return (store as any).store;
+});
+
 ipcMain.handle('store:getHomePath', () => {
   return app.getPath('home');
 });
@@ -1236,6 +1240,18 @@ app.on('before-quit', () => {
     terminal.kill();
   }
   terminals.clear();
+});
+
+// Clean up Claude instances on app quit
+app.on('before-quit', () => {
+  for (const [instanceId, claudePty] of claudeInstances) {
+    try {
+      claudePty.kill();
+    } catch (error) {
+      console.error(`Failed to kill Claude instance ${instanceId}:`, error);
+    }
+  }
+  claudeInstances.clear();
 });
 
 // MCP (Model Context Protocol) Management - Using Claude CLI
