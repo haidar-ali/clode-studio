@@ -1,5 +1,5 @@
 <template>
-  <div class="ide-container" :class="layoutStore.layoutClasses">
+  <div class="ide-container">
     <!-- Mode Selector -->
     <ModeSelector />
     
@@ -11,74 +11,31 @@
       <ActivityBar />
       
       <div class="ide-main-content">
-        <!-- Full IDE Mode with Three-Dock System -->
-        <div v-if="layoutStore.isFullIdeMode" class="layout-three-dock">
+        <!-- Simplified Three-Dock System -->
+        <div class="layout-three-dock">
           <!-- Layout without bottom panel when minimized -->
           <div v-if="layoutStore.bottomPanelMinimized" class="main-content-full" key="minimized-layout">
-            <!-- Layout WITH right sidebar -->
             <Splitpanes 
-              v-if="layoutStore.rightSidebarVisible && layoutStore.dockConfig.rightDock.length > 0"
               class="default-theme" 
               @ready="onSplitpanesReady"
             >
-              <!-- Left Dock -->
-              <Pane v-if="layoutStore.dockConfig.leftDock.length > 0" :size="20" :min-size="15" :max-size="30">
+              <!-- Left Dock - Always visible, expands when right is hidden -->
+              <Pane 
+                :size="layoutStore.rightSidebarVisible ? 70 : 100" 
+                :min-size="50"
+              >
                 <LeftDock />
               </Pane>
 
-              <!-- Center: Editor -->
-              <Pane :size="50" :min-size="30">
-                <div class="editor-container">
-                  <EditorTabs />
-                  <ClientOnly>
-                    <CodeMirrorWrapper v-if="activeTab" />
-                    <template #fallback>
-                      <div class="loading-editor">
-                        Loading editor...
-                      </div>
-                    </template>
-                  </ClientOnly>
-                  <div v-if="!activeTab" class="welcome-screen">
-                    <h2>Claude Code IDE</h2>
-                    <p>Open a file to start editing</p>
-                  </div>
-                </div>
-              </Pane>
-
-              <!-- Right Dock -->
-              <Pane :size="layoutStore.rightSidebarWidth" :min-size="20" :max-size="50">
-                <RightSidebar />
-              </Pane>
-            </Splitpanes>
-
-            <!-- Layout WITHOUT right sidebar -->
-            <Splitpanes 
-              v-else
-              class="default-theme" 
-              @ready="onSplitpanesReady"
-            >
-              <!-- Left Dock -->
-              <Pane v-if="layoutStore.dockConfig.leftDock.length > 0" :size="20" :min-size="15" :max-size="30">
-                <LeftDock />
-              </Pane>
-
-              <!-- Center: Editor - Takes remaining space -->
-              <Pane :size="layoutStore.dockConfig.leftDock.length > 0 ? 80 : 100" :min-size="30">
-                <div class="editor-container">
-                  <EditorTabs />
-                  <ClientOnly>
-                    <CodeMirrorWrapper v-if="activeTab" />
-                    <template #fallback>
-                      <div class="loading-editor">
-                        Loading editor...
-                      </div>
-                    </template>
-                  </ClientOnly>
-                  <div v-if="!activeTab" class="welcome-screen">
-                    <h2>Claude Code IDE</h2>
-                    <p>Open a file to start editing</p>
-                  </div>
-                </div>
+              <!-- Right Dock - Can be hidden -->
+              <Pane 
+                v-if="layoutStore.rightSidebarVisible || dragDropState?.isDragging"
+                :size="30" 
+                :min-size="20" 
+                :max-size="50"
+              >
+                <RightSidebar v-if="layoutStore.rightSidebarVisible && layoutStore.dockConfig.rightDock.length > 0" />
+                <RightDockShadow v-else />
               </Pane>
             </Splitpanes>
             
@@ -90,76 +47,33 @@
           
           <!-- Layout with bottom panel when expanded -->
           <Splitpanes v-else horizontal class="default-theme" key="expanded-layout" @ready="onSplitpanesReady">
-            <!-- Main Content Area (Editor + Docks) -->
+            <!-- Main Content Area -->
             <Pane 
               :size="100 - layoutStore.bottomPanelHeight" 
               :min-size="50" 
               :max-size="85"
             >
-              <!-- Layout WITH right sidebar -->
               <Splitpanes 
-                v-if="layoutStore.rightSidebarVisible && layoutStore.dockConfig.rightDock.length > 0"
                 class="default-theme" 
                 @ready="onSplitpanesReady"
               >
-                <!-- Left Dock -->
-                <Pane v-if="layoutStore.dockConfig.leftDock.length > 0" :size="20" :min-size="15" :max-size="30">
+                <!-- Left Dock - Always visible, expands when right is hidden -->
+                <Pane 
+                  :size="layoutStore.rightSidebarVisible ? 70 : 100" 
+                  :min-size="50"
+                >
                   <LeftDock />
                 </Pane>
 
-                <!-- Center: Editor -->
-                <Pane :size="50" :min-size="30">
-                  <div class="editor-container">
-                    <EditorTabs />
-                    <ClientOnly>
-                      <CodeMirrorWrapper v-if="activeTab" />
-                      <template #fallback>
-                        <div class="loading-editor">
-                          Loading editor...
-                        </div>
-                      </template>
-                    </ClientOnly>
-                    <div v-if="!activeTab" class="welcome-screen">
-                      <h2>Claude Code IDE</h2>
-                      <p>Open a file to start editing</p>
-                    </div>
-                  </div>
-                </Pane>
-
-                <!-- Right Dock -->
-                <Pane :size="layoutStore.rightSidebarWidth" :min-size="20" :max-size="50">
-                  <RightSidebar />
-                </Pane>
-              </Splitpanes>
-
-              <!-- Layout WITHOUT right sidebar -->
-              <Splitpanes 
-                v-else
-                class="default-theme" 
-                @ready="onSplitpanesReady"
-              >
-                <!-- Left Dock -->
-                <Pane v-if="layoutStore.dockConfig.leftDock.length > 0" :size="20" :min-size="15" :max-size="30">
-                  <LeftDock />
-                </Pane>
-
-                <!-- Center: Editor - Takes remaining space -->
-                <Pane :size="layoutStore.dockConfig.leftDock.length > 0 ? 80 : 100" :min-size="30">
-                  <div class="editor-container">
-                    <EditorTabs />
-                    <ClientOnly>
-                      <CodeMirrorWrapper v-if="activeTab" />
-                      <template #fallback>
-                        <div class="loading-editor">
-                          Loading editor...
-                        </div>
-                      </template>
-                    </ClientOnly>
-                    <div v-if="!activeTab" class="welcome-screen">
-                      <h2>Claude Code IDE</h2>
-                      <p>Open a file to start editing</p>
-                    </div>
-                  </div>
+                <!-- Right Dock - Can be hidden -->
+                <Pane 
+                  v-if="layoutStore.rightSidebarVisible || dragDropState?.isDragging"
+                  :size="30" 
+                  :min-size="20" 
+                  :max-size="50"
+                >
+                  <RightSidebar v-if="layoutStore.rightSidebarVisible && layoutStore.dockConfig.rightDock.length > 0" />
+                  <RightDockShadow v-else />
                 </Pane>
               </Splitpanes>
             </Pane>
@@ -176,190 +90,10 @@
           </Splitpanes>
         </div>
 
-    <!-- Kanban + Claude Mode -->
-    <div v-else-if="layoutStore.isKanbanClaudeMode" class="layout-kanban-claude">
-      <Splitpanes horizontal class="default-theme">
-        <!-- Top Section: Kanban and Claude -->
-        <Pane :size="60" :min-size="40" :max-size="80">
-          <Splitpanes>
-            <!-- Left Panel: Kanban Board -->
-            <Pane :size="layoutStore.kanbanClaudeSplit" :min-size="60" :max-size="85">
-              <div class="panel kanban-panel">
-                <div class="panel-header">
-                  <h3>Task Management</h3>
-                </div>
-                <KanbanBoard />
-              </div>
-            </Pane>
-
-            <!-- Right Panel: Claude Terminal -->
-            <Pane :size="100 - layoutStore.kanbanClaudeSplit" :min-size="15" :max-size="40">
-              <div class="panel terminal-panel" id="claude-terminal-kanban-claude">
-                <!-- Claude terminals will be teleported here -->
-              </div>
-            </Pane>
-          </Splitpanes>
-        </Pane>
-        
-        <!-- Bottom Section: Full-width Tasks/Terminal -->
-        <Pane :size="40" :min-size="20" :max-size="60">
-          <div class="panel bottom-panel">
-            <div class="tabs">
-              <button
-                :class="{ active: bottomTab === 'terminal' }"
-                @click="bottomTab = 'terminal'"
-              >
-                Terminal
-              </button>
-              <button
-                :class="{ active: bottomTab === 'context' }"
-                @click="bottomTab = 'context'"
-              >
-                Context
-                <span v-if="contextFilesCount > 0" class="context-badge">{{ contextFilesCount }}</span>
-              </button>
-              <button
-                :class="{ active: bottomTab === 'knowledge' }"
-                @click="bottomTab = 'knowledge'"
-              >
-                Knowledge
-              </button>
-              <button
-                :class="{ active: bottomTab === 'prompts' }"
-                @click="bottomTab = 'prompts'"
-              >
-                <Icon name="heroicons:sparkles" size="16" />
-                Prompts
-              </button>
-              <button
-                :class="{ active: bottomTab === 'source-control' }"
-                @click="bottomTab = 'source-control'"
-              >
-                <Icon name="mdi:source-branch" size="16" />
-                Source Control
-              </button>
-              <button
-                :class="{ active: bottomTab === 'checkpoints' }"
-                @click="bottomTab = 'checkpoints'"
-              >
-                <Icon name="mdi:history" size="16" />
-                Checkpoints
-              </button>
-              <button
-                :class="{ active: bottomTab === 'worktrees' }"
-                @click="bottomTab = 'worktrees'"
-              >
-                <Icon name="mdi:file-tree" size="16" />
-                Worktrees
-              </button>
-            </div>
-            <div class="tab-content">
-              <KanbanBoard v-if="bottomTab === 'tasks'" />
-              <Terminal v-else-if="bottomTab === 'terminal'" :project-path="projectPath" />
-              <ContextPanel v-else-if="bottomTab === 'context'" />
-              <KnowledgePanel v-else-if="bottomTab === 'knowledge'" />
-              <PromptStudio v-else-if="bottomTab === 'prompts'" />
-              <SourceControlV2 v-else-if="bottomTab === 'source-control'" />
-              <CheckpointPanel v-else-if="bottomTab === 'checkpoints'" />
-              <WorktreePanel v-else-if="bottomTab === 'worktrees'" />
-            </div>
-          </div>
-        </Pane>
-      </Splitpanes>
-    </div>
-
-    <!-- Kanban Only Mode -->
-    <div v-else-if="layoutStore.isKanbanOnlyMode" class="layout-kanban-only">
-      <Splitpanes horizontal class="default-theme">
-        <!-- Top Section: Kanban Board -->
-        <Pane :size="60" :min-size="40" :max-size="80">
-          <div class="panel kanban-panel">
-            <div class="panel-header">
-              <h3>Task Management</h3>
-            </div>
-            <KanbanBoard />
-          </div>
-        </Pane>
-        
-        <!-- Bottom Section: Full-width Tasks/Terminal -->
-        <Pane :size="40" :min-size="20" :max-size="60">
-          <div class="panel bottom-panel">
-            <div class="tabs">
-              <button
-                :class="{ active: bottomTab === 'tasks' }"
-                @click="bottomTab = 'tasks'"
-              >
-                Tasks
-                <span v-if="taskCount.todo > 0" class="task-badge">{{ taskCount.todo }}</span>
-              </button>
-              <button
-                :class="{ active: bottomTab === 'terminal' }"
-                @click="bottomTab = 'terminal'"
-              >
-                Terminal
-              </button>
-              <button
-                :class="{ active: bottomTab === 'context' }"
-                @click="bottomTab = 'context'"
-              >
-                Context
-                <span v-if="contextFilesCount > 0" class="context-badge">{{ contextFilesCount }}</span>
-              </button>
-              <button
-                :class="{ active: bottomTab === 'knowledge' }"
-                @click="bottomTab = 'knowledge'"
-              >
-                Knowledge
-              </button>
-              <button
-                :class="{ active: bottomTab === 'prompts' }"
-                @click="bottomTab = 'prompts'"
-              >
-                <Icon name="heroicons:sparkles" size="16" />
-                Prompts
-              </button>
-              <button
-                :class="{ active: bottomTab === 'source-control' }"
-                @click="bottomTab = 'source-control'"
-              >
-                <Icon name="mdi:source-branch" size="16" />
-                Source Control
-              </button>
-              <button
-                :class="{ active: bottomTab === 'checkpoints' }"
-                @click="bottomTab = 'checkpoints'"
-              >
-                <Icon name="mdi:history" size="16" />
-                Checkpoints
-              </button>
-              <button
-                :class="{ active: bottomTab === 'worktrees' }"
-                @click="bottomTab = 'worktrees'"
-              >
-                <Icon name="mdi:file-tree" size="16" />
-                Worktrees
-              </button>
-            </div>
-            <div class="tab-content">
-              <KanbanBoard v-if="bottomTab === 'tasks'" />
-              <Terminal v-else-if="bottomTab === 'terminal'" :project-path="projectPath" />
-              <ContextPanel v-else-if="bottomTab === 'context'" />
-              <KnowledgePanel v-else-if="bottomTab === 'knowledge'" />
-              <PromptStudio v-else-if="bottomTab === 'prompts'" />
-              <SourceControlV2 v-else-if="bottomTab === 'source-control'" />
-              <CheckpointPanel v-else-if="bottomTab === 'checkpoints'" />
-              <WorktreePanel v-else-if="bottomTab === 'worktrees'" />
-            </div>
-          </div>
-        </Pane>
-      </Splitpanes>
-    </div>
-
     <StatusBar />
     
-    <!-- Global Search Modal (only in Full IDE mode) -->
+    <!-- Global Search Modal -->
     <GlobalSearch 
-      v-if="layoutStore.isFullIdeMode" 
       :is-open="showGlobalSearch" 
       @close="showGlobalSearch = false" 
     />
@@ -396,6 +130,9 @@
     
     <!-- Global Input Modal -->
     <InputModal />
+    
+    <!-- Drag Indicator -->
+    <DragIndicator />
     
       </div> <!-- ide-main-content -->
     </div> <!-- ide-with-activity-bar -->
@@ -434,7 +171,11 @@ import CommandStudioModal from '~/components/Commands/CommandStudioModal.vue';
 import ActivityBar from '~/components/Layout/ActivityBar.vue';
 import LeftDock from '~/components/Layout/LeftDock.vue';
 import RightSidebar from '~/components/Layout/RightSidebar.vue';
+import RightDockShadow from '~/components/Layout/RightDockShadow.vue';
 import BottomDock from '~/components/Layout/BottomDock.vue';
+import DragIndicator from '~/components/Layout/DragIndicator.vue';
+import GlobalSearch from '~/components/Search/GlobalSearch.vue';
+import { useModuleDragDrop } from '~/composables/useModuleDragDrop';
 
 const editorStore = useEditorStore();
 const tasksStore = useTasksStore();
@@ -443,12 +184,12 @@ const mcpStore = useMCPStore();
 const contextManager = useContextManager();
 const commandsStore = useCommandsStore();
 const snapshotTriggers = useSnapshotTriggers();
+const { dragDropState } = useModuleDragDrop();
 const bottomTab = ref<'tasks' | 'terminal' | 'context' | 'knowledge' | 'prompts' | 'source-control' | 'checkpoints' | 'worktrees'>('tasks');
 const showGlobalSearch = ref(false);
 const showMCPModal = ref(false);
 const showCommandsModal = ref(false);
 
-const activeTab = computed(() => editorStore.activeTab);
 const taskCount = computed(() => tasksStore.taskCount);
 const projectPath = computed(() => tasksStore.projectPath);
 const contextFilesCount = computed(() => contextManager.statistics.value?.totalFiles || 0);
@@ -523,21 +264,12 @@ watch(projectPath, (newPath, oldPath) => {
   }
 });
 
-// Watch for layout mode changes to adjust bottomTab
-watch(() => layoutStore.isKanbanClaudeMode, (isKanbanClaude) => {
-  if (isKanbanClaude && bottomTab.value === 'tasks') {
-    // In Kanban + Claude mode, Tasks tab is not available
-    // Switch to terminal tab instead
-    bottomTab.value = 'context';
-  }
-});
 
 onMounted(async () => {
   // Initialize command store
   await commandsStore.initialize();
   
-  // Load saved layout mode and configuration
-  layoutStore.loadSavedMode();
+  // Load saved layout configuration
   layoutStore.loadLayoutConfig();
   
   document.addEventListener('keydown', handleKeydown);
@@ -769,58 +501,7 @@ onUnmounted(() => {
   position: relative;
 }
 
-/* Layout Mode Specific Styles */
-.layout-full-ide {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  max-height: calc(100vh - 1px); /* Prevent growing beyond viewport */
-  overflow: hidden;
-}
 
-.layout-kanban-claude {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  max-height: calc(100vh - 1px);
-  overflow: hidden;
-}
-
-.layout-kanban-only {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  max-height: calc(100vh - 1px);
-  overflow: hidden;
-}
-
-.layout-kanban-only .kanban-panel {
-  height: 100%;
-}
-
-.kanban-panel {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  background: #252526;
-  border: 1px solid #181818;
-}
-
-.kanban-panel .panel-header {
-  padding: 8px 16px;
-  background: #2d2d30;
-  border-bottom: 1px solid #181818;
-  flex-shrink: 0;
-}
-
-.kanban-panel .panel-header h3 {
-  margin: 0;
-  font-size: 13px;
-  font-weight: normal;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: #cccccc;
-}
 
 .loading-terminal {
   display: flex;

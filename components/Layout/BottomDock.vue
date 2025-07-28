@@ -1,12 +1,28 @@
 <template>
-  <div class="bottom-dock" :class="{ minimized: layoutStore.bottomPanelMinimized }">
+  <div 
+    class="bottom-dock" 
+    :class="{ 
+      minimized: layoutStore.bottomPanelMinimized,
+      'drop-target': dragDropState.isDragging && canDropInDock('bottomDock'),
+      'drop-active': dragDropState.dropTarget === 'bottomDock'
+    }"
+    @dragover="handleDragOver"
+    @dragleave="handleDragLeave"
+    @drop="handleDrop"
+  >
     <div class="dock-header">
       <div class="dock-tabs">
         <button
           v-for="moduleId in bottomDockModules"
           :key="moduleId"
-          :class="['dock-tab', { active: activeBottomModule === moduleId }]"
+          :class="['dock-tab', { 
+            active: activeBottomModule === moduleId,
+            'dragging': dragDropState.isDragging && dragDropState.draggedModule === moduleId
+          }]"
           @click="setActiveBottomModule(moduleId)"
+          draggable="true"
+          @dragstart="handleTabDragStart($event, moduleId)"
+          @dragend="handleTabDragEnd"
         >
           <Icon :name="getModuleIcon(moduleId)" size="16" />
           <span>{{ getModuleLabel(moduleId) }}</span>
@@ -42,11 +58,13 @@ import { ref, computed, defineAsyncComponent, watch, onMounted } from 'vue';
 import { useLayoutStore, type ModuleId } from '~/stores/layout';
 import { useTasksStore } from '~/stores/tasks';
 import { useSourceControlStore } from '~/stores/source-control';
+import { useModuleDragDrop } from '~/composables/useModuleDragDrop';
 import Icon from '~/components/Icon.vue';
 
 const layoutStore = useLayoutStore();
 const tasksStore = useTasksStore();
 const sourceControlStore = useSourceControlStore();
+const { dragDropState, canDropInDock, handleDrop: handleDropModule, setDropTarget, startDrag, endDrag } = useModuleDragDrop();
 
 const projectPath = computed(() => tasksStore.projectPath);
 
@@ -61,7 +79,8 @@ const moduleConfig: Record<ModuleId, { label: string; icon: string }> = {
   knowledge: { label: 'Knowledge', icon: 'mdi:book-open-page-variant' },
   prompts: { label: 'Prompts', icon: 'mdi:lightning-bolt' },
   claude: { label: 'Claude AI', icon: 'simple-icons:anthropic' },
-  explorer: { label: 'Explorer', icon: 'mdi:folder-outline' }
+  explorer: { label: 'Explorer', icon: 'mdi:folder-outline' },
+  'explorer-editor': { label: 'Explorer + Editor', icon: 'mdi:file-code-outline' }
 };
 
 // Module components mapping
@@ -75,7 +94,8 @@ const moduleComponents = {
   knowledge: defineAsyncComponent(() => import('~/components/Knowledge/KnowledgePanel.vue')),
   prompts: defineAsyncComponent(() => import('~/components/Prompts/PromptStudio.vue')),
   claude: defineAsyncComponent(() => import('~/components/Terminal/ClaudeTerminalTabs.vue')),
-  explorer: defineAsyncComponent(() => import('~/components/FileExplorer/FileTree.vue'))
+  explorer: defineAsyncComponent(() => import('~/components/FileExplorer/FileTree.vue')),
+  'explorer-editor': defineAsyncComponent(() => import('~/components/Modules/ExplorerEditor.vue'))
 };
 
 // Get modules in bottom dock
@@ -107,6 +127,40 @@ const setActiveBottomModule = (moduleId: ModuleId) => {
 
 const toggleMinimize = () => {
   layoutStore.toggleBottomPanel();
+};
+
+const handleDragOver = (event: DragEvent) => {
+  if (!canDropInDock('bottomDock')) return;
+  
+  event.preventDefault();
+  event.dataTransfer!.dropEffect = 'move';
+  setDropTarget('bottomDock');
+};
+
+const handleDragLeave = (event: DragEvent) => {
+  // Only clear if we're leaving the dock entirely
+  const relatedTarget = event.relatedTarget as HTMLElement;
+  if (!relatedTarget || !event.currentTarget!.contains(relatedTarget)) {
+    setDropTarget(null);
+  }
+};
+
+const handleDrop = (event: DragEvent) => {
+  event.preventDefault();
+  handleDropModule('bottomDock');
+};
+
+const handleTabDragStart = (event: DragEvent, moduleId: ModuleId) => {
+  if (!event.dataTransfer) return;
+  
+  event.dataTransfer.effectAllowed = 'move';
+  event.dataTransfer.setData('text/plain', moduleId);
+  
+  startDrag(moduleId, 'bottomDock');
+};
+
+const handleTabDragEnd = () => {
+  endDrag();
 };
 </script>
 
@@ -223,5 +277,39 @@ const toggleMinimize = () => {
 /* Ensure contained components fill the space */
 .dock-content > * {
   height: 100%;
+}
+
+/* Drag and drop styles */
+.bottom-dock.drop-target {
+  position: relative;
+}
+
+.bottom-dock.drop-target::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 2px dashed #007acc;
+  border-radius: 4px;
+  pointer-events: none;
+  opacity: 0.5;
+  z-index: 10;
+}
+
+.bottom-dock.drop-active::after {
+  opacity: 1;
+  background: rgba(0, 122, 204, 0.1);
+}
+
+/* Draggable tab styles */
+.dock-tab[draggable="true"] {
+  cursor: grab;
+}
+
+.dock-tab[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+.dock-tab.dragging {
+  opacity: 0.5;
 }
 </style>

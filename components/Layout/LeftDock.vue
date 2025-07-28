@@ -1,12 +1,29 @@
 <template>
-  <div class="left-dock" v-if="leftDockModules.length > 0">
-    <div class="dock-header" v-if="leftDockModules.length > 1">
+  <div 
+    class="left-dock" 
+    v-if="leftDockModules.length > 0"
+    :class="{ 
+      'drop-target': dragDropState.isDragging && canDropInDock('leftDock'),
+      'drop-active': dragDropState.dropTarget === 'leftDock'
+    }"
+    @dragover="handleDragOver"
+    @dragleave="handleDragLeave"
+    @drop="handleDrop"
+  >
+    <div class="dock-header">
       <div class="dock-tabs">
         <button
           v-for="moduleId in leftDockModules"
           :key="moduleId"
-          :class="['dock-tab', { active: activeLeftModule === moduleId }]"
+          :class="['dock-tab', { 
+            active: activeLeftModule === moduleId,
+            'dragging': dragDropState.isDragging && dragDropState.draggedModule === moduleId
+          }]"
           @click="setActiveLeftModule(moduleId)"
+          :draggable="moduleId !== 'explorer-editor'"
+          @dragstart="moduleId !== 'explorer-editor' && handleTabDragStart($event, moduleId)"
+          @dragend="handleTabDragEnd"
+          @contextmenu.prevent="showTabMenu($event, moduleId)"
         >
           <Icon :name="getModuleIcon(moduleId)" size="16" />
           <span>{{ getModuleLabel(moduleId) }}</span>
@@ -28,16 +45,19 @@
 import { ref, computed, defineAsyncComponent, watch, onMounted } from 'vue';
 import { useLayoutStore, type ModuleId } from '~/stores/layout';
 import { useTasksStore } from '~/stores/tasks';
+import { useModuleDragDrop } from '~/composables/useModuleDragDrop';
 import Icon from '~/components/Icon.vue';
 
 const layoutStore = useLayoutStore();
 const tasksStore = useTasksStore();
+const { dragDropState, canDropInDock, handleDrop: handleDropModule, setDropTarget, startDrag, endDrag } = useModuleDragDrop();
 
 const projectPath = computed(() => tasksStore.projectPath);
 
 // Module configuration
 const moduleConfig: Record<ModuleId, { label: string; icon: string }> = {
   explorer: { label: 'Explorer', icon: 'mdi:folder-outline' },
+  'explorer-editor': { label: 'Explorer + Editor', icon: 'mdi:file-code-outline' },
   terminal: { label: 'Terminal', icon: 'mdi:console' },
   tasks: { label: 'Tasks', icon: 'mdi:checkbox-marked-outline' },
   'source-control': { label: 'Source Control', icon: 'mdi:source-branch' },
@@ -52,6 +72,7 @@ const moduleConfig: Record<ModuleId, { label: string; icon: string }> = {
 // Module components mapping
 const moduleComponents = {
   explorer: defineAsyncComponent(() => import('~/components/FileExplorer/FileTree.vue')),
+  'explorer-editor': defineAsyncComponent(() => import('~/components/Modules/ExplorerEditor.vue')),
   terminal: defineAsyncComponent(() => import('~/components/Terminal/Terminal.vue')),
   tasks: defineAsyncComponent(() => import('~/components/Kanban/KanbanBoard.vue')),
   'source-control': defineAsyncComponent(() => import('~/components/SourceControlV2/SourceControlV2.vue')),
@@ -76,6 +97,85 @@ const getModuleComponent = (moduleId: ModuleId) => moduleComponents[moduleId];
 
 const setActiveLeftModule = (moduleId: ModuleId) => {
   layoutStore.setActiveLeftModule(moduleId);
+};
+
+const handleDragOver = (event: DragEvent) => {
+  if (!canDropInDock('leftDock')) return;
+  
+  event.preventDefault();
+  event.dataTransfer!.dropEffect = 'move';
+  setDropTarget('leftDock');
+};
+
+const handleDragLeave = (event: DragEvent) => {
+  // Only clear if we're leaving the dock entirely
+  const relatedTarget = event.relatedTarget as HTMLElement;
+  if (!relatedTarget || !event.currentTarget!.contains(relatedTarget)) {
+    setDropTarget(null);
+  }
+};
+
+const handleDrop = (event: DragEvent) => {
+  event.preventDefault();
+  handleDropModule('leftDock');
+};
+
+const handleTabDragStart = (event: DragEvent, moduleId: ModuleId) => {
+  if (!event.dataTransfer) return;
+  
+  event.dataTransfer.effectAllowed = 'move';
+  event.dataTransfer.setData('text/plain', moduleId);
+  
+  startDrag(moduleId, 'leftDock');
+};
+
+const handleTabDragEnd = () => {
+  endDrag();
+};
+
+const showTabMenu = (event: MouseEvent, moduleId: ModuleId) => {
+  // Don't show menu for explorer-editor
+  if (moduleId === 'explorer-editor') return;
+  
+  // Create context menu
+  const menu = document.createElement('div');
+  menu.className = 'module-context-menu';
+  
+  menu.innerHTML = `
+    <div class="menu-item" data-action="remove">
+      <span class="menu-icon">✕</span>
+      Remove from dock
+    </div>
+  `;
+  
+  // Position menu
+  menu.style.position = 'fixed';
+  menu.style.left = event.clientX + 'px';
+  menu.style.top = event.clientY + 'px';
+  
+  // Add click handler
+  menu.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    const menuItem = target.closest('.menu-item');
+    if (menuItem?.getAttribute('data-action') === 'remove' && !menuItem.classList.contains('disabled')) {
+      layoutStore.removeModuleFromDock(moduleId);
+    }
+    menu.remove();
+  });
+  
+  // Add to body
+  document.body.appendChild(menu);
+  
+  // Remove on click outside
+  setTimeout(() => {
+    const removeMenu = (e: MouseEvent) => {
+      if (!menu.contains(e.target as Node)) {
+        menu.remove();
+        document.removeEventListener('click', removeMenu);
+      }
+    };
+    document.addEventListener('click', removeMenu);
+  }, 0);
 };
 
 </script>
@@ -159,8 +259,37 @@ const setActiveLeftModule = (moduleId: ModuleId) => {
   display: none; /* Hide redundant headers when in tabbed mode */
 }
 
-/* Show header when only one module */
-.left-dock:not(:has(.dock-header)) .dock-content :deep(.panel-header) {
-  display: block;
+/* Drag and drop styles */
+.left-dock.drop-target {
+  position: relative;
+}
+
+.left-dock.drop-target::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 2px dashed #007acc;
+  border-radius: 4px;
+  pointer-events: none;
+  opacity: 0.5;
+  z-index: 10;
+}
+
+.left-dock.drop-active::after {
+  opacity: 1;
+  background: rgba(0, 122, 204, 0.1);
+}
+
+/* Draggable tab styles */
+.dock-tab[draggable="true"] {
+  cursor: grab;
+}
+
+.dock-tab[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+.dock-tab.dragging {
+  opacity: 0.5;
 }
 </style>

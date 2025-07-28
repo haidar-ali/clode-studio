@@ -1,8 +1,8 @@
 import { defineStore } from 'pinia';
 
-export type LayoutMode = 'full-ide' | 'kanban-claude' | 'kanban-only';
+// Layout mode removed - always using full IDE mode with modular docks
 
-export type ModuleId = 'explorer' | 'claude' | 'tasks' | 'knowledge' | 'context' | 
+export type ModuleId = 'explorer' | 'explorer-editor' | 'claude' | 'tasks' | 'knowledge' | 'context' | 
   'source-control' | 'checkpoints' | 'worktrees' | 'prompts' | 'terminal';
 
 export interface DockConfiguration {
@@ -13,24 +13,22 @@ export interface DockConfiguration {
 
 export const useLayoutStore = defineStore('layout', {
   state: () => ({
-    currentMode: 'full-ide' as LayoutMode,
-    kanbanClaudeSplit: 75, // Kanban takes 75%, Claude takes 25%
-    
     // Activity bar state
     activeModule: 'explorer' as ModuleId,
     activityBarCollapsed: false,
     
-    // Dock configuration
+    // Dock configuration - start with explorer-editor in left dock by default
     dockConfig: {
-      leftDock: ['explorer'],
+      leftDock: ['explorer-editor'],
       rightDock: ['claude'],
       bottomDock: ['terminal']
     } as DockConfiguration,
     
     // Active modules per dock
-    activeLeftModule: 'explorer' as ModuleId,
+    activeLeftModule: 'explorer-editor' as ModuleId,
     activeRightModule: 'claude' as ModuleId,
     activeBottomModule: 'terminal' as ModuleId,
+    secondaryRightModule: null as ModuleId | null,
     
     // Right sidebar state
     rightSidebarVisible: true,
@@ -43,39 +41,14 @@ export const useLayoutStore = defineStore('layout', {
   }),
 
   getters: {
-    isFullIdeMode: (state) => state.currentMode === 'full-ide',
-    isKanbanClaudeMode: (state) => state.currentMode === 'kanban-claude',
-    isKanbanOnlyMode: (state) => state.currentMode === 'kanban-only',
-    
-    showFileTree: (state) => state.currentMode === 'full-ide',
-    showEditor: (state) => state.currentMode === 'full-ide',
-    showKanban: (state) => true, // Kanban is always visible
-    showClaude: (state) => state.currentMode === 'full-ide' || state.currentMode === 'kanban-claude',
-    
-    layoutClasses: (state) => ({
-      'layout-full-ide': state.currentMode === 'full-ide',
-      'layout-kanban-claude': state.currentMode === 'kanban-claude',
-      'layout-kanban-only': state.currentMode === 'kanban-only',
-    }),
+    // Always in full IDE mode now
+    isFullIdeMode: () => true,
+    isKanbanClaudeMode: () => false,
+    isKanbanOnlyMode: () => false,
   },
 
   actions: {
-    setMode(mode: LayoutMode) {
-      this.currentMode = mode;
-      // Save to localStorage for persistence
-      localStorage.setItem('layoutMode', mode);
-    },
-
-    setSplit(kanbanPercentage: number) {
-      this.kanbanClaudeSplit = Math.max(20, Math.min(80, kanbanPercentage));
-    },
-
-    loadSavedMode() {
-      const saved = localStorage.getItem('layoutMode') as LayoutMode;
-      if (saved && ['full-ide', 'kanban-claude', 'kanban-only'].includes(saved)) {
-        this.currentMode = saved;
-      }
-    },
+    // Layout mode methods removed - always using full IDE mode
     
     // Activity bar actions
     setActiveModule(moduleId: ModuleId) {
@@ -116,12 +89,24 @@ export const useLayoutStore = defineStore('layout', {
       }
     },
     
+    setSecondaryRightModule(moduleId: ModuleId | null) {
+      if (moduleId === null || this.dockConfig.rightDock.includes(moduleId)) {
+        this.secondaryRightModule = moduleId;
+      }
+    },
+    
     setActivityBarCollapsed(collapsed: boolean) {
       this.activityBarCollapsed = collapsed;
     },
     
     // Dock management
     moveModuleToDock(moduleId: ModuleId, targetDock: 'leftDock' | 'rightDock' | 'bottomDock') {
+      // Don't allow moving explorer-editor
+      if (moduleId === 'explorer-editor') {
+        console.warn('Cannot move explorer-editor module');
+        return;
+      }
+      
       // Remove from all docks
       this.dockConfig.leftDock = this.dockConfig.leftDock.filter(id => id !== moduleId);
       this.dockConfig.rightDock = this.dockConfig.rightDock.filter(id => id !== moduleId);
@@ -129,6 +114,33 @@ export const useLayoutStore = defineStore('layout', {
       
       // Add to target dock
       this.dockConfig[targetDock].push(moduleId);
+      
+      // Save dock configuration
+      this.saveDockConfig();
+    },
+    
+    removeModuleFromDock(moduleId: ModuleId) {
+      // Don't allow removing explorer-editor
+      if (moduleId === 'explorer-editor') {
+        console.warn('Cannot remove explorer-editor module');
+        return;
+      }
+      
+      // Remove from all docks
+      this.dockConfig.leftDock = this.dockConfig.leftDock.filter(id => id !== moduleId);
+      this.dockConfig.rightDock = this.dockConfig.rightDock.filter(id => id !== moduleId);
+      this.dockConfig.bottomDock = this.dockConfig.bottomDock.filter(id => id !== moduleId);
+      
+      // If it was the active module in a dock, clear it
+      if (this.activeLeftModule === moduleId) {
+        this.activeLeftModule = this.dockConfig.leftDock[0] || 'explorer-editor';
+      }
+      if (this.activeRightModule === moduleId) {
+        this.activeRightModule = this.dockConfig.rightDock[0] || 'claude';
+      }
+      if (this.activeBottomModule === moduleId) {
+        this.activeBottomModule = this.dockConfig.bottomDock[0] || 'terminal';
+      }
       
       // Save dock configuration
       this.saveDockConfig();
@@ -175,7 +187,26 @@ export const useLayoutStore = defineStore('layout', {
       const savedDockConfig = localStorage.getItem('dockConfig');
       if (savedDockConfig) {
         try {
-          this.dockConfig = JSON.parse(savedDockConfig);
+          const parsed = JSON.parse(savedDockConfig);
+          // Ensure we have at least empty arrays for each dock
+          this.dockConfig = {
+            leftDock: parsed.leftDock || [],
+            rightDock: parsed.rightDock || [],
+            bottomDock: parsed.bottomDock || []
+          };
+          
+          // Ensure explorer-editor is always in left dock
+          if (!this.dockConfig.leftDock.includes('explorer-editor')) {
+            this.dockConfig.leftDock.unshift('explorer-editor');
+          }
+          
+          // If docks are missing, add defaults
+          if (this.dockConfig.rightDock.length === 0) {
+            this.dockConfig.rightDock = ['claude'];
+          }
+          if (this.dockConfig.bottomDock.length === 0) {
+            this.dockConfig.bottomDock = ['terminal'];
+          }
         } catch (e) {
           console.error('Failed to load dock config:', e);
         }
