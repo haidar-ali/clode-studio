@@ -38,6 +38,9 @@ export const useLayoutStore = defineStore('layout', {
     // Bottom panel state
     bottomPanelHeight: 30,
     bottomPanelMinimized: false,
+    
+    // Worktree bar state
+    worktreeBarVisible: true,
   }),
 
   getters: {
@@ -113,6 +116,12 @@ export const useLayoutStore = defineStore('layout', {
         return;
       }
       
+      // Don't allow moving terminal from bottom dock
+      if (moduleId === 'terminal' && targetDock !== 'bottomDock') {
+        console.warn('Cannot move Terminal from bottom dock');
+        return;
+      }
+      
       // Remove from all docks
       this.dockConfig.leftDock = this.dockConfig.leftDock.filter(id => id !== moduleId);
       this.dockConfig.rightDock = this.dockConfig.rightDock.filter(id => id !== moduleId);
@@ -135,6 +144,12 @@ export const useLayoutStore = defineStore('layout', {
       // Don't allow removing claude
       if (moduleId === 'claude') {
         console.warn('Cannot remove Claude AI module');
+        return;
+      }
+      
+      // Don't allow removing terminal
+      if (moduleId === 'terminal') {
+        console.warn('Cannot remove Terminal module');
         return;
       }
       
@@ -183,6 +198,10 @@ export const useLayoutStore = defineStore('layout', {
       this.bottomPanelMinimized = !this.bottomPanelMinimized;
     },
     
+    toggleWorktreeBar() {
+      this.worktreeBarVisible = !this.worktreeBarVisible;
+    },
+    
     // Persistence
     saveDockConfig() {
       localStorage.setItem('dockConfig', JSON.stringify(this.dockConfig));
@@ -215,6 +234,11 @@ export const useLayoutStore = defineStore('layout', {
           // Ensure claude is always in right dock
           if (!this.dockConfig.rightDock.includes('claude')) {
             this.dockConfig.rightDock.unshift('claude');
+          }
+          
+          // Ensure terminal is always in bottom dock
+          if (!this.dockConfig.bottomDock.includes('terminal')) {
+            this.dockConfig.bottomDock.unshift('terminal');
           }
           
           // If docks are missing, add defaults

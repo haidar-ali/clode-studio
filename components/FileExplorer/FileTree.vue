@@ -1,9 +1,8 @@
 <template>
   <div class="file-tree">
     <div class="file-tree-header">
-      <button @click="handleWorkspaceSelect" class="workspace-button">
+      <button @click="handleWorkspaceSelect" class="workspace-button icon-only" title="Select Workspace">
         <Icon name="mdi:folder-open" />
-        Select Workspace
       </button>
       <div class="header-actions">
         <button @click="createNewFileInRoot" class="action-button" title="New File" :disabled="!hasWorkspace">
@@ -554,6 +553,14 @@ onUnmounted(() => {
   color: #cccccc;
   cursor: pointer;
   font-size: 13px;
+}
+
+.workspace-button.icon-only {
+  flex: 0;
+  padding: 8px;
+  min-width: 36px;
+  height: 36px;
+  justify-content: center;
 }
 
 .workspace-button:hover {

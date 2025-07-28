@@ -10,7 +10,7 @@
     @dragleave="handleDragLeave"
     @drop="handleDrop"
   >
-    <div class="dock-header">
+    <div class="dock-header" v-if="leftDockModules.length > 1">
       <div class="dock-tabs">
         <button
           v-for="moduleId in leftDockModules"

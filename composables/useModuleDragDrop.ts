@@ -46,12 +46,12 @@ export function useModuleDragDrop() {
   const handleDrop = (targetDock: 'leftDock' | 'rightDock' | 'bottomDock') => {
     const { draggedModule, draggedFromDock } = dragDropState.value;
     
-    if (!draggedModule || !draggedFromDock || draggedFromDock === 'activityBar') {
+    if (!draggedModule || !draggedFromDock) {
       endDrag();
       return;
     }
 
-    // Don't allow dropping on the same dock
+    // Don't allow dropping on the same dock (unless from activity bar)
     if (draggedFromDock === targetDock) {
       endDrag();
       return;
@@ -92,6 +92,9 @@ export function useModuleDragDrop() {
     
     // Can't drag claude from right dock
     if (draggedModule === 'claude' && draggedFromDock === 'rightDock' && dockType !== 'rightDock') return false;
+    
+    // Can't drag terminal from bottom dock
+    if (draggedModule === 'terminal' && draggedFromDock === 'bottomDock' && dockType !== 'bottomDock') return false;
     
     // Can't drop in the same dock
     if (draggedFromDock === dockType) return false;

@@ -13,7 +13,7 @@
         @click="setActiveModule(item.id)"
         :title="isInHiddenRightDock(item.id) ? `${item.label} (in hidden right sidebar)` : item.label"
         :draggable="item.id !== 'explorer-editor' && item.id !== 'claude'"
-        @dragstart="(item.id !== 'explorer-editor' && item.id !== 'claude') && handleDragStart($event, item.id)"
+        @dragstart="handleDragStart($event, item.id)"
         @dragend="handleDragEnd"
         @contextmenu.prevent="showModuleMenu($event, item.id)"
       >
@@ -150,11 +150,6 @@ const activityItems = computed<ActivityItem[]>(() => {
       id: 'prompts',
       label: 'Prompt Studio',
       icon: 'mdi:lightning-bolt'
-    },
-    {
-      id: 'terminal',
-      label: 'Terminal',
-      icon: 'mdi:console'
     }
   ];
   
@@ -175,7 +170,10 @@ const setActiveModule = (moduleId: string) => {
   
   if (!inLeftDock && !inRightDock && !inBottomDock) {
     // Module not in any dock, add to default dock
-    const defaultDock = moduleId === 'claude' ? 'rightDock' : 'leftDock';
+    const defaultDock = 
+      moduleId === 'claude' ? 'rightDock' : 
+      moduleId === 'explorer' || moduleId === 'terminal' ? 'bottomDock' : 
+      'leftDock';
     layoutStore.moveModuleToDock(moduleId, defaultDock);
   }
   
@@ -205,7 +203,7 @@ const openSettings = () => {
 };
 
 const handleDragStart = (event: DragEvent, moduleId: string) => {
-  if (!event.dataTransfer || moduleId === 'explorer-editor') return;
+  if (!event.dataTransfer || moduleId === 'explorer-editor' || moduleId === 'claude') return;
   
   // Check if module is in a dock
   let fromDock: 'leftDock' | 'rightDock' | 'bottomDock' | 'activityBar' = 'activityBar';

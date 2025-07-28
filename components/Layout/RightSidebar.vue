@@ -12,6 +12,7 @@
   >
     <div 
       class="sidebar-header"
+      v-if="rightDockModules.length > 1"
       @dragover="handleDragOver"
       @dragleave="handleDragLeave"
       @drop="handleDrop"

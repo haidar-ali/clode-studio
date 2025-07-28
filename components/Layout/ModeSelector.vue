@@ -6,6 +6,16 @@
     </div>
     
     <div class="controls">
+      <!-- Worktree Bar Toggle (only show if git repository) -->
+      <button
+        v-if="sourceControlStore.isGitRepository"
+        class="control-btn"
+        @click="toggleWorktreeBar"
+        :title="layoutStore.worktreeBarVisible ? 'Hide worktree bar' : 'Show worktree bar'"
+      >
+        <Icon :name="layoutStore.worktreeBarVisible ? 'mdi:source-branch-remove' : 'mdi:source-branch-plus'" size="16" />
+      </button>
+      
       <!-- Split View Toggle -->
       <button
         v-if="canSplit"
@@ -31,9 +41,11 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useLayoutStore } from '~/stores/layout';
+import { useSourceControlStore } from '~/stores/source-control';
 import Icon from '~/components/Icon.vue';
 
 const layoutStore = useLayoutStore();
+const sourceControlStore = useSourceControlStore();
 
 // Can split if we have Claude in right dock or multiple modules
 const canSplit = computed(() => {
@@ -46,6 +58,10 @@ const toggleSplitView = () => {
 
 const toggleRightSidebar = () => {
   layoutStore.toggleRightSidebar();
+};
+
+const toggleWorktreeBar = () => {
+  layoutStore.toggleWorktreeBar();
 };
 </script>
 

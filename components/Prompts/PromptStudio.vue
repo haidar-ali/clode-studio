@@ -113,21 +113,22 @@ onMounted(() => {
 .studio-layout {
   flex: 1;
   display: flex;
+  flex-direction: column; /* Changed to vertical stacking */
   gap: 1px;
   background-color: #2d2d30;
   overflow: hidden;
 }
 
 .prompt-canvas {
-  flex: 1.5; /* Give more space to canvas */
+  flex: 1.5; /* Takes more vertical space */
+  min-height: 60%; /* Ensure it takes at least 60% height */
   background-color: #1e1e1e;
   overflow-y: auto;
 }
 
 .settings-panel {
-  flex: 1; /* Expanded from fixed width */
-  min-width: 400px;
-  max-width: 600px;
+  flex: 1; /* Takes remaining vertical space */
+  min-height: 300px; /* Minimum height for usability */
   background-color: #252526;
   display: flex;
   flex-direction: column;

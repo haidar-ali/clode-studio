@@ -20,9 +20,10 @@
             'dragging': dragDropState.isDragging && dragDropState.draggedModule === moduleId
           }]"
           @click="setActiveBottomModule(moduleId)"
-          draggable="true"
+          :draggable="moduleId !== 'terminal'"
           @dragstart="handleTabDragStart($event, moduleId)"
           @dragend="handleTabDragEnd"
+          @contextmenu.prevent="showTabMenu($event, moduleId)"
         >
           <Icon :name="getModuleIcon(moduleId)" size="16" />
           <span>{{ getModuleLabel(moduleId) }}</span>
@@ -151,7 +152,7 @@ const handleDrop = (event: DragEvent) => {
 };
 
 const handleTabDragStart = (event: DragEvent, moduleId: ModuleId) => {
-  if (!event.dataTransfer) return;
+  if (!event.dataTransfer || moduleId === 'terminal') return;
   
   event.dataTransfer.effectAllowed = 'move';
   event.dataTransfer.setData('text/plain', moduleId);
@@ -161,6 +162,50 @@ const handleTabDragStart = (event: DragEvent, moduleId: ModuleId) => {
 
 const handleTabDragEnd = () => {
   endDrag();
+};
+
+const showTabMenu = (event: MouseEvent, moduleId: ModuleId) => {
+  // Don't show menu for terminal
+  if (moduleId === 'terminal') return;
+  
+  // Create context menu
+  const menu = document.createElement('div');
+  menu.className = 'module-context-menu';
+  menu.innerHTML = `
+    <div class="menu-item" data-action="remove">
+      <span class="menu-icon">✕</span>
+      Remove from dock
+    </div>
+  `;
+  
+  // Position menu
+  menu.style.position = 'fixed';
+  menu.style.left = event.clientX + 'px';
+  menu.style.top = event.clientY + 'px';
+  
+  // Add click handler
+  menu.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    const menuItem = target.closest('.menu-item');
+    if (menuItem?.getAttribute('data-action') === 'remove') {
+      layoutStore.removeModuleFromDock(moduleId);
+    }
+    menu.remove();
+  });
+  
+  // Add to body
+  document.body.appendChild(menu);
+  
+  // Remove on click outside
+  setTimeout(() => {
+    const removeMenu = (e: MouseEvent) => {
+      if (!menu.contains(e.target as Node)) {
+        menu.remove();
+        document.removeEventListener('click', removeMenu);
+      }
+    };
+    document.addEventListener('click', removeMenu);
+  }, 0);
 };
 </script>
 
@@ -311,5 +356,37 @@ const handleTabDragEnd = () => {
 
 .dock-tab.dragging {
   opacity: 0.5;
+}
+
+/* Context menu styles - matching other docks */
+:global(.module-context-menu) {
+  background: #2d2d30;
+  border: 1px solid #454545;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  padding: 4px;
+  z-index: 10000;
+}
+
+:global(.module-context-menu .menu-item) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  border-radius: 3px;
+  color: #cccccc;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+:global(.module-context-menu .menu-item:hover) {
+  background: #3e3e42;
+  color: #ffffff;
+}
+
+:global(.module-context-menu .menu-icon) {
+  font-size: 14px;
+  opacity: 0.8;
 }
 </style>
