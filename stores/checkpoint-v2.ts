@@ -340,11 +340,11 @@ export const useCheckpointV2Store = defineStore('checkpoint-v2', () => {
     
     try {
       // Create a backup checkpoint before restoring
-      await createCheckpoint(
+     /* await createCheckpoint(
         `Pre-restore backup (${checkpoint.name})`,
         'manual',
         'Automatic backup before checkpoint restoration'
-      );
+      );*/ 
       
       // Get workspace path
       const workspacePath = shadowRepoPath.value.replace('/.claude-checkpoints', '');
@@ -823,7 +823,7 @@ ${claudeEntries.join('\n')}
       
       await initializeShadowRepo();
       if (autoCheckpointEnabled.value) {
-        startAutoCheckpoint();
+        //startAutoCheckpoint();
       }
     }
   }

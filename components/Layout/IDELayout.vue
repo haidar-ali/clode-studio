@@ -418,9 +418,9 @@ const claudeTerminalTarget = computed(() => {
 useFileWatcher();
 // Set up TASKS.md watching
 useTasksFileWatcher();
-// Set up auto-checkpoint
-const { useAutoCheckpoint } = await import('~/composables/useAutoCheckpoint');
-useAutoCheckpoint();
+// Set up auto-checkpoint DEPRECATED
+//const { useAutoCheckpoint } = await import('~/composables/useAutoCheckpoint');
+//useAutoCheckpoint();
 
 
 const handleResize = (event: any) => {

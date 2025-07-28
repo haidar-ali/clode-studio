@@ -35,7 +35,7 @@ export class CheckpointService {
     if (setupHandlers) {
       this.setupIpcHandlers();
     }
-    this.setupPostCommitWatcher();
+    //this.setupPostCommitWatcher();
   }
 
   private setupIpcHandlers() {
@@ -396,6 +396,7 @@ export class CheckpointService {
       }
 
       // Create backup if requested
+      /*
       if (options.createBackup) {
         await this.createCheckpoint({
           name: `Pre-restore backup`,
@@ -403,7 +404,7 @@ export class CheckpointService {
           description: `Automatic backup before restoring checkpoint ${checkpointId}`
         });
       }
-
+*/
       const manifest = await fs.readJSON(path.join(checkpointDir, 'manifest.json'));
       const filesDir = path.join(checkpointDir, 'files');
       const workspacePath = path.dirname(this.shadowRepoPath);
