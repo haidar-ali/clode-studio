@@ -1,6 +1,16 @@
 <template>
   <div class="status-bar">
     <div class="status-bar-left">
+      <!-- Activity Bar Toggle Button when collapsed -->
+      <button
+        v-if="layoutStore.activityBarCollapsed"
+        class="activity-bar-toggle-btn"
+        @click="toggleActivityBar"
+        title="Toggle Activity Bar (Cmd/Ctrl + B)"
+      >
+        <Icon name="mdi:menu" size="16" />
+      </button>
+      
       <span class="status-item">
         <Icon name="mdi:source-branch" />
         main
@@ -32,12 +42,14 @@ import { computed, ref } from 'vue';
 import { useEditorStore } from '~/stores/editor';
 import { useChatStore } from '~/stores/chat';
 import { useClaudeInstancesStore } from '~/stores/claude-instances';
+import { useLayoutStore } from '~/stores/layout';
 import QuickAccessToolbar from '~/components/Layout/QuickAccessToolbar.vue';
 import SnapshotButton from '~/components/Snapshots/SnapshotButton.vue';
 
 const editorStore = useEditorStore();
 const chatStore = useChatStore();
 const claudeInstancesStore = useClaudeInstancesStore();
+const layoutStore = useLayoutStore();
 
 const activeTab = computed(() => editorStore.activeTab);
 const claudeStatus = computed(() => {
@@ -65,6 +77,10 @@ const claudeStatusIcon = computed(() => {
       return 'mdi:alert-circle';
   }
 });
+
+const toggleActivityBar = () => {
+  layoutStore.setActivityBarCollapsed(false);
+};
 
 </script>
 
@@ -118,5 +134,29 @@ const claudeStatusIcon = computed(() => {
 
 .status-connecting {
   color: #e7c547;
+}
+
+/* Activity Bar Toggle Button */
+.activity-bar-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 3px;
+  color: white;
+  cursor: pointer;
+  padding: 0 8px;
+  height: 18px;
+  margin-right: 8px;
+  transition: all 0.2s;
+}
+
+.activity-bar-toggle-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.activity-bar-toggle-btn:active {
+  transform: scale(0.95);
 }
 </style>

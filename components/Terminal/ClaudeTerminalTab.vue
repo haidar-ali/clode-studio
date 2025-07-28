@@ -85,7 +85,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, watch, provide } from 'vue';
+import { ref, onMounted, onUnmounted, computed, watch, provide, nextTick } from 'vue';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import type { ClaudeInstance } from '~/stores/claude-instances';
@@ -590,7 +590,11 @@ onMounted(async () => {
     await commandsStore.initialize();
   }
 
-  initTerminal();
+  // Add a small delay to ensure container has dimensions
+  await nextTick();
+  setTimeout(() => {
+    initTerminal();
+  }, 100);
 
   // Set up event listeners for chat control
   openChatHandler = (event: Event) => {

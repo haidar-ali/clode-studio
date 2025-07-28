@@ -111,7 +111,22 @@ import { computed, onMounted, onUnmounted, ref, nextTick } from 'vue';
 import { useClaudeInstancesStore } from '~/stores/claude-instances';
 import ClaudeTerminalTab from './ClaudeTerminalTab.vue';
 
+// Props for instance group support (for dual terminal view)
+interface Props {
+  instanceGroup?: string;
+}
+
+const props = defineProps<Props>();
 const instancesStore = useClaudeInstancesStore();
+
+// Filter instances by group if specified
+const instances = computed(() => {
+  if (!props.instanceGroup) {
+    return instancesStore.instancesList;
+  }
+  // For now, return all instances - we'll implement group filtering later
+  return instancesStore.instancesList;
+});
 
 // Editing state
 const editingInstanceId = ref<string | null>(null);
@@ -126,7 +141,6 @@ const contextMenu = ref({
 });
 const contextMenuRef = ref<HTMLElement | null>(null);
 
-const instances = computed(() => instancesStore.instancesList);
 const activeInstanceId = computed(() => instancesStore.activeInstanceId);
 const activeInstance = computed(() => instancesStore.activeInstance);
 
