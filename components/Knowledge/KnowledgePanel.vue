@@ -329,21 +329,14 @@ const selectEntry = async (entry: KnowledgeEntry) => {
   // Prevent event from bubbling to splitpanes
   selectedEntry.value = entry;
   
-  // If not in Full IDE mode, defer the mode switch and file opening
-  if (!layoutStore.isFullIdeMode) {
-    // Use setTimeout to break out of the current event cycle
-    setTimeout(async () => {
-      layoutStore.setMode('full-ide');
-      await nextTick();
-      // Give extra time for layout to fully stabilize
-      setTimeout(() => {
-        openInMainEditor(entry);
-      }, 150);
-    }, 0);
-  } else {
-    // Already in Full IDE mode, open directly
-    await openInMainEditor(entry);
-  }
+  // Switch to explorer-editor module in the left dock
+  layoutStore.setActiveModule('explorer-editor');
+  
+  // Give a small delay for the layout to update
+  await nextTick();
+  setTimeout(() => {
+    openInMainEditor(entry);
+  }, 50);
 };
 
 const openInMainEditor = async (entry: KnowledgeEntry) => {
@@ -381,18 +374,14 @@ const createNewEntry = async () => {
     category: 'notes'
   });
   
-  // If not in Full IDE mode, defer the switch
-  if (!layoutStore.isFullIdeMode) {
-    setTimeout(async () => {
-      layoutStore.setMode('full-ide');
-      await nextTick();
-      setTimeout(() => {
-        openInMainEditor(entry);
-      }, 150);
-    }, 0);
-  } else {
-    await openInMainEditor(entry);
-  }
+  // Switch to explorer-editor module in the left dock
+  layoutStore.setActiveModule('explorer-editor');
+  
+  // Give a small delay for the layout to update
+  await nextTick();
+  setTimeout(() => {
+    openInMainEditor(entry);
+  }, 50);
 };
 
 
@@ -458,11 +447,7 @@ onMounted(async () => {
         category: 'notes'
       });
       
-      if (layoutStore.isFullIdeMode) {
-        await openInMainEditor(entry);
-      } else {
-        await selectEntry(entry);
-      }
+      await selectEntry(entry);
     }
   };
   
@@ -496,10 +481,12 @@ onUnmounted(() => {
         category: 'notes'
       });
       
-      if (!layoutStore.isFullIdeMode) {
-        layoutStore.setMode('full-ide');
-      }
-      await openInMainEditor(entry);
+      // Switch to explorer-editor module in the left dock
+      layoutStore.setActiveModule('explorer-editor');
+      await nextTick();
+      setTimeout(() => {
+        openInMainEditor(entry);
+      }, 50);
     }
   };
   
