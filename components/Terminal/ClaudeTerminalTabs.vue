@@ -123,12 +123,10 @@ const instancesStore = useClaudeInstancesStore();
 // Filter instances by worktree if specified
 const instances = computed(() => {
   const allInstances = instancesStore.instancesList;
-  console.log('[ClaudeTerminalTabs] Computing instances - worktreePath:', props.worktreePath, 'allInstances:', allInstances.length);
   
   // If worktreePath is provided, filter instances by working directory
   if (props.worktreePath) {
     const filtered = allInstances.filter(instance => instance.workingDirectory === props.worktreePath);
-    console.log('[ClaudeTerminalTabs] Filtered instances:', filtered.length, filtered.map(i => ({ id: i.id, workingDirectory: i.workingDirectory })));
     return filtered;
   }
   
@@ -413,9 +411,7 @@ onMounted(async () => {
     }
     
     // If this is for a specific worktree and no instances exist for it, create one
-    console.log('[ClaudeTerminalTabs] Mounted - worktreePath:', props.worktreePath, 'instances:', instances.value.length);
     if (props.worktreePath && instances.value.length === 0) {
-      console.log('[ClaudeTerminalTabs] Creating default instance for worktree:', props.worktreePath);
       await instancesStore.createInstance(`Claude 1`, undefined, props.worktreePath);
     }
     

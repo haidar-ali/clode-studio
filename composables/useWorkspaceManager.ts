@@ -100,21 +100,21 @@ export function useWorkspaceManager() {
       await new Promise(resolve => setTimeout(resolve, 100));
       
       // 8. Initialize worktrees for this workspace BEFORE loading Claude instances
-      console.log('[WorkspaceManager] Before initializeWorktrees - activeWorktreePath:', activeWorktreePath.value);
+    
       await initializeWorktrees();
-      console.log('[WorkspaceManager] After initializeWorktrees - activeWorktreePath:', activeWorktreePath.value);
+    
       
       // 9. Load workspace-specific Claude instances configuration using the activeWorktreePath
       // For non-git projects, activeWorktreePath will be set to currentWorkspacePath
       if (activeWorktreePath.value) {
-        console.log('[WorkspaceManager] Loading Claude config for worktree:', activeWorktreePath.value);
+      
         await claudeInstancesStore.loadWorkspaceConfiguration(activeWorktreePath.value);
         
         // Also load Terminal instances configuration
-        console.log('[WorkspaceManager] Loading Terminal config for worktree:', activeWorktreePath.value);
+      
         await terminalInstancesStore.loadWorkspaceConfiguration(activeWorktreePath.value);
       } else {
-        console.log('[WorkspaceManager] No activeWorktreePath, skipping Claude/Terminal config load');
+      
       }
       
       // 10. Set project path FIRST, then load existing tasks (don't clear until after loading)
@@ -338,7 +338,7 @@ export function useWorkspaceManager() {
   const initializeWorktrees = async () => {
     if (!currentWorkspacePath.value) return;
     
-    console.log('[initializeWorktrees] Starting for workspace:', currentWorkspacePath.value);
+  
     
     // Clear existing worktrees first
     activeWorktrees.value.clear();
@@ -346,12 +346,12 @@ export function useWorkspaceManager() {
     
     // Get list of worktrees
     const result = await window.electronAPI.worktree.list();
-    console.log('[initializeWorktrees] Worktree list result:', result);
+  
     
     if (!result.success || !result.worktrees) {
       // Check if it's because this is not a git repository
       if (result.error && (result.error.includes('not a git repository') || result.error.includes('Not a git repository'))) {
-        console.log('[initializeWorktrees] Not a git repo, setting activeWorktreePath to:', currentWorkspacePath.value);
+      
         
         // Add a worktree session for non-git projects
         const nonGitWorktree: WorktreeSession = {
@@ -412,7 +412,7 @@ export function useWorkspaceManager() {
     // Set active worktree if not set
     if (!activeWorktreePath.value) {
       activeWorktreePath.value = currentWorkspacePath.value;
-      console.log('[initializeWorktrees] Setting activeWorktreePath to:', activeWorktreePath.value);
+    
       // Update the backend's active worktree path
       await window.electronAPI.workspace.setPath(activeWorktreePath.value);
     }

@@ -195,12 +195,12 @@ const splitDropTarget = ref<'top' | 'bottom' | null>(null);
 // Get worktree information
 const activeWorktrees = computed(() => {
   const worktrees = workspaceManager.activeWorktrees.value;
-  console.log('[RightSidebar] activeWorktrees:', worktrees.size, Array.from(worktrees.keys()));
+
   return worktrees;
 });
 const activeWorktreePath = computed(() => {
   const path = workspaceManager.activeWorktreePath.value;
-  console.log('[RightSidebar] activeWorktreePath:', path);
+
   return path;
 });
 

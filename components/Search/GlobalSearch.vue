@@ -211,7 +211,7 @@ const toggleFile = (path: string) => {
 const performSearch = async () => {
   if (!searchQuery.value || searchQuery.value.length < 3) return;
 
-  console.log('[GlobalSearch] Starting search with query:', searchQuery.value);
+
 
   // Check if search API is available
   if (!window.electronAPI?.search) {
@@ -239,8 +239,8 @@ const performSearch = async () => {
       workspacePath: workspacePath
     };
 
-    console.log('[GlobalSearch] Search params:', searchParams);
-    console.log('[GlobalSearch] Calling electronAPI.search.findInFiles...');
+  
+  
     
     const startTime = Date.now();
     
@@ -250,13 +250,13 @@ const performSearch = async () => {
       results = await window.electronAPI.search.findInFiles(searchParams);
       
       const searchTime = Date.now() - startTime;
-      console.log(`[GlobalSearch] Search completed in ${searchTime}ms with ${results?.length || 0} results`);
+    
     } catch (ipcError) {
       console.error('[GlobalSearch] IPC call failed:', ipcError);
       throw ipcError;
     }
 
-    console.log('[GlobalSearch] Received results:', results);
+  
     searchResults.value = results || [];
     expandedFiles.value.clear();
 
@@ -266,12 +266,12 @@ const performSearch = async () => {
         expandedFiles.value.add(file.path);
       });
     }
-    console.log('[GlobalSearch] Search complete, UI should update');
+  
   } catch (error: any) {
     console.error('[GlobalSearch] Search failed:', error);
     alert('Search failed: ' + (error?.message || 'Unknown error'));
   } finally {
-    console.log('[GlobalSearch] Setting isSearching to false');
+  
     isSearching.value = false;
   }
 };

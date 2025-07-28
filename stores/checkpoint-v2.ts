@@ -125,7 +125,7 @@ export const useCheckpointV2Store = defineStore('checkpoint-v2', () => {
       if (!gitStatus.success || !gitStatus.data) return snapshots;
       
       // Debug: log the git status structure
-      console.log('Git status data:', gitStatus.data);
+    
       
       // Safely extract file paths
       const files = gitStatus.data.files || [];
@@ -490,7 +490,7 @@ export const useCheckpointV2Store = defineStore('checkpoint-v2', () => {
         }
       } catch (error) {
         // If check fails, add all directories to be safe
-        console.log('Failed to check git ignore status, will add all directories');
+      
       }
       
       if (dirsToAdd.length > 0) {

@@ -45,11 +45,14 @@
     </div>
     
     <div v-if="!layoutStore.bottomPanelMinimized" class="dock-content">
-      <component 
-        :is="getModuleComponent(activeBottomModule)" 
-        v-if="activeBottomModule"
-        :project-path="activeBottomModule === 'terminal' ? projectPath : undefined"
-      />
+      <KeepAlive>
+        <component 
+          :is="getModuleComponent(activeBottomModule)" 
+          v-if="activeBottomModule"
+          :key="activeBottomModule"
+          :project-path="activeBottomModule === 'terminal' ? projectPath : undefined"
+        />
+      </KeepAlive>
     </div>
   </div>
 </template>

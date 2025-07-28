@@ -115,7 +115,7 @@ async function handleCreateBranch(branchName: string, startPoint?: string) {
 
 // Render git graph
 function renderGraph() {
-  console.log('[GitTimeline] renderGraph called, container:', !!graphContainer.value, 'data:', !!timelineData.value);
+
   if (!graphContainer.value || !timelineData.value) return;
 
   // Clear existing graph
@@ -125,7 +125,7 @@ function renderGraph() {
 
   // Create new graph
   try {
-    console.log('[GitTimeline] Creating gitgraph');
+  
     gitgraph = createGitgraph(graphContainer.value, {
       template: TemplateName.Metro,
       mode: compactMode.value ? Mode.Compact : Mode.Extended,
@@ -134,7 +134,7 @@ function renderGraph() {
       author: ' ',
       commitMessage: ' '
     });
-    console.log('[GitTimeline] Gitgraph created:', !!gitgraph);
+  
   } catch (err) {
     console.error('[GitTimeline] Error creating gitgraph:', err);
     return;
@@ -153,10 +153,10 @@ function renderGraph() {
 
   // Add commits in reverse order (oldest first for gitgraph)
   const commits = [...timelineData.value.commits].reverse();
-  console.log('[GitTimeline] Adding commits to graph:', commits.length);
+
   
   commits.forEach(commit => {
-    console.log('[GitTimeline] Adding commit:', commit.abbrevHash, commit.subject);
+  
     // Find which branch this commit belongs to
     let targetBranch = null;
     
@@ -203,10 +203,10 @@ function renderGraph() {
 
 // Watch for data changes
 watch(timelineData, (newData) => {
-  console.log('[GitTimeline] timelineData changed:', newData);
+
   if (newData) {
-    console.log('[GitTimeline] New currentBranch:', currentBranch.value);
-    console.log('[GitTimeline] New branches:', branches.value);
+  
+  
   }
 });
 
@@ -216,10 +216,10 @@ watch([timelineData, compactMode, showRemotes, showTags], () => {
 
 // Initial render
 onMounted(() => {
-  console.log('[GitTimeline] Component mounted, timelineData:', timelineData.value);
-  console.log('[GitTimeline] isLoading:', isLoading.value, 'error:', error.value);
-  console.log('[GitTimeline] currentBranch:', currentBranch.value);
-  console.log('[GitTimeline] branches:', branches.value);
+
+
+
+
   if (timelineData.value) {
     renderGraph();
   }

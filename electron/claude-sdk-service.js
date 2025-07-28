@@ -70,7 +70,7 @@ export class ClaudeCodeService {
    */
   async createTodosForTask(taskDescription, cwd = process.cwd()) {
     try {
-      console.log('Creating todos with Claude SDK for:', taskDescription, 'in', cwd);
+    
       
       const options = await this.initializeSession({ cwd });
       
@@ -84,20 +84,20 @@ export class ClaudeCodeService {
       let toolUseFound = false;
 
       for await (const message of response) {
-        console.log('Claude SDK message type:', message.type, 'subtype:', message.subtype);
+      
         
         if (message.type === 'assistant') {
           fullResponse += message.message.content[0]?.text || '';
-          console.log('Assistant response:', fullResponse);
+        
         } else if (message.type === 'tool_use' && message.name === 'TodoWrite') {
           // Handle TodoWrite tool use directly
           toolUseFound = true;
-          console.log('TodoWrite tool use found:', message);
+        
           if (message.input && message.input.todos) {
             todos.push(...message.input.todos);
           }
         } else if (message.type === 'result') {
-          console.log('Result message:', message);
+        
           if (!toolUseFound) {
             // Fallback to parsing if no tool use was found
             const extractedTodos = this.parseClaudeTodos(fullResponse);
@@ -107,7 +107,7 @@ export class ClaudeCodeService {
         }
       }
 
-      console.log('Final todos extracted:', todos);
+    
       this.todos = todos;
       return { success: true, todos };
     } catch (error) {
@@ -147,7 +147,7 @@ export class ClaudeCodeService {
    */
   parseClaudeTodos(text) {
     const todos = [];
-    console.log('Parsing Claude response for todos:', text);
+  
     
     // Look for TodoWrite/TodoRead tool usage with various formats
     const patterns = [
@@ -162,7 +162,7 @@ export class ClaudeCodeService {
       if (match) {
         try {
           const todosJson = `[${match[1]}]`;
-          console.log('Attempting to parse JSON:', todosJson);
+        
           const parsedTodos = JSON.parse(todosJson);
           
           const mappedTodos = parsedTodos.map(todo => ({
@@ -172,7 +172,7 @@ export class ClaudeCodeService {
             priority: this.mapClaudePriority(todo.priority)
           }));
           
-          console.log('Successfully parsed todos:', mappedTodos);
+        
           return mappedTodos;
         } catch (error) {
           console.error('Error parsing TodoWrite JSON with pattern:', pattern, error);
@@ -226,7 +226,7 @@ export class ClaudeCodeService {
       }
     }
 
-    console.log('Fallback parsing found todos:', todos);
+  
     return todos;
   }
 

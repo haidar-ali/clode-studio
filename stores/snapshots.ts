@@ -88,9 +88,9 @@ export const useSnapshotsStore = defineStore('snapshots', () => {
       );
       
       // Scan for file changes
-      console.log('📸 Scanning file changes for snapshot...');
+    
       const fileChanges = await fileContentManager.scanFileChanges(previousSnapshot);
-      console.log(`📸 Found ${fileChanges.summary.filesChanged} changed files (${fileChanges.added.length} added, ${fileChanges.modified.length} modified, ${fileChanges.removed.length} removed)`);
+    
       
       // Get storage info
       let storageInfo: any = null;
@@ -166,7 +166,7 @@ export const useSnapshotsStore = defineStore('snapshots', () => {
         tags: []
       };
 
-      console.log(`📸 Created enhanced snapshot with ${snapshot.contentStorage?.objectHashes.length || 0} content objects (${totalSizeKb.toFixed(1)}KB)`);
+    
 
       // Save via electron API - convert to serializable format
       const serializableSnapshot = JSON.parse(JSON.stringify(snapshot));
@@ -179,7 +179,7 @@ export const useSnapshotsStore = defineStore('snapshots', () => {
         // Cleanup if needed
         await cleanupSnapshots();
         
-        console.log(`📸 Enhanced snapshot "${snapshot.name}" saved successfully`);
+      
       } else {
         console.error('📸 Failed to save enhanced snapshot:', result.error);
       }
@@ -210,13 +210,13 @@ export const useSnapshotsStore = defineStore('snapshots', () => {
     
     isRestoring.value = true;
     try {
-      console.log(`🔄 Restoring snapshot "${snapshot.name}"...`);
+    
       
       // Check if this is an enhanced snapshot with file content
       const isEnhancedSnapshot = !!snapshot.fileChanges;
       
       if (opts.restoreFiles && isEnhancedSnapshot && snapshot.fileChanges) {
-        console.log('🔄 Restoring file content from enhanced snapshot...');
+      
         
         // Initialize file content manager
         const fileContentManager = useFileContentManager(snapshot.projectPath);
@@ -229,7 +229,7 @@ export const useSnapshotsStore = defineStore('snapshots', () => {
               `This will restore ${totalFiles} files from the snapshot, potentially overwriting current changes. Continue?`
             );
             if (!confirmed) {
-              console.log('🔄 File restoration cancelled by user');
+            
               return false;
             }
           }
@@ -238,7 +238,7 @@ export const useSnapshotsStore = defineStore('snapshots', () => {
         // Restore file content
         try {
           await fileContentManager.restoreFiles(snapshot.fileChanges);
-          console.log(`🔄 Successfully restored ${snapshot.fileChanges.summary.filesChanged} files`);
+        
           
           // Show success notification
           if (window.electronAPI?.showNotification) {
@@ -254,7 +254,7 @@ export const useSnapshotsStore = defineStore('snapshots', () => {
       }
       
       if (opts.restoreIdeState) {
-        console.log('🔄 Restoring IDE state...');
+      
         
         const editorStore = useEditorStore();
         
@@ -281,13 +281,13 @@ export const useSnapshotsStore = defineStore('snapshots', () => {
         // 4. Restore cursor positions
         editorStore.restoreCursorPositions(snapshot.cursorPositions);
         
-        console.log('🔄 IDE state restored successfully');
+      
       }
       
       // 5. Show git status differences (informational only)
       const gitStore = useSourceControlStore();
       if (gitStore.currentBranch !== snapshot.gitBranch) {
-        console.log(`🔄 Note: Snapshot was on branch '${snapshot.gitBranch}', current branch is '${gitStore.currentBranch}'`);
+      
         
         if (window.electronAPI?.showNotification) {
           await window.electronAPI.showNotification({
@@ -297,7 +297,7 @@ export const useSnapshotsStore = defineStore('snapshots', () => {
         }
       }
       
-      console.log(`🔄 Snapshot "${snapshot.name}" restored successfully`);
+    
       return true;
     } catch (error) {
       console.error('🔄 Failed to restore snapshot:', error);

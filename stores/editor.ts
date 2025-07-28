@@ -126,7 +126,7 @@ export const useEditorStore = defineStore('editor', {
         const tab = this.tabs[tabIndex];
         // Only update if content is different and tab is not dirty
         if (tab.content !== content && !tab.isDirty) {
-          console.log('Updating file content from external change:', path);
+        
           
           // Use Vue's reactivity system to ensure the change is detected
           this.tabs[tabIndex] = {

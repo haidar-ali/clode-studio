@@ -407,7 +407,7 @@ async function cherryPickSelected() {
     
     await fileContentManager.restoreFiles(filesToRestore);
     
-    console.log(`🍒 Successfully cherry-picked ${selectedCount.value} files`);
+  
     
     // Close modal and notify parent
     emit('cherry-pick-complete');

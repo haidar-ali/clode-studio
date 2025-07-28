@@ -7,6 +7,7 @@ export interface TerminalInstance {
   ptyProcessId?: string;
   createdAt: string;
   lastActiveAt: string;
+  savedBuffer?: string; // Add saved terminal buffer
 }
 
 export const useTerminalInstancesStore = defineStore('terminalInstances', {
@@ -30,18 +31,15 @@ export const useTerminalInstancesStore = defineStore('terminalInstances', {
 
   actions: {
     async init() {
-      console.log('[TerminalInstances] init() called');
       
       // Only proceed with storage operations if in Electron context
       if (typeof window !== 'undefined' && window.electronAPI?.store) {
         try {
           // Clear PTY process IDs on startup since they don't persist
           const savedInstances = await window.electronAPI.store.get('terminalInstances');
-          console.log('[TerminalInstances] init() - savedInstances from storage:', savedInstances);
           
           if (savedInstances && Array.isArray(savedInstances)) {
             savedInstances.forEach((instance: TerminalInstance) => {
-              console.log('[TerminalInstances] init() - Loading instance:', instance.id, 'ptyProcessId:', instance.ptyProcessId);
               
               // Clear PTY process ID on app startup since processes don't persist
               delete instance.ptyProcessId;
@@ -57,7 +55,6 @@ export const useTerminalInstancesStore = defineStore('terminalInstances', {
             });
           }
           
-          console.log('[TerminalInstances] init() - After loading, instances size:', this.instances.size);
         } catch (error) {
           console.error('Failed to load saved terminal instances:', error);
         }
@@ -141,7 +138,30 @@ export const useTerminalInstancesStore = defineStore('terminalInstances', {
       if (instance) {
         instance.ptyProcessId = ptyProcessId;
         this.saveInstances();
+        // Also save workspace configuration so PTY IDs are persisted per worktree
+        if (instance.workingDirectory) {
+          this.saveWorkspaceConfiguration(instance.workingDirectory);
+        }
+      } else {
       }
+    },
+
+    saveTerminalBuffer(id: string, buffer: string) {
+      const instance = this.instances.get(id);
+      if (instance) {
+        instance.savedBuffer = buffer;
+        // Don't persist to storage here, just keep in memory
+      }
+    },
+
+    getTerminalBuffer(id: string): string | undefined {
+      const instance = this.instances.get(id);
+      const buffer = instance?.savedBuffer;
+      if (buffer) {
+        // Clear after retrieval to free memory
+        instance.savedBuffer = undefined;
+      }
+      return buffer;
     },
 
     async saveInstances() {
@@ -167,6 +187,7 @@ export const useTerminalInstancesStore = defineStore('terminalInstances', {
 
     async saveWorkspaceConfiguration(workspacePath: string) {
       if (!workspacePath) return;
+      
       
       // Group instances by their working directory (worktree)
       const instancesByWorktree = new Map<string, any[]>();
@@ -207,24 +228,25 @@ export const useTerminalInstancesStore = defineStore('terminalInstances', {
     async loadWorkspaceConfiguration(workspacePath: string) {
       if (!workspacePath) return;
       
+      
       // Load configurations for this specific worktree
       const key = `terminal-worktree-${workspacePath.replace(/[^a-zA-Z0-9]/g, '_')}`;
-      console.log('[TerminalInstances] Loading config for key:', key);
       
       if (typeof window !== 'undefined' && window.electronAPI?.store?.get) {
         try {
           const config = await window.electronAPI.store.get(key);
-          console.log('[TerminalInstances] Loaded config:', config);
           
           if (config && config.instances) {
             // Restore instances from worktree config
             for (const instanceData of config.instances) {
+              // Check if instance already exists (preserve savedBuffer)
+              const existingInstance = this.instances.get(instanceData.id);
+              
               // Check if PTY is still alive before restoring
               let ptyProcessId = instanceData.ptyProcessId;
               if (ptyProcessId) {
                 const isAlive = await this.isPtyAlive(ptyProcessId);
                 if (!isAlive) {
-                  console.log('[TerminalInstances] PTY process no longer alive:', ptyProcessId);
                   ptyProcessId = undefined;
                 }
               }
@@ -235,10 +257,12 @@ export const useTerminalInstancesStore = defineStore('terminalInstances', {
                 workingDirectory: instanceData.workingDirectory,
                 ptyProcessId,
                 createdAt: instanceData.createdAt,
-                lastActiveAt: new Date().toISOString()
+                lastActiveAt: new Date().toISOString(),
+                savedBuffer: existingInstance?.savedBuffer // Preserve saved buffer
               };
               this.instances.set(instance.id, instance);
             }
+            
             
             // Set active instance for this worktree if it exists
             if (config.activeInstanceId && this.instances.has(config.activeInstanceId)) {
@@ -253,7 +277,6 @@ export const useTerminalInstancesStore = defineStore('terminalInstances', {
             
           } else {
             // No configuration found for this worktree, create default instance
-            console.log('[TerminalInstances] No config found for key:', key, ', creating default instance');
             await this.createInstance('Terminal 1', workspacePath);
           }
         } catch (error) {
@@ -288,8 +311,8 @@ export const useTerminalInstancesStore = defineStore('terminalInstances', {
       
       try {
         // Try to write an empty string to check if PTY is alive
-        await window.electronAPI.terminal.write(ptyProcessId, '');
-        return true;
+        const result = await window.electronAPI.terminal.write(ptyProcessId, '');
+        return result && result.success === true;
       } catch (error) {
         return false;
       }

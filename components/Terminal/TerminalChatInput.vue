@@ -196,7 +196,7 @@ async function sendMessage() {
   
   try {
     // 🔍 Create checkpoint BEFORE sending to Claude
-    console.log('[Checkpoint] Creating checkpoint before sending message to Claude...');
+  
     const checkpointCreated = await createCheckpoint(props.instanceId, userMessage);
     
     if (!checkpointCreated) {

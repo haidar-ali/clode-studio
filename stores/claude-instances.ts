@@ -109,7 +109,7 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
 
   actions: {
     async init() {
-      console.log('[ClaudeInstances] init() called');
+    
       
       // Load default personalities
       this.$state.defaultPersonalities.forEach(personality => {
@@ -129,11 +129,11 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
 
           // Load saved instances from storage
           const savedInstances = await window.electronAPI.store.get('claudeInstances');
-          console.log('[ClaudeInstances] init() - savedInstances from storage:', savedInstances);
+        
           
           if (savedInstances && Array.isArray(savedInstances)) {
             savedInstances.forEach((instance: ClaudeInstance) => {
-              console.log('[ClaudeInstances] init() - Loading instance:', instance.id, 'status:', instance.status, 'pid:', instance.pid);
+            
               
               // Clear status and PID on app startup since processes don't persist
               instance.status = 'disconnected';
@@ -150,7 +150,7 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
             });
           }
           
-          console.log('[ClaudeInstances] init() - After loading, instances size:', this.instances.size);
+        
         } catch (error) {
           console.error('Failed to load saved data:', error);
         }
@@ -158,7 +158,7 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
 
       // Create default instance if none exist
       if (this.instances.size === 0) {
-        console.log('[ClaudeInstances] init() - Creating default instance');
+      
         await this.createInstance('Claude 1');
       }
     },
@@ -447,12 +447,12 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
       
       // Load configurations for this specific worktree
       const key = `worktree-${workspacePath.replace(/[^a-zA-Z0-9]/g, '_')}`;
-      console.log('[ClaudeInstances] Loading config for key:', key);
+    
       
       if (typeof window !== 'undefined' && window.electronAPI?.store?.get) {
         try {
           const config = await window.electronAPI.store.get(key);
-          console.log('[ClaudeInstances] Loaded config:', config);
+        
           
           if (config && config.instances) {
             // Don't clear all instances - just load the ones for this worktree
@@ -487,7 +487,7 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
             
           } else {
             // No configuration found for this worktree
-            console.log('[ClaudeInstances] No config found for key:', key);
+          
             // The ClaudeTerminalTabs component will create an instance if needed
           }
         } catch (error) {

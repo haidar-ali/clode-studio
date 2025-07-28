@@ -19,19 +19,19 @@ export const useDialogs = createSharedComposable(() => {
     defaultValue?: string;
     placeholder?: string;
   }): Promise<string | null> {
-    console.log('[useDialogs] showInputDialog called with:', options);
+  
     
     // Try Electron dialog first
     if (window.electronAPI?.dialog?.showInputBox) {
       try {
-        console.log('[useDialogs] Trying Electron dialog...');
+      
         const result = await window.electronAPI.dialog.showInputBox({
           title: options.title || 'Input',
           message: options.message,
           defaultValue: options.defaultValue || '',
           placeholder: options.placeholder
         });
-        console.log('[useDialogs] Electron dialog result:', result);
+      
         
         // If Electron returns canceled, fall through to Vue modal
         if (!result.canceled && result.value !== undefined) {
@@ -43,7 +43,7 @@ export const useDialogs = createSharedComposable(() => {
     }
     
     // Fallback to Vue modal
-    console.log('[useDialogs] Using Vue modal fallback');
+  
     return new Promise((resolve) => {
       modalConfig.value = {
         title: options.title || 'Input',

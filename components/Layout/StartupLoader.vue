@@ -169,7 +169,7 @@ async function useRecentWorkspace(workspace: string) {
 
 async function openWorkspace(workspace: string) {
   selectedWorkspace.value = workspace;
-  console.log('[StartupLoader] Opening workspace:', workspace);
+
   
   // Update default workspace if it's different
   if (workspace !== defaultWorkspace.value) {
@@ -232,7 +232,7 @@ function formatDate(dateString: string): string {
 }
 
 onMounted(() => {
-  console.log('[StartupLoader] Component mounted, checking Claude...');
+
   checkClaude();
 });
 </script>

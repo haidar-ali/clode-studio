@@ -44,7 +44,7 @@ export function useGitTimeline() {
   // Load timeline data
   async function loadTimeline() {
     const workspacePath = workspaceStore.currentWorkspacePath;
-    console.log('[useGitTimeline] loadTimeline called, workspacePath:', workspacePath);
+  
     if (!workspacePath) return;
 
     isLoading.value = true;
@@ -53,7 +53,7 @@ export function useGitTimeline() {
     try {
       // Ensure filter is serializable (convert dates to ISO strings if needed)
       const serializableFilter = JSON.parse(JSON.stringify(filter.value));
-      console.log('[useGitTimeline] Making IPC call with filter:', serializableFilter);
+    
       
       const result = await window.electronAPI.gitTimeline.getData(
         workspacePath,
@@ -61,7 +61,7 @@ export function useGitTimeline() {
       );
 
       if (result.success) {
-        console.log('[useGitTimeline] Received data:', result.data);
+      
         timelineData.value = result.data;
       } else {
         console.error('[useGitTimeline] Error:', result.error);
@@ -202,7 +202,7 @@ export function useGitTimeline() {
   watch(
     () => workspaceStore.currentWorkspacePath,
     (newPath) => {
-      console.log('[useGitTimeline] Workspace path changed:', newPath);
+    
       if (newPath) {
         loadTimeline();
       }

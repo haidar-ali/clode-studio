@@ -91,7 +91,7 @@ async function downloadRipgrep() {
     const binaryPath = path.join(platformDir, rgBinary);
     
     if (fs.existsSync(binaryPath)) {
-      console.log('Ripgrep already downloaded');
+    
       return;
     }
     
@@ -100,7 +100,7 @@ async function downloadRipgrep() {
     const archivePath = path.join(platformDir, `ripgrep${archiveExt}`);
     
     await downloadFile(url, archivePath);
-    console.log('Download complete, extracting...');
+  
     
     // Extract archive
     await extractArchive(archivePath, platformDir);
@@ -129,7 +129,7 @@ async function downloadRipgrep() {
     // Clean up archive
     fs.unlinkSync(archivePath);
     
-    console.log(`Ripgrep installed successfully at ${binaryPath}`);
+  
     
   } catch (error) {
     console.error('Failed to download ripgrep:', error);

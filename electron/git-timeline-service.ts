@@ -44,7 +44,7 @@ export class GitTimelineService {
     }
 
     try {
-      console.log('[GitTimelineService] Getting timeline data for:', this.workspacePath);
+    
       
       // Get all data in parallel
       const [commits, branches, tags, status, remotes] = await Promise.all([
@@ -203,7 +203,7 @@ export class GitTimelineService {
   private async getBranches(): Promise<GitBranch[]> {
     try {
       const branchSummary = await this.git.branch(['-a', '-v']);
-      console.log('[GitTimelineService] Branch summary:', branchSummary);
+    
       const branches: GitBranch[] = [];
 
       for (const [name, branch] of Object.entries(branchSummary.branches)) {

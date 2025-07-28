@@ -8,6 +8,8 @@
 import { ref, onMounted, onUnmounted } from 'vue';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
+import { SerializeAddon } from '@xterm/addon-serialize';
+import { useTerminalInstancesStore } from '~/stores/terminal-instances';
 import 'xterm/css/xterm.css';
 
 const props = defineProps<{
@@ -24,11 +26,15 @@ const emit = defineEmits<{
 const terminalElement = ref<HTMLElement>();
 let terminal: Terminal | null = null;
 let fitAddon: FitAddon | null = null;
+let serializeAddon: SerializeAddon | null = null;
 let ptyProcess: any = null;
 let dataListener: any = null;
 
+const terminalStore = useTerminalInstancesStore();
+
 onMounted(async () => {
   if (!terminalElement.value) return;
+  
   
   // Create terminal instance
   terminal = new Terminal({
@@ -64,6 +70,10 @@ onMounted(async () => {
   // Add fit addon
   fitAddon = new FitAddon();
   terminal.loadAddon(fitAddon);
+  
+  // Add serialize addon for state persistence
+  serializeAddon = new SerializeAddon();
+  terminal.loadAddon(serializeAddon);
   
   // Open terminal in the DOM
   terminal.open(terminalElement.value);
@@ -132,29 +142,30 @@ onMounted(async () => {
     // Check if we should reconnect to an existing PTY
     if (props.existingPtyId) {
       ptyProcess = props.existingPtyId;
-      console.log('[Terminal] Attempting to reconnect to PTY:', ptyProcess);
       
       try {
         // Test if PTY is still alive by trying to write to it
         const writeResult = await window.electronAPI.terminal.write(ptyProcess, '');
-        console.log('[Terminal] Write test result:', writeResult);
         
         if (writeResult && writeResult.success) {
           // Resize the existing PTY to match our terminal
           await window.electronAPI.terminal.resize(ptyProcess, terminal.cols, terminal.rows);
           
-          // The issue is that xterm.js doesn't have the previous buffer content
-          // Send Ctrl+L to clear and redraw the current screen content
-          // This will show the current prompt and any running command
-          await window.electronAPI.terminal.write(ptyProcess, '\x0c');
+          // Restore terminal state if available from store
+          if (props.instanceId) {
+            const savedState = terminalStore.getTerminalBuffer(props.instanceId);
+            if (savedState) {
+              terminal.write(savedState);
+            } else {
+              // Fallback: Send Ctrl+L to at least show current prompt
+              await window.electronAPI.terminal.write(ptyProcess, '\x0c');
+            }
+          }
           
-          console.log('[Terminal] Successfully reconnected to existing PTY:', ptyProcess);
         } else {
-          console.log('[Terminal] PTY no longer exists:', writeResult);
           ptyProcess = null;
         }
       } catch (error) {
-        console.error('[Terminal] Failed to reconnect to PTY:', error);
         // PTY doesn't exist, create a new one
         ptyProcess = null;
       }
@@ -171,12 +182,13 @@ onMounted(async () => {
       ptyProcess = result.id;
       emit('pty-created', ptyProcess);
       
-      console.log('[Terminal] Created new PTY:', ptyProcess);
+      // Write welcome message only for newly created terminals
+      terminal.write('\x1b[1;34mTerminal ready\x1b[0m\r\n');
+      terminal.write(`\x1b[90mWorking directory: ${props.projectPath || process.cwd()}\x1b[0m\r\n\r\n`);
     }
     
     // Handle data from PTY
     if (ptyProcess) {
-      console.log('[Terminal] Setting up data listener for PTY:', ptyProcess);
       dataListener = window.electronAPI.terminal.onData(ptyProcess, (data: string) => {
         terminal?.write(data);
       });
@@ -225,11 +237,6 @@ onMounted(async () => {
       window.electronAPI.terminal.resize(ptyProcess, cols, rows);
     });
     
-    // Write welcome message only for new terminals
-    if (!props.existingPtyId) {
-      terminal.write('\x1b[1;34mTerminal ready\x1b[0m\r\n');
-      terminal.write(`\x1b[90mWorking directory: ${props.projectPath || process.cwd()}\x1b[0m\r\n\r\n`);
-    }
     
   } catch (error) {
     console.error('Failed to create terminal:', error);
@@ -239,6 +246,15 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  // Save terminal state before unmounting to store
+  if (props.instanceId && serializeAddon && terminal) {
+    try {
+      const serializedState = serializeAddon.serialize();
+      terminalStore.saveTerminalBuffer(props.instanceId, serializedState);
+    } catch (error) {
+    }
+  }
+  
   // Clean up data listener
   if (dataListener) {
     dataListener();

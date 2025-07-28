@@ -282,7 +282,7 @@ onMounted(async () => {
     const moduleId = customEvent.detail?.moduleId;
     if (moduleId) {
       // For now, just log it - we'll implement the logic to show/focus the module
-      console.log('Module switch requested:', moduleId);
+    
     }
   });
   

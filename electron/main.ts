@@ -774,11 +774,11 @@ ipcMain.handle('fs:watchFile', async (event, filePath: string) => {
         const content = await readFile(filePath, 'utf-8');
 
         // Send update to all windows
-        console.log('[FileWatcher] Sending file:changed event for:', filePath);
+      
         const windows = BrowserWindow.getAllWindows();
         windows.forEach(window => {
           if (!window.isDestroyed()) {
-            console.log('[FileWatcher] Sending to window:', window.id);
+          
             window.webContents.send('file:changed', {
               path: filePath,
               content
@@ -935,12 +935,12 @@ ipcMain.handle('search:findInFiles', async (event, options) => {
 
     // Use workspace path if provided, otherwise fall back to current directory
     const workingDir = workspacePath || process.cwd();
-    console.log('[Main] Working directory:', workingDir);
+  
 
     // Validate that the workspace path exists
     try {
       await fs.access(workingDir);
-      console.log('[Main] Workspace directory exists');
+    
     } catch (error) {
       console.error('[Main] Workspace directory not found:', workingDir);
       throw new Error(`Workspace directory not found: ${workingDir}`);
@@ -948,7 +948,7 @@ ipcMain.handle('search:findInFiles', async (event, options) => {
 
     try {
       // Try ripgrep first
-      console.log('[Main] Attempting to use ripgrep...');
+    
 
       // Check for bundled ripgrep first
       const platform = process.platform;
@@ -967,9 +967,9 @@ ipcMain.handle('search:findInFiles', async (event, options) => {
 
         if (existsSync(bundledRgPath)) {
           rgPath = bundledRgPath;
-          console.log('[Main] Using bundled ripgrep from:', rgPath);
+        
         } else {
-          console.log('[Main] Bundled ripgrep not found at:', bundledRgPath);
+        
         }
       }
 
@@ -985,7 +985,7 @@ ipcMain.handle('search:findInFiles', async (event, options) => {
       return sendResponse(results);
     } catch (error: any) {
       // Ripgrep failed (likely timeout), fallback to Node.js implementation
-      console.log('[Main] Ripgrep failed, falling back to Node.js search. Error:', error.message);
+    
       const fallbackResults = await fallbackSearch(workingDir, options);
       return sendResponse(fallbackResults);
     }
@@ -1899,7 +1899,7 @@ ipcMain.handle('git:checkIgnore', async (event, workspacePath: string, paths: st
       }
     } catch (error) {
       // Git command might not be available
-      console.log('Git command not available or error checking repo status');
+    
       const results: Record<string, boolean> = {};
       paths.forEach(path => { results[path] = false; });
       return { success: true, results, gitAvailable: false };

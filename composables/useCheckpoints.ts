@@ -52,8 +52,8 @@ export function useCheckpoints() {
           instanceId
         };
         
-        console.log('[Checkpoint] ✅ Created checkpoint:', commitHash.substring(0, 8), 'for message:', userMessage.substring(0, 30));
-        console.log('[Checkpoint] Commit message:', commitMessage);
+      
+      
         return true;
       }
       
@@ -79,7 +79,7 @@ export function useCheckpoints() {
       const result = await window.electronAPI.git.resetHard(lastCheckpoint.value.hash);
       
       if (result.success) {
-        console.log('[Checkpoint] Successfully undone to checkpoint:', lastCheckpoint.value.hash.substring(0, 8));
+      
         
         // Clear the checkpoint since we've used it
         lastCheckpoint.value = null;

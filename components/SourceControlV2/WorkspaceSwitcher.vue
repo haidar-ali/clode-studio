@@ -227,12 +227,12 @@ function handleCreateWorktree(data: any) {
 
 async function openFolder() {
   // Implementation
-  console.log('Open folder');
+
 }
 
 async function cloneRepository() {
   // Implementation
-  console.log('Clone repository');
+
 }
 
 // Refresh worktrees when modal opens

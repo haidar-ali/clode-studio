@@ -21,7 +21,7 @@ const workspaceManager = useWorkspaceManager();
 
 async function onWorkspaceReady(workspace: string) {
   try {
-    console.log('[App] onWorkspaceReady called with workspace:', workspace);
+  
     
     // Clear all Claude instance PIDs and status from storage on app startup
     // This needs to happen before any store loads the data
@@ -35,7 +35,7 @@ async function onWorkspaceReady(workspace: string) {
         pid: undefined
       }));
       await window.electronAPI.store.set('claudeInstances', cleanedInstances);
-      console.log('[App] Cleared PIDs from general instances storage');
+    
     }
     
     // Clear terminal instance PTY process IDs on app startup
@@ -47,7 +47,7 @@ async function onWorkspaceReady(workspace: string) {
         ptyProcessId: undefined
       }));
       await window.electronAPI.store.set('terminalInstances', cleanedTerminalInstances);
-      console.log('[App] Cleared PTY process IDs from terminal instances storage');
+    
     }
     
     // Clear from all worktree-specific configurations
@@ -62,7 +62,7 @@ async function onWorkspaceReady(workspace: string) {
             pid: undefined
           }));
           await window.electronAPI.store.set(key, worktreeConfig);
-          console.log('[App] Cleared PIDs from worktree config:', key);
+        
         }
       }
       
@@ -75,7 +75,7 @@ async function onWorkspaceReady(workspace: string) {
             ptyProcessId: undefined
           }));
           await window.electronAPI.store.set(key, terminalWorktreeConfig);
-          console.log('[App] Cleared PTY process IDs from terminal worktree config:', key);
+        
         }
       }
     }

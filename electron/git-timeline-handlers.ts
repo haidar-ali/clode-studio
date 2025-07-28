@@ -35,7 +35,7 @@ export function setupGitTimelineHandlers() {
     filter?: TimelineFilter
   ) => {
     try {
-      console.log('[git-timeline-handlers] getData called for:', workspacePath);
+    
       const service = getTimelineService(workspacePath);
       const data = await service.getTimelineData(filter);
       
