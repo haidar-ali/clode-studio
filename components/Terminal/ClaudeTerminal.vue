@@ -175,10 +175,28 @@ const initTerminal = () => {
   });
   resizeObserver.observe(terminalElement.value);
   
-  // Show welcome message
-  terminal.writeln('Welcome to Clode Studio Terminal');
-  terminal.writeln('Click the \x1b[32mStart\x1b[0m button above to launch Claude CLI');
-  terminal.writeln('');
+  // Check if Claude is already connected
+  if (chatStore.claudeStatus === 'connected') {
+    terminal.writeln('Claude CLI is already running');
+    terminal.writeln('Reconnecting to existing session...');
+    terminal.writeln('');
+    
+    // Reconnect listeners
+    setupClaudeListeners();
+    
+    // Sync terminal size
+    setTimeout(() => {
+      if (fitAddon && terminal) {
+        fitAddon.fit();
+        window.electronAPI.claude.resize(terminal.cols, terminal.rows);
+      }
+    }, 100);
+  } else {
+    // Show welcome message
+    terminal.writeln('Welcome to Clode Studio Terminal');
+    terminal.writeln('Click the \x1b[32mStart\x1b[0m button above to launch Claude CLI');
+    terminal.writeln('');
+  }
   terminal.scrollToBottom();
 };
 
@@ -245,6 +263,15 @@ const setupClaudeListeners = () => {
 
 const startClaude = async () => {
   if (!terminal) return;
+  
+  // Check if Claude is already running
+  if (chatStore.claudeStatus === 'connected') {
+    terminal.writeln('\\x1b[33mClaude CLI is already running\\x1b[0m');
+    terminal.writeln('You can continue your conversation.');
+    terminal.writeln('');
+    autoScrollIfNeeded();
+    return;
+  }
   
   terminal.clear();
   terminal.writeln('Starting Claude CLI...');
@@ -358,7 +385,11 @@ onUnmounted(() => {
   if (terminal) {
     terminal.dispose();
   }
-  window.electronAPI.claude.removeAllListeners();
+  // Don't remove listeners if Claude is still connected
+  // This allows us to reconnect when the component is remounted
+  if (chatStore.claudeStatus !== 'connected') {
+    window.electronAPI.claude.removeAllListeners();
+  }
   
   // Clean up event listeners
   window.removeEventListener('claude-stopped', handleClaudeStop);

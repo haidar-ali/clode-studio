@@ -46,10 +46,12 @@
         @dragleave="handleDragLeave"
         @drop="handleDrop"
       >
+        <!-- Keep all modules mounted but hidden to preserve state -->
         <component 
-          :is="getModuleComponent(activeRightModule)" 
-          v-if="activeRightModule"
-          :key="`single-${activeRightModule}`"
+          v-for="moduleId in rightDockModules"
+          :key="`single-${moduleId}`"
+          :is="getModuleComponent(moduleId)" 
+          v-show="moduleId === activeRightModule"
         />
       </div>
       
@@ -73,11 +75,13 @@
               @dragleave="handleSplitDragLeave"
               @drop="handleSplitDrop($event, 'top')"
             >
+              <!-- Keep all modules mounted but hidden to preserve state -->
               <component 
-                :is="getModuleComponent(activeRightModule)" 
-                v-if="activeRightModule"
-                :instance-group="activeRightModule === 'claude' ? 'primary' : undefined"
-                :key="`split-primary-${activeRightModule}`"
+                v-for="moduleId in rightDockModules"
+                :key="`split-primary-${moduleId}`"
+                :is="getModuleComponent(moduleId)" 
+                v-show="moduleId === activeRightModule"
+                :instance-group="moduleId === 'claude' ? 'primary' : undefined"
               />
             </div>
           </Pane>

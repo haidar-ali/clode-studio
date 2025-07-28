@@ -326,8 +326,27 @@ const initTerminal = () => {
   });
   resizeObserver.observe(terminalElement.value);
 
-  // Show welcome message
-  showWelcomeMessage();
+  // Check if Claude is already connected
+  if (props.instance.status === 'connected') {
+    terminal.writeln('Claude CLI is already running');
+    terminal.writeln(`Instance: ${props.instance.name}`);
+    terminal.writeln('Reconnecting to existing session...');
+    terminal.writeln('');
+    
+    // Reconnect listeners
+    setupClaudeListeners();
+    
+    // Sync terminal size
+    setTimeout(() => {
+      if (fitAddon && terminal) {
+        fitAddon.fit();
+        window.electronAPI.claude.resize(props.instance.id, terminal.cols, terminal.rows);
+      }
+    }, 100);
+  } else {
+    // Show welcome message
+    showWelcomeMessage();
+  }
 };
 
 const showWelcomeMessage = () => {
@@ -438,6 +457,15 @@ const onConfigChanged = (config: ClaudeRunConfig) => {
 
 const startClaude = async () => {
   if (!terminal) return;
+
+  // Check if Claude is already running
+  if (props.instance.status === 'connected') {
+    terminal.writeln('\x1b[33mClaude CLI is already running\x1b[0m');
+    terminal.writeln('You can continue your conversation.');
+    terminal.writeln('');
+    autoScrollIfNeeded();
+    return;
+  }
 
   terminal.clear();
   terminal.writeln('Starting Claude CLI...');
