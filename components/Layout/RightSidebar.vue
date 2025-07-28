@@ -25,8 +25,8 @@
             'dragging': dragDropState.isDragging && dragDropState.draggedModule === moduleId
           }]"
           @click="setActiveRightModule(moduleId)"
-          draggable="true"
-          @dragstart="handleTabDragStart($event, moduleId)"
+          :draggable="moduleId !== 'claude'"
+          @dragstart="moduleId !== 'claude' && handleTabDragStart($event, moduleId)"
           @dragend="handleTabDragEnd"
           @contextmenu.prevent="showTabMenu($event, moduleId)"
         >
@@ -212,6 +212,9 @@ const handleTabDragEnd = () => {
 };
 
 const showTabMenu = (event: MouseEvent, moduleId: ModuleId) => {
+  // Don't show menu for claude
+  if (moduleId === 'claude') return;
+  
   // Create context menu
   const menu = document.createElement('div');
   menu.className = 'module-context-menu';

@@ -12,8 +12,8 @@
         }]"
         @click="setActiveModule(item.id)"
         :title="isInHiddenRightDock(item.id) ? `${item.label} (in hidden right sidebar)` : item.label"
-        :draggable="item.id !== 'explorer-editor'"
-        @dragstart="item.id !== 'explorer-editor' && handleDragStart($event, item.id)"
+        :draggable="item.id !== 'explorer-editor' && item.id !== 'claude'"
+        @dragstart="(item.id !== 'explorer-editor' && item.id !== 'claude') && handleDragStart($event, item.id)"
         @dragend="handleDragEnd"
         @contextmenu.prevent="showModuleMenu($event, item.id)"
       >
@@ -96,11 +96,6 @@ const isInHiddenRightDock = (moduleId: string) => {
 const activityItems = computed<ActivityItem[]>(() => {
   const items: ActivityItem[] = [
     {
-      id: 'explorer',
-      label: 'Explorer',
-      icon: 'mdi:folder-outline'
-    },
-    {
       id: 'explorer-editor',
       label: 'Explorer + Editor',
       icon: 'mdi:file-code-outline'
@@ -109,6 +104,11 @@ const activityItems = computed<ActivityItem[]>(() => {
       id: 'claude',
       label: 'Claude AI',
       icon: 'simple-icons:anthropic'
+    },
+    {
+      id: 'explorer',
+      label: 'Explorer',
+      icon: 'mdi:folder-outline'
     },
     {
       id: 'tasks',
@@ -229,8 +229,8 @@ const handleDragEnd = () => {
 };
 
 const showModuleMenu = (event: MouseEvent, moduleId: string) => {
-  // Don't show menu for explorer-editor
-  if (moduleId === 'explorer-editor') return;
+  // Don't show menu for explorer-editor or claude
+  if (moduleId === 'explorer-editor' || moduleId === 'claude') return;
   
   // Check if module is in a dock
   const isInDock = layoutStore.dockConfig.leftDock.includes(moduleId) ||

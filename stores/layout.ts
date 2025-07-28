@@ -107,6 +107,12 @@ export const useLayoutStore = defineStore('layout', {
         return;
       }
       
+      // Don't allow moving claude from right dock
+      if (moduleId === 'claude' && targetDock !== 'rightDock') {
+        console.warn('Cannot move Claude AI from right dock');
+        return;
+      }
+      
       // Remove from all docks
       this.dockConfig.leftDock = this.dockConfig.leftDock.filter(id => id !== moduleId);
       this.dockConfig.rightDock = this.dockConfig.rightDock.filter(id => id !== moduleId);
@@ -123,6 +129,12 @@ export const useLayoutStore = defineStore('layout', {
       // Don't allow removing explorer-editor
       if (moduleId === 'explorer-editor') {
         console.warn('Cannot remove explorer-editor module');
+        return;
+      }
+      
+      // Don't allow removing claude
+      if (moduleId === 'claude') {
+        console.warn('Cannot remove Claude AI module');
         return;
       }
       
@@ -198,6 +210,11 @@ export const useLayoutStore = defineStore('layout', {
           // Ensure explorer-editor is always in left dock
           if (!this.dockConfig.leftDock.includes('explorer-editor')) {
             this.dockConfig.leftDock.unshift('explorer-editor');
+          }
+          
+          // Ensure claude is always in right dock
+          if (!this.dockConfig.rightDock.includes('claude')) {
+            this.dockConfig.rightDock.unshift('claude');
           }
           
           // If docks are missing, add defaults

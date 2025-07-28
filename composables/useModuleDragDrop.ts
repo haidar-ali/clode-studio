@@ -90,6 +90,9 @@ export function useModuleDragDrop() {
     // Can't drag explorer-editor
     if (draggedModule === 'explorer-editor') return false;
     
+    // Can't drag claude from right dock
+    if (draggedModule === 'claude' && draggedFromDock === 'rightDock' && dockType !== 'rightDock') return false;
+    
     // Can't drop in the same dock
     if (draggedFromDock === dockType) return false;
     
