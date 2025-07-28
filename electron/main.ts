@@ -1841,10 +1841,20 @@ ipcMain.handle('workspace:setPath', async (event, workspacePath: string) => {
     }
     
     // Initialize snapshot service for workspace
-    if (!snapshotServices.has(workspacePath)) {
-      const snapshotService = new SnapshotService(workspacePath);
+    // IMPORTANT: Always use the main repository path for snapshots, not worktree paths
+    let snapshotProjectPath = workspacePath;
+    
+    // Check if this is a worktree path (contains .worktrees in the path)
+    if (workspacePath.includes('.worktrees')) {
+      // Extract the main repo path (everything before .worktrees)
+      const worktreeIndex = workspacePath.indexOf('.worktrees');
+      snapshotProjectPath = workspacePath.substring(0, worktreeIndex - 1); // -1 to remove the trailing slash
+    }
+    
+    if (!snapshotServices.has(snapshotProjectPath)) {
+      const snapshotService = new SnapshotService(snapshotProjectPath);
       snapshotService.setupIpcHandlers();
-      snapshotServices.set(workspacePath, snapshotService);
+      snapshotServices.set(snapshotProjectPath, snapshotService);
     }
 
     return { success: true };
