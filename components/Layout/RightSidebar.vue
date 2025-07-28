@@ -58,6 +58,16 @@
               :worktree-path="worktreePath"
             />
           </template>
+          <!-- Special handling for Terminal module - one per worktree -->
+          <template v-else-if="moduleId === 'terminal'">
+            <component
+              v-for="[worktreePath, worktree] in activeWorktrees"
+              :key="`terminal-${worktreePath}`"
+              :is="getModuleComponent('terminal')"
+              v-show="moduleId === activeRightModule && worktreePath === activeWorktreePath"
+              :project-path="worktreePath"
+            />
+          </template>
           <!-- Regular modules -->
           <component 
             v-else
@@ -100,6 +110,16 @@
                     :instance-group="'primary'"
                   />
                 </template>
+                <!-- Special handling for Terminal module - one per worktree -->
+                <template v-else-if="moduleId === 'terminal'">
+                  <component
+                    v-for="[worktreePath, worktree] in activeWorktrees"
+                    :key="`split-primary-terminal-${worktreePath}`"
+                    :is="getModuleComponent('terminal')"
+                    v-show="moduleId === activeRightModule && worktreePath === activeWorktreePath"
+                    :project-path="worktreePath"
+                  />
+                </template>
                 <!-- Regular modules -->
                 <component 
                   v-else
@@ -130,6 +150,16 @@
                     v-show="worktreePath === activeWorktreePath"
                     :worktree-path="worktreePath"
                     :instance-group="'secondary'"
+                  />
+                </template>
+                <!-- Special handling for Terminal module - one per worktree -->
+                <template v-else-if="secondaryModule === 'terminal'">
+                  <component
+                    v-for="[worktreePath, worktree] in activeWorktrees"
+                    :key="`split-secondary-terminal-${worktreePath}`"
+                    :is="getModuleComponent('terminal')"
+                    v-show="worktreePath === activeWorktreePath"
+                    :project-path="worktreePath"
                   />
                 </template>
                 <!-- Regular modules -->
@@ -184,7 +214,7 @@ const moduleComponents = {
   checkpoints: defineAsyncComponent(() => import('~/components/Checkpoint/CheckpointPanel.vue')),
   worktrees: defineAsyncComponent(() => import('~/components/Worktree/WorktreePanel.vue')),
   prompts: defineAsyncComponent(() => import('~/components/Prompts/PromptStudio.vue')),
-  terminal: defineAsyncComponent(() => import('~/components/Terminal/Terminal.vue')),
+  terminal: defineAsyncComponent(() => import('~/components/Terminal/TerminalWithSidebar.vue')),
   explorer: defineAsyncComponent(() => import('~/components/FileExplorer/FileTree.vue')),
   'explorer-editor': defineAsyncComponent(() => import('~/components/Modules/ExplorerEditor.vue'))
 };

@@ -3,6 +3,7 @@ import { useEditorStore } from '~/stores/editor';
 import { useChatStore } from '~/stores/chat';
 import { useTasksStore } from '~/stores/tasks';
 import { useClaudeInstancesStore } from '~/stores/claude-instances';
+import { useTerminalInstancesStore } from '~/stores/terminal-instances';
 import { useSourceControlStore } from '~/stores/source-control';
 
 const currentWorkspacePath = ref<string>('');
@@ -33,6 +34,7 @@ export function useWorkspaceManager() {
   const chatStore = useChatStore();
   const tasksStore = useTasksStore();
   const claudeInstancesStore = useClaudeInstancesStore();
+  const terminalInstancesStore = useTerminalInstancesStore();
 
   const workspaceName = computed(() => {
     if (!currentWorkspacePath.value) return '';
@@ -107,8 +109,12 @@ export function useWorkspaceManager() {
       if (activeWorktreePath.value) {
         console.log('[WorkspaceManager] Loading Claude config for worktree:', activeWorktreePath.value);
         await claudeInstancesStore.loadWorkspaceConfiguration(activeWorktreePath.value);
+        
+        // Also load Terminal instances configuration
+        console.log('[WorkspaceManager] Loading Terminal config for worktree:', activeWorktreePath.value);
+        await terminalInstancesStore.loadWorkspaceConfiguration(activeWorktreePath.value);
       } else {
-        console.log('[WorkspaceManager] No activeWorktreePath, skipping Claude config load');
+        console.log('[WorkspaceManager] No activeWorktreePath, skipping Claude/Terminal config load');
       }
       
       // 10. Set project path FIRST, then load existing tasks (don't clear until after loading)
@@ -265,6 +271,8 @@ export function useWorkspaceManager() {
       await saveWorktreeState(previousWorktreePath);
       // Save Claude instances configuration for old worktree
       await claudeInstancesStore.saveWorkspaceConfiguration(previousWorktreePath);
+      // Save Terminal instances configuration for old worktree
+      await terminalInstancesStore.saveWorkspaceConfiguration(previousWorktreePath);
     }
     
     // Update active worktree path
@@ -289,6 +297,9 @@ export function useWorkspaceManager() {
     
     // Load Claude instances configuration for new worktree
     await claudeInstancesStore.loadWorkspaceConfiguration(worktreePath);
+    
+    // Load Terminal instances configuration for new worktree
+    await terminalInstancesStore.loadWorkspaceConfiguration(worktreePath);
     
     // Update tasks path to the worktree
     tasksStore.setProjectPath(worktreePath);

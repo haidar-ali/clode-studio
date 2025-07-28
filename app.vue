@@ -38,6 +38,18 @@ async function onWorkspaceReady(workspace: string) {
       console.log('[App] Cleared PIDs from general instances storage');
     }
     
+    // Clear terminal instance PTY process IDs on app startup
+    // PTY processes don't persist across app restarts
+    const savedTerminalInstances = await window.electronAPI.store.get('terminalInstances');
+    if (savedTerminalInstances && Array.isArray(savedTerminalInstances)) {
+      const cleanedTerminalInstances = savedTerminalInstances.map((instance: any) => ({
+        ...instance,
+        ptyProcessId: undefined
+      }));
+      await window.electronAPI.store.set('terminalInstances', cleanedTerminalInstances);
+      console.log('[App] Cleared PTY process IDs from terminal instances storage');
+    }
+    
     // Clear from all worktree-specific configurations
     const allStoreData = await window.electronAPI.store.getAll();
     for (const [key, value] of Object.entries(allStoreData)) {
@@ -51,6 +63,19 @@ async function onWorkspaceReady(workspace: string) {
           }));
           await window.electronAPI.store.set(key, worktreeConfig);
           console.log('[App] Cleared PIDs from worktree config:', key);
+        }
+      }
+      
+      // Clear terminal worktree configurations PTY process IDs
+      if (key.startsWith('terminal-worktree-') && value && typeof value === 'object' && 'instances' in value) {
+        const terminalWorktreeConfig = value as any;
+        if (terminalWorktreeConfig.instances && Array.isArray(terminalWorktreeConfig.instances)) {
+          terminalWorktreeConfig.instances = terminalWorktreeConfig.instances.map((inst: any) => ({
+            ...inst,
+            ptyProcessId: undefined
+          }));
+          await window.electronAPI.store.set(key, terminalWorktreeConfig);
+          console.log('[App] Cleared PTY process IDs from terminal worktree config:', key);
         }
       }
     }

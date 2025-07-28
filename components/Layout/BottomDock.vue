@@ -86,7 +86,7 @@ const moduleConfig: Record<ModuleId, { label: string; icon: string }> = {
 
 // Module components mapping
 const moduleComponents = {
-  terminal: defineAsyncComponent(() => import('~/components/Terminal/Terminal.vue')),
+  terminal: defineAsyncComponent(() => import('~/components/Terminal/TerminalWithSidebar.vue')),
   tasks: defineAsyncComponent(() => import('~/components/Kanban/KanbanBoard.vue')),
   'source-control': defineAsyncComponent(() => import('~/components/SourceControlV2/SourceControlV2.vue')),
   checkpoints: defineAsyncComponent(() => import('~/components/Checkpoint/CheckpointPanel.vue')),

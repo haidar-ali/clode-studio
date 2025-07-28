@@ -12,12 +12,20 @@ import 'xterm/css/xterm.css';
 
 const props = defineProps<{
   projectPath?: string;
+  instanceId?: string;
+  existingPtyId?: string;
+}>();
+
+const emit = defineEmits<{
+  'pty-created': [ptyId: string];
+  'pty-destroyed': [];
 }>();
 
 const terminalElement = ref<HTMLElement>();
 let terminal: Terminal | null = null;
 let fitAddon: FitAddon | null = null;
 let ptyProcess: any = null;
+let dataListener: any = null;
 
 onMounted(async () => {
   if (!terminalElement.value) return;
@@ -112,7 +120,7 @@ onMounted(async () => {
     return true;
   });
   
-  // Start PTY process
+  // Start PTY process or reconnect to existing one
   try {
     // Check if terminal API is available
     if (!window.electronAPI?.terminal) {
@@ -121,18 +129,58 @@ onMounted(async () => {
       return;
     }
     
-    const result = await window.electronAPI.terminal.create({
-      cols: terminal.cols,
-      rows: terminal.rows,
-      cwd: props.projectPath || process.cwd()
-    });
+    // Check if we should reconnect to an existing PTY
+    if (props.existingPtyId) {
+      ptyProcess = props.existingPtyId;
+      console.log('[Terminal] Attempting to reconnect to PTY:', ptyProcess);
+      
+      try {
+        // Test if PTY is still alive by trying to write to it
+        const writeResult = await window.electronAPI.terminal.write(ptyProcess, '');
+        console.log('[Terminal] Write test result:', writeResult);
+        
+        if (writeResult && writeResult.success) {
+          // Resize the existing PTY to match our terminal
+          await window.electronAPI.terminal.resize(ptyProcess, terminal.cols, terminal.rows);
+          
+          // The issue is that xterm.js doesn't have the previous buffer content
+          // Send Ctrl+L to clear and redraw the current screen content
+          // This will show the current prompt and any running command
+          await window.electronAPI.terminal.write(ptyProcess, '\x0c');
+          
+          console.log('[Terminal] Successfully reconnected to existing PTY:', ptyProcess);
+        } else {
+          console.log('[Terminal] PTY no longer exists:', writeResult);
+          ptyProcess = null;
+        }
+      } catch (error) {
+        console.error('[Terminal] Failed to reconnect to PTY:', error);
+        // PTY doesn't exist, create a new one
+        ptyProcess = null;
+      }
+    }
     
-    ptyProcess = result.id;
+    if (!ptyProcess) {
+      // Create new PTY process
+      const result = await window.electronAPI.terminal.create({
+        cols: terminal.cols,
+        rows: terminal.rows,
+        cwd: props.projectPath || process.cwd()
+      });
+      
+      ptyProcess = result.id;
+      emit('pty-created', ptyProcess);
+      
+      console.log('[Terminal] Created new PTY:', ptyProcess);
+    }
     
     // Handle data from PTY
-    window.electronAPI.terminal.onData(ptyProcess, (data: string) => {
-      terminal?.write(data);
-    });
+    if (ptyProcess) {
+      console.log('[Terminal] Setting up data listener for PTY:', ptyProcess);
+      dataListener = window.electronAPI.terminal.onData(ptyProcess, (data: string) => {
+        terminal?.write(data);
+      });
+    }
     
     // Track current command
     let currentCommand = '';
@@ -177,9 +225,11 @@ onMounted(async () => {
       window.electronAPI.terminal.resize(ptyProcess, cols, rows);
     });
     
-    // Write welcome message
-    terminal.write('\x1b[1;34mTerminal ready\x1b[0m\r\n');
-    terminal.write(`\x1b[90mWorking directory: ${props.projectPath || process.cwd()}\x1b[0m\r\n\r\n`);
+    // Write welcome message only for new terminals
+    if (!props.existingPtyId) {
+      terminal.write('\x1b[1;34mTerminal ready\x1b[0m\r\n');
+      terminal.write(`\x1b[90mWorking directory: ${props.projectPath || process.cwd()}\x1b[0m\r\n\r\n`);
+    }
     
   } catch (error) {
     console.error('Failed to create terminal:', error);
@@ -189,19 +239,39 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
-  if (ptyProcess) {
-    window.electronAPI.terminal.destroy(ptyProcess);
+  // Clean up data listener
+  if (dataListener) {
+    dataListener();
+    dataListener = null;
   }
+  
+  // Don't destroy PTY process - keep it alive for reconnection
+  // The PTY will only be destroyed when explicitly removed by the user
+  
   if (terminal) {
     terminal.dispose();
   }
 });
 
+// Method to destroy PTY process when explicitly requested
+const destroyPty = async () => {
+  if (ptyProcess) {
+    try {
+      await window.electronAPI.terminal.destroy(ptyProcess);
+      emit('pty-destroyed');
+      ptyProcess = null;
+    } catch (error) {
+      console.error('Failed to destroy PTY:', error);
+    }
+  }
+};
+
 // Expose methods for parent components
 defineExpose({
   clear: () => terminal?.clear(),
   focus: () => terminal?.focus(),
-  write: (data: string) => terminal?.write(data)
+  write: (data: string) => terminal?.write(data),
+  destroyPty
 });
 </script>
 
