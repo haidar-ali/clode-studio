@@ -3,30 +3,12 @@
     <div class="terminal-header">
       <div class="header-left">
         <h3>{{ instance.name }}</h3>
-        <div class="worktree-indicator">
-          <Icon 
-            :name="isWorktree ? 'mdi:git-branch' : 'mdi:source-branch'" 
-            size="14"
-            :class="{ 'worktree-icon': isWorktree, 'main-icon': !isWorktree }"
-          />
-          <span 
-            class="branch-name" 
-            :class="{ 'worktree-name': isWorktree, 'main-name': !isWorktree }"
-            :title="isWorktree ? `Worktree: ${currentBranch}` : `Main branch: ${currentBranch}`"
-          >
-            {{ currentBranch }}
-          </span>
-        </div>
       </div>
       <div class="terminal-actions">
         <PersonalitySelector
           :instanceId="instance.id"
           :currentPersonalityId="instance.personalityId"
           @update="updatePersonality"
-        />
-        <ClaudeRunConfigSelector
-          v-if="instance.status === 'disconnected'"
-          @config-changed="onConfigChanged"
         />
         <button
           v-if="instance.status === 'disconnected'"
@@ -47,14 +29,6 @@
           <span>Stop</span>
         </button>
         <button
-          @click="toggleChatInput"
-          class="icon-button"
-          :class="{ active: showChatInput }"
-          title="Toggle chat input"
-        >
-          <Icon name="heroicons:chat-bubble-left-right" size="16" />
-        </button>
-        <button
           v-if="hasUndo"
           @click="undoLastCheckpoint"
           class="icon-button undo-button"
@@ -63,17 +37,24 @@
         >
           <Icon name="mdi:undo" size="16" />
         </button>
-        <button
-          @click="clearTerminal"
-          class="icon-button"
-          :title="instance.status === 'connected' ? 'Clear screen (Ctrl+L)' : 'Clear terminal'"
-        >
-          <Icon name="mdi:delete" size="16" />
-        </button>
+        <ClaudeRunConfigSelector
+          v-if="instance.status === 'disconnected'"
+          @config-changed="onConfigChanged"
+        />
       </div>
     </div>
 
     <div ref="terminalElement" class="terminal-content"></div>
+
+    <!-- Floating Chat Button -->
+    <button
+      @click="toggleChatInput"
+      class="floating-chat-button"
+      :class="{ active: showChatInput }"
+      title="Toggle chat input"
+    >
+      <Icon name="heroicons:chat-bubble-left-right" size="20" />
+    </button>
 
     <!-- Chat Input Overlay -->
     <TerminalChatInput
@@ -85,7 +66,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed, watch, provide } from 'vue';
+import { ref, onMounted, onUnmounted, computed, watch, provide, nextTick, watchEffect } from 'vue';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import type { ClaudeInstance } from '~/stores/claude-instances';
@@ -326,7 +307,7 @@ const initTerminal = () => {
   });
   resizeObserver.observe(terminalElement.value);
 
-  // Show welcome message
+  // Always show welcome message since we clear status/PID on load
   showWelcomeMessage();
 };
 
@@ -432,12 +413,49 @@ const removeClaudeListeners = () => {
   }
 };
 
+// Reconnect to existing Claude process
+const reconnectToExistingProcess = async () => {
+  if (!terminal || props.instance.status !== 'connected') return;
+  
+  // Attempting to reconnect to Claude process
+  
+  // Re-setup listeners if not already setup
+  if (!listenersSetup) {
+    setupClaudeListeners();
+  }
+  
+  // Sync terminal size
+  if (fitAddon && terminal) {
+    fitAddon.fit();
+    try {
+      await window.electronAPI.claude.resize(props.instance.id, terminal.cols, terminal.rows);
+    } catch (error) {
+      console.error('Failed to resize terminal:', error);
+    }
+  }
+  
+  // Don't send a newline - it causes unwanted line breaks
+  // The terminal will maintain its state properly without this
+  
+  // Focus terminal
+  terminal.focus();
+};
+
 const onConfigChanged = (config: ClaudeRunConfig) => {
   selectedRunConfig.value = config;
 };
 
 const startClaude = async () => {
   if (!terminal) return;
+
+  // Check if Claude is already running
+  if (props.instance.status === 'connected') {
+    terminal.writeln('\x1b[33mClaude CLI is already running\x1b[0m');
+    terminal.writeln('You can continue your conversation.');
+    terminal.writeln('');
+    autoScrollIfNeeded();
+    return;
+  }
 
   terminal.clear();
   terminal.writeln('Starting Claude CLI...');
@@ -553,7 +571,12 @@ const stopClaude = async () => {
     autoScrollIfNeeded();
   }
 
-  await window.electronAPI.claude.stop(props.instance.id);
+  try {
+    await window.electronAPI.claude.stop(props.instance.id);
+  } catch (error) {
+    console.error('Failed to stop Claude:', error);
+  }
+  
   removeClaudeListeners();
   emit('status-change', 'disconnected');
 
@@ -590,7 +613,11 @@ onMounted(async () => {
     await commandsStore.initialize();
   }
 
-  initTerminal();
+  // Add a small delay to ensure container has dimensions
+  await nextTick();
+  setTimeout(() => {
+    initTerminal();
+  }, 100);
 
   // Set up event listeners for chat control
   openChatHandler = (event: Event) => {
@@ -635,6 +662,52 @@ onMounted(async () => {
 // Store event handler references for cleanup
 let openChatHandler: ((event: Event) => void) | null = null;
 let startClaudeHandler: ((event: Event) => void) | null = null;
+
+// Watch for instance visibility changes (when switching worktrees)
+let isVisible = ref(false);
+
+// Use IntersectionObserver for better performance
+watchEffect(() => {
+  if (!terminalElement.value) return;
+  
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      const wasVisible = isVisible.value;
+      isVisible.value = entry.isIntersecting;
+      
+      if (!wasVisible && isVisible.value && terminal && props.instance.status === 'connected') {
+        // Component became visible and instance should be connected
+        // Terminal became visible, reconnecting...
+        
+        // Use nextTick to ensure DOM is stable
+        nextTick(() => {
+          reconnectToExistingProcess();
+        });
+      }
+    });
+  }, {
+    threshold: 0.1 // Trigger when at least 10% visible
+  });
+  
+  observer.observe(terminalElement.value);
+  
+  // Cleanup
+  return () => {
+    observer.disconnect();
+  };
+});
+
+// Watch for external status changes
+watch(() => props.instance.status, (newStatus, oldStatus) => {
+  if (oldStatus === 'connected' && newStatus === 'disconnected' && terminal) {
+    // Instance was disconnected externally
+    removeClaudeListeners();
+    terminal.writeln('\r\n\x1b[33mClaude process disconnected.\x1b[0m');
+  } else if (oldStatus === 'disconnected' && newStatus === 'connected' && terminal && isVisible.value) {
+    // Instance was reconnected externally while visible
+    reconnectToExistingProcess();
+  }
+});
 
 onUnmounted(() => {
   removeClaudeListeners();
@@ -699,37 +772,6 @@ onUnmounted(() => {
   letter-spacing: 0.5px;
 }
 
-.worktree-indicator {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 500;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.worktree-icon {
-  color: #569cd6;
-}
-
-.main-icon {
-  color: #cccccc;
-}
-
-.branch-name {
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-}
-
-.worktree-name {
-  color: #569cd6;
-}
-
-.main-name {
-  color: #cccccc;
-}
 
 .terminal-actions {
   display: flex;
@@ -809,5 +851,35 @@ onUnmounted(() => {
 
 :deep(.xterm-screen) {
   height: 100% !important;
+}
+
+.floating-chat-button {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #007acc;
+  color: white;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s;
+  box-shadow: 0 4px 12px rgba(0, 122, 204, 0.4);
+  z-index: 50;
+}
+
+.floating-chat-button:hover {
+  background: #1a7dc4;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 122, 204, 0.5);
+}
+
+.floating-chat-button.active {
+  background: #1a7dc4;
+  transform: rotate(45deg);
 }
 </style>

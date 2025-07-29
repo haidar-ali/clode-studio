@@ -26,6 +26,7 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
   state: () => ({
     instances: new Map<string, ClaudeInstance>(),
     activeInstanceId: null as string | null,
+    activeInstanceByWorktree: new Map<string, string>(), // worktree path -> instance id
     personalities: new Map<string, ClaudePersonality>(),
     defaultPersonalities: [
       {
@@ -97,6 +98,10 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
       if (!instance?.personalityId) return null;
       return state.personalities.get(instance.personalityId);
     },
+    getActiveInstanceForWorktree: (state) => (worktreePath: string) => {
+      const instanceId = state.activeInstanceByWorktree.get(worktreePath);
+      return instanceId ? state.instances.get(instanceId) : null;
+    },
     getFormattedDate: () => (isoString: string) => {
       return new Date(isoString).toLocaleString();
     }
@@ -104,6 +109,8 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
 
   actions: {
     async init() {
+    
+      
       // Load default personalities
       this.$state.defaultPersonalities.forEach(personality => {
         this.personalities.set(personality.id, personality);
@@ -122,10 +129,16 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
 
           // Load saved instances from storage
           const savedInstances = await window.electronAPI.store.get('claudeInstances');
+        
+          
           if (savedInstances && Array.isArray(savedInstances)) {
             savedInstances.forEach((instance: ClaudeInstance) => {
-              // Reset status to disconnected on load
+            
+              
+              // Clear status and PID on app startup since processes don't persist
               instance.status = 'disconnected';
+              delete instance.pid;
+              
               // Ensure dates are strings
               if (instance.createdAt && typeof instance.createdAt !== 'string') {
                 instance.createdAt = new Date(instance.createdAt).toISOString();
@@ -136,6 +149,8 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
               this.instances.set(instance.id, instance);
             });
           }
+          
+        
         } catch (error) {
           console.error('Failed to load saved data:', error);
         }
@@ -143,6 +158,7 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
 
       // Create default instance if none exist
       if (this.instances.size === 0) {
+      
         await this.createInstance('Claude 1');
       }
     },
@@ -237,6 +253,12 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
         this.activeInstanceId = id;
         const instance = this.instances.get(id)!;
         instance.lastActiveAt = new Date().toISOString();
+        
+        // Track active instance per worktree
+        if (instance.workingDirectory) {
+          this.activeInstanceByWorktree.set(instance.workingDirectory, id);
+        }
+        
         this.saveInstances();
       }
     },
@@ -380,27 +402,42 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
     async saveWorkspaceConfiguration(workspacePath: string) {
       if (!workspacePath) return;
       
-      // Save current instances configuration for this workspace
-      const workspaceConfig = {
-        instances: Array.from(this.instances.values()).map(instance => ({
+      // Group instances by their working directory (worktree)
+      const instancesByWorktree = new Map<string, any[]>();
+      
+      Array.from(this.instances.values()).forEach(instance => {
+        const worktreePath = instance.workingDirectory;
+        if (!instancesByWorktree.has(worktreePath)) {
+          instancesByWorktree.set(worktreePath, []);
+        }
+        instancesByWorktree.get(worktreePath)!.push({
           id: instance.id,
           name: instance.name,
           personalityId: instance.personalityId,
           workingDirectory: instance.workingDirectory,
           createdAt: instance.createdAt,
-          color: instance.color
-        })),
-        activeInstanceId: this.activeInstanceId
-      };
+          color: instance.color,
+          status: instance.status,
+          pid: instance.pid
+        });
+      });
       
-      const key = `workspace-${workspacePath.replace(/[^a-zA-Z0-9]/g, '_')}`;
-      
-      if (typeof window !== 'undefined' && window.electronAPI?.store?.set) {
-        try {
-          await window.electronAPI.store.set(key, workspaceConfig);
-          
-        } catch (error) {
-          console.error('Failed to save workspace configuration:', error);
+      // Save configuration for each worktree
+      for (const [worktreePath, instances] of instancesByWorktree) {
+        const key = `worktree-${worktreePath.replace(/[^a-zA-Z0-9]/g, '_')}`;
+        const worktreeConfig = {
+          instances,
+          // Store active instance ID per worktree
+          activeInstanceId: this.activeInstanceByWorktree.get(worktreePath) || 
+                          (instances.find(inst => inst.id === this.activeInstanceId) ? this.activeInstanceId : null)
+        };
+        
+        if (typeof window !== 'undefined' && window.electronAPI?.store?.set) {
+          try {
+            await window.electronAPI.store.set(key, worktreeConfig);
+          } catch (error) {
+            console.error('Failed to save worktree configuration:', error);
+          }
         }
       }
     },
@@ -408,47 +445,50 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
     async loadWorkspaceConfiguration(workspacePath: string) {
       if (!workspacePath) return;
       
-      const key = `workspace-${workspacePath.replace(/[^a-zA-Z0-9]/g, '_')}`;
+      // Load configurations for this specific worktree
+      const key = `worktree-${workspacePath.replace(/[^a-zA-Z0-9]/g, '_')}`;
+    
       
       if (typeof window !== 'undefined' && window.electronAPI?.store?.get) {
         try {
           const config = await window.electronAPI.store.get(key);
+        
           
           if (config && config.instances) {
+            // Don't clear all instances - just load the ones for this worktree
+            // This allows multiple worktrees to maintain their own instances
             
-            
-            // Clear current instances
-            await this.clearAllInstances();
-            
-            // Restore instances from workspace config
+            // Restore instances from worktree config
             config.instances.forEach((instanceData: any) => {
               const instance: ClaudeInstance = {
                 id: instanceData.id,
                 name: instanceData.name,
-                status: 'disconnected', // Always start disconnected
+                status: instanceData.status || 'disconnected', // Preserve status if available
                 personalityId: instanceData.personalityId,
-                workingDirectory: workspacePath, // Use new workspace path
+                workingDirectory: instanceData.workingDirectory, // Keep original worktree path
                 createdAt: instanceData.createdAt,
                 lastActiveAt: new Date().toISOString(),
-                color: instanceData.color
+                color: instanceData.color,
+                pid: instanceData.pid // Preserve PID for worktree switches
               };
               this.instances.set(instance.id, instance);
             });
             
-            // Restore active instance
+            // Set active instance for this worktree if it exists
             if (config.activeInstanceId && this.instances.has(config.activeInstanceId)) {
-              this.activeInstanceId = config.activeInstanceId;
-            } else if (this.instances.size > 0) {
-              this.activeInstanceId = this.instances.keys().next().value;
+              this.activeInstanceByWorktree.set(workspacePath, config.activeInstanceId);
+              // Only set global active instance if we're loading the current worktree
+              const { useWorkspaceManager } = await import('~/composables/useWorkspaceManager');
+              const workspaceManager = useWorkspaceManager();
+              if (workspaceManager.activeWorktreePath.value === workspacePath) {
+                this.activeInstanceId = config.activeInstanceId;
+              }
             }
-            
             
           } else {
-            
-            // Create default instance if none exist
-            if (this.instances.size === 0) {
-              await this.createInstance('Claude 1', undefined, workspacePath);
-            }
+            // No configuration found for this worktree
+          
+            // The ClaudeTerminalTabs component will create an instance if needed
           }
         } catch (error) {
           console.error('Failed to load workspace configuration:', error);

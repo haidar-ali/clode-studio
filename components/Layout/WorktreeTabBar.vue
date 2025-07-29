@@ -1,5 +1,5 @@
 <template>
-  <div class="worktree-tab-bar" v-if="hasWorkspace && sourceControlStore.isGitRepository && hasWorktrees">
+  <div class="worktree-tab-bar" v-if="hasWorkspace && sourceControlStore.isGitRepository && hasWorktrees && layoutStore.worktreeBarVisible">
     <div class="workspace-info">
       <Icon name="mdi:folder-outline" class="workspace-icon" />
       <span class="workspace-name">{{ workspaceName }}:</span>
@@ -41,16 +41,6 @@
         <Icon name="mdi:plus" />
       </button>
     </div>
-    
-    <div class="worktree-actions">
-      <button 
-        @click="refreshWorktrees" 
-        title="Refresh worktrees"
-        class="action-btn"
-      >
-        <Icon name="mdi:refresh" />
-      </button>
-    </div>
   </div>
   
   <!-- Create Worktree Dialog -->
@@ -65,11 +55,13 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useWorkspaceManager } from '~/composables/useWorkspaceManager';
 import { useSourceControlStore } from '~/stores/source-control';
+import { useLayoutStore } from '~/stores/layout';
 import Icon from '~/components/Icon.vue';
 import WorktreeCreateDialog from '~/components/Worktree/WorktreeCreateDialog.vue';
 
 const workspaceManager = useWorkspaceManager();
 const sourceControlStore = useSourceControlStore();
+const layoutStore = useLayoutStore();
 
 // State
 const showCreateDialog = ref(false);
@@ -310,31 +302,5 @@ onUnmounted(() => {
 .add-worktree-btn:hover {
   background: #37373d;
   border-color: #505050;
-}
-
-.worktree-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.action-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  background: transparent;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.2s;
-  color: #858585;
-}
-
-.action-btn:hover {
-  background: #37373d;
-  color: #cccccc;
 }
 </style>

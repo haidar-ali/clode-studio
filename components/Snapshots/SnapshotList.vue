@@ -258,12 +258,12 @@ async function deleteSnapshot(id: string) {
 
 function compareWithCurrent(id: string) {
   // TODO: Implement comparison view
-  console.log('Compare with current:', id);
+
 }
 
 function exportSnapshot(id: string) {
   // TODO: Implement export
-  console.log('Export snapshot:', id);
+
 }
 
 function formatDate(timestamp: string) {

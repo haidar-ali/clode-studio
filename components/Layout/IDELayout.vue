@@ -1,313 +1,99 @@
 <template>
-  <div class="ide-container" :class="layoutStore.layoutClasses">
+  <div class="ide-container">
     <!-- Mode Selector -->
     <ModeSelector />
     
     <!-- Worktree Tab Bar -->
     <WorktreeTabBar />
+    
+    <!-- New Three-Dock Layout System -->
+    <div class="ide-with-activity-bar">
+      <ActivityBar />
+      
+      <div class="ide-main-content">
+        <!-- Simplified Three-Dock System -->
+        <div class="layout-three-dock">
+          <!-- Layout without bottom panel when minimized -->
+          <div v-if="layoutStore.bottomPanelMinimized" class="main-content-full" key="minimized-layout">
+            <Splitpanes 
+              class="default-theme" 
+              @ready="onSplitpanesReady"
+            >
+              <!-- Left Dock - Always visible, expands when right is hidden -->
+              <Pane 
+                :size="layoutStore.rightSidebarVisible ? 70 : 100" 
+                :min-size="50"
+              >
+                <LeftDock />
+              </Pane>
 
-    <!-- Full IDE Mode -->
-    <div v-if="layoutStore.isFullIdeMode" class="layout-full-ide">
-      <Splitpanes horizontal class="default-theme">
-        <!-- Top Section: Editor and Panels -->
-        <Pane :size="50" :min-size="30" :max-size="70">
-          <Splitpanes @resize="handleResize">
-            <!-- Left Panel: File Explorer -->
-            <Pane :size="20" :min-size="15" :max-size="30">
-              <div class="panel file-explorer-panel">
-                <div class="panel-header">
-                  <h3>Explorer</h3>
-                </div>
-                <FileTree />
-              </div>
+              <!-- Right Dock - Can be hidden -->
+              <Pane 
+                v-if="layoutStore.rightSidebarVisible || dragDropState?.isDragging"
+                :size="30" 
+                :min-size="20" 
+                :max-size="50"
+              >
+                <RightSidebar v-if="layoutStore.rightSidebarVisible && layoutStore.dockConfig.rightDock.length > 0" />
+                <RightDockShadow v-else />
+              </Pane>
+            </Splitpanes>
+            
+            <!-- Minimized Bottom Dock -->
+            <div class="bottom-dock-minimized" :style="{ left: layoutStore.activityBarCollapsed ? '0' : '48px' }">
+              <BottomDock />
+            </div>
+          </div>
+          
+          <!-- Layout with bottom panel when expanded -->
+          <Splitpanes v-else horizontal class="default-theme" key="expanded-layout" @ready="onSplitpanesReady">
+            <!-- Main Content Area -->
+            <Pane 
+              :size="100 - layoutStore.bottomPanelHeight" 
+              :min-size="50" 
+              :max-size="85"
+            >
+              <Splitpanes 
+                class="default-theme" 
+                @ready="onSplitpanesReady"
+              >
+                <!-- Left Dock - Always visible, expands when right is hidden -->
+                <Pane 
+                  :size="layoutStore.rightSidebarVisible ? 70 : 100" 
+                  :min-size="50"
+                >
+                  <LeftDock />
+                </Pane>
+
+                <!-- Right Dock - Can be hidden -->
+                <Pane 
+                  v-if="layoutStore.rightSidebarVisible || dragDropState?.isDragging"
+                  :size="30" 
+                  :min-size="20" 
+                  :max-size="50"
+                >
+                  <RightSidebar v-if="layoutStore.rightSidebarVisible && layoutStore.dockConfig.rightDock.length > 0" />
+                  <RightDockShadow v-else />
+                </Pane>
+              </Splitpanes>
             </Pane>
 
-            <!-- Center Panel: Editor -->
-            <Pane :size="50" :min-size="30">
-              <div class="panel editor-panel">
-                <EditorTabs />
-                <ClientOnly>
-                  <CodeMirrorWrapper v-if="activeTab" />
-                  <template #fallback>
-                    <div class="loading-editor">
-                      Loading editor...
-                    </div>
-                  </template>
-                </ClientOnly>
-                <div v-if="!activeTab" class="welcome-screen">
-                  <h2>Clode Studio</h2>
-                  <p>Open a file to start editing</p>
-                </div>
-              </div>
-            </Pane>
-
-            <!-- Right Panel: Claude Terminal -->
-            <Pane :size="30" :min-size="20" :max-size="40">
-              <div class="panel terminal-panel" id="claude-terminal-full-ide">
-                <!-- Claude terminals will be teleported here -->
-              </div>
+            <!-- Bottom Dock -->
+            <Pane 
+              v-if="layoutStore.dockConfig.bottomDock.length > 0"
+              :size="layoutStore.bottomPanelHeight" 
+              :min-size="15" 
+              :max-size="50"
+            >
+              <BottomDock />
             </Pane>
           </Splitpanes>
-        </Pane>
-
-        <!-- Bottom Section: Full-width Tasks/Terminal -->
-        <Pane :size="50" :min-size="30" :max-size="70">
-          <div class="panel bottom-panel">
-            <div class="tabs">
-              <button
-                :class="{ active: bottomTab === 'tasks' }"
-                @click="bottomTab = 'tasks'"
-              >
-                Tasks
-                <span v-if="taskCount.todo > 0" class="task-badge">{{ taskCount.todo }}</span>
-              </button>
-              <button
-                :class="{ active: bottomTab === 'terminal' }"
-                @click="bottomTab = 'terminal'"
-              >
-                Terminal
-              </button>
-              <button
-                :class="{ active: bottomTab === 'context' }"
-                @click="bottomTab = 'context'"
-              >
-                Context
-                <span v-if="contextFilesCount > 0" class="context-badge">{{ contextFilesCount }}</span>
-              </button>
-              <button
-                :class="{ active: bottomTab === 'knowledge' }"
-                @click="bottomTab = 'knowledge'"
-              >
-                Knowledge
-              </button>
-              <button
-                :class="{ active: bottomTab === 'prompts' }"
-                @click="bottomTab = 'prompts'"
-              >
-                <Icon name="heroicons:sparkles" size="16" />
-                Prompts
-              </button>
-              <button
-                :class="{ active: bottomTab === 'source-control' }"
-                @click="bottomTab = 'source-control'"
-              >
-                <Icon name="mdi:source-branch" size="16" />
-                Source Control
-              </button>
-              <button
-                :class="{ active: bottomTab === 'checkpoints' }"
-                @click="bottomTab = 'checkpoints'"
-              >
-                <Icon name="mdi:history" size="16" />
-                Checkpoints
-              </button>
-              <button
-                :class="{ active: bottomTab === 'worktrees' }"
-                @click="bottomTab = 'worktrees'"
-              >
-                <Icon name="mdi:file-tree" size="16" />
-                Worktrees
-              </button>
-            </div>
-            <div class="tab-content">
-              <KanbanBoard v-if="bottomTab === 'tasks'" />
-              <Terminal v-else-if="bottomTab === 'terminal'" :project-path="projectPath" />
-              <ContextPanel v-else-if="bottomTab === 'context'" />
-              <KnowledgePanel v-else-if="bottomTab === 'knowledge'" />
-              <PromptStudio v-else-if="bottomTab === 'prompts'" />
-              <SourceControlV2 v-else-if="bottomTab === 'source-control'" />
-              <CheckpointPanel v-else-if="bottomTab === 'checkpoints'" />
-              <WorktreePanel v-else-if="bottomTab === 'worktrees'" />
-            </div>
-          </div>
-        </Pane>
-      </Splitpanes>
-    </div>
-
-    <!-- Kanban + Claude Mode -->
-    <div v-else-if="layoutStore.isKanbanClaudeMode" class="layout-kanban-claude">
-      <Splitpanes horizontal class="default-theme">
-        <!-- Top Section: Kanban and Claude -->
-        <Pane :size="60" :min-size="40" :max-size="80">
-          <Splitpanes>
-            <!-- Left Panel: Kanban Board -->
-            <Pane :size="layoutStore.kanbanClaudeSplit" :min-size="60" :max-size="85">
-              <div class="panel kanban-panel">
-                <div class="panel-header">
-                  <h3>Task Management</h3>
-                </div>
-                <KanbanBoard />
-              </div>
-            </Pane>
-
-            <!-- Right Panel: Claude Terminal -->
-            <Pane :size="100 - layoutStore.kanbanClaudeSplit" :min-size="15" :max-size="40">
-              <div class="panel terminal-panel" id="claude-terminal-kanban-claude">
-                <!-- Claude terminals will be teleported here -->
-              </div>
-            </Pane>
-          </Splitpanes>
-        </Pane>
-        
-        <!-- Bottom Section: Full-width Tasks/Terminal -->
-        <Pane :size="40" :min-size="20" :max-size="60">
-          <div class="panel bottom-panel">
-            <div class="tabs">
-              <button
-                :class="{ active: bottomTab === 'terminal' }"
-                @click="bottomTab = 'terminal'"
-              >
-                Terminal
-              </button>
-              <button
-                :class="{ active: bottomTab === 'context' }"
-                @click="bottomTab = 'context'"
-              >
-                Context
-                <span v-if="contextFilesCount > 0" class="context-badge">{{ contextFilesCount }}</span>
-              </button>
-              <button
-                :class="{ active: bottomTab === 'knowledge' }"
-                @click="bottomTab = 'knowledge'"
-              >
-                Knowledge
-              </button>
-              <button
-                :class="{ active: bottomTab === 'prompts' }"
-                @click="bottomTab = 'prompts'"
-              >
-                <Icon name="heroicons:sparkles" size="16" />
-                Prompts
-              </button>
-              <button
-                :class="{ active: bottomTab === 'source-control' }"
-                @click="bottomTab = 'source-control'"
-              >
-                <Icon name="mdi:source-branch" size="16" />
-                Source Control
-              </button>
-              <button
-                :class="{ active: bottomTab === 'checkpoints' }"
-                @click="bottomTab = 'checkpoints'"
-              >
-                <Icon name="mdi:history" size="16" />
-                Checkpoints
-              </button>
-              <button
-                :class="{ active: bottomTab === 'worktrees' }"
-                @click="bottomTab = 'worktrees'"
-              >
-                <Icon name="mdi:file-tree" size="16" />
-                Worktrees
-              </button>
-            </div>
-            <div class="tab-content">
-              <KanbanBoard v-if="bottomTab === 'tasks'" />
-              <Terminal v-else-if="bottomTab === 'terminal'" :project-path="projectPath" />
-              <ContextPanel v-else-if="bottomTab === 'context'" />
-              <KnowledgePanel v-else-if="bottomTab === 'knowledge'" />
-              <PromptStudio v-else-if="bottomTab === 'prompts'" />
-              <SourceControlV2 v-else-if="bottomTab === 'source-control'" />
-              <CheckpointPanel v-else-if="bottomTab === 'checkpoints'" />
-              <WorktreePanel v-else-if="bottomTab === 'worktrees'" />
-            </div>
-          </div>
-        </Pane>
-      </Splitpanes>
-    </div>
-
-    <!-- Kanban Only Mode -->
-    <div v-else-if="layoutStore.isKanbanOnlyMode" class="layout-kanban-only">
-      <Splitpanes horizontal class="default-theme">
-        <!-- Top Section: Kanban Board -->
-        <Pane :size="60" :min-size="40" :max-size="80">
-          <div class="panel kanban-panel">
-            <div class="panel-header">
-              <h3>Task Management</h3>
-            </div>
-            <KanbanBoard />
-          </div>
-        </Pane>
-        
-        <!-- Bottom Section: Full-width Tasks/Terminal -->
-        <Pane :size="40" :min-size="20" :max-size="60">
-          <div class="panel bottom-panel">
-            <div class="tabs">
-              <button
-                :class="{ active: bottomTab === 'tasks' }"
-                @click="bottomTab = 'tasks'"
-              >
-                Tasks
-                <span v-if="taskCount.todo > 0" class="task-badge">{{ taskCount.todo }}</span>
-              </button>
-              <button
-                :class="{ active: bottomTab === 'terminal' }"
-                @click="bottomTab = 'terminal'"
-              >
-                Terminal
-              </button>
-              <button
-                :class="{ active: bottomTab === 'context' }"
-                @click="bottomTab = 'context'"
-              >
-                Context
-                <span v-if="contextFilesCount > 0" class="context-badge">{{ contextFilesCount }}</span>
-              </button>
-              <button
-                :class="{ active: bottomTab === 'knowledge' }"
-                @click="bottomTab = 'knowledge'"
-              >
-                Knowledge
-              </button>
-              <button
-                :class="{ active: bottomTab === 'prompts' }"
-                @click="bottomTab = 'prompts'"
-              >
-                <Icon name="heroicons:sparkles" size="16" />
-                Prompts
-              </button>
-              <button
-                :class="{ active: bottomTab === 'source-control' }"
-                @click="bottomTab = 'source-control'"
-              >
-                <Icon name="mdi:source-branch" size="16" />
-                Source Control
-              </button>
-              <button
-                :class="{ active: bottomTab === 'checkpoints' }"
-                @click="bottomTab = 'checkpoints'"
-              >
-                <Icon name="mdi:history" size="16" />
-                Checkpoints
-              </button>
-              <button
-                :class="{ active: bottomTab === 'worktrees' }"
-                @click="bottomTab = 'worktrees'"
-              >
-                <Icon name="mdi:file-tree" size="16" />
-                Worktrees
-              </button>
-            </div>
-            <div class="tab-content">
-              <KanbanBoard v-if="bottomTab === 'tasks'" />
-              <Terminal v-else-if="bottomTab === 'terminal'" :project-path="projectPath" />
-              <ContextPanel v-else-if="bottomTab === 'context'" />
-              <KnowledgePanel v-else-if="bottomTab === 'knowledge'" />
-              <PromptStudio v-else-if="bottomTab === 'prompts'" />
-              <SourceControlV2 v-else-if="bottomTab === 'source-control'" />
-              <CheckpointPanel v-else-if="bottomTab === 'checkpoints'" />
-              <WorktreePanel v-else-if="bottomTab === 'worktrees'" />
-            </div>
-          </div>
-        </Pane>
-      </Splitpanes>
-    </div>
+        </div>
 
     <StatusBar />
     
-    <!-- Global Search Modal (only in Full IDE mode) -->
+    <!-- Global Search Modal -->
     <GlobalSearch 
-      v-if="layoutStore.isFullIdeMode" 
       :is-open="showGlobalSearch" 
       @close="showGlobalSearch = false" 
     />
@@ -340,21 +126,21 @@
     <!-- Command Studio Modal -->
     <CommandStudioModal v-model="showCommandsModal" />
     
-    <!-- Persistent Claude Terminals (rendered once, teleported to appropriate location) -->
-    <ClientOnly>
-      <Teleport :to="claudeTerminalTarget" :disabled="!claudeTerminalTarget">
-        <ClaudeTerminalTabs v-if="shouldShowClaude" />
-      </Teleport>
-    </ClientOnly>
+    <!-- Claude terminals are now handled by the dock system, no teleport needed -->
     
     <!-- Global Input Modal -->
     <InputModal />
     
+    <!-- Drag Indicator -->
+    <DragIndicator />
+    
+      </div> <!-- ide-main-content -->
+    </div> <!-- ide-with-activity-bar -->
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { Splitpanes, Pane } from 'splitpanes';
 import 'splitpanes/dist/splitpanes.css';
 import { useEditorStore } from '~/stores/editor';
@@ -382,6 +168,14 @@ import WorktreeTabBar from '~/components/Layout/WorktreeTabBar.vue';
 import SourceControlV2 from '~/components/SourceControlV2/SourceControlV2.vue';
 import MCPManagerModal from '~/components/MCP/MCPManagerModal.vue';
 import CommandStudioModal from '~/components/Commands/CommandStudioModal.vue';
+import ActivityBar from '~/components/Layout/ActivityBar.vue';
+import LeftDock from '~/components/Layout/LeftDock.vue';
+import RightSidebar from '~/components/Layout/RightSidebar.vue';
+import RightDockShadow from '~/components/Layout/RightDockShadow.vue';
+import BottomDock from '~/components/Layout/BottomDock.vue';
+import DragIndicator from '~/components/Layout/DragIndicator.vue';
+import GlobalSearch from '~/components/Search/GlobalSearch.vue';
+import { useModuleDragDrop } from '~/composables/useModuleDragDrop';
 
 const editorStore = useEditorStore();
 const tasksStore = useTasksStore();
@@ -390,29 +184,15 @@ const mcpStore = useMCPStore();
 const contextManager = useContextManager();
 const commandsStore = useCommandsStore();
 const snapshotTriggers = useSnapshotTriggers();
+const { dragDropState } = useModuleDragDrop();
 const bottomTab = ref<'tasks' | 'terminal' | 'context' | 'knowledge' | 'prompts' | 'source-control' | 'checkpoints' | 'worktrees'>('tasks');
 const showGlobalSearch = ref(false);
 const showMCPModal = ref(false);
 const showCommandsModal = ref(false);
 
-const activeTab = computed(() => editorStore.activeTab);
 const taskCount = computed(() => tasksStore.taskCount);
 const projectPath = computed(() => tasksStore.projectPath);
 const contextFilesCount = computed(() => contextManager.statistics.value?.totalFiles || 0);
-
-// Computed properties for Claude Terminal persistence
-const shouldShowClaude = computed(() => {
-  return layoutStore.isFullIdeMode || layoutStore.isKanbanClaudeMode;
-});
-
-const claudeTerminalTarget = computed(() => {
-  if (layoutStore.isFullIdeMode) {
-    return '#claude-terminal-full-ide';
-  } else if (layoutStore.isKanbanClaudeMode) {
-    return '#claude-terminal-kanban-claude';
-  }
-  return null;
-});
 
 // Set up file watching
 useFileWatcher();
@@ -426,6 +206,13 @@ useTasksFileWatcher();
 const handleResize = (event: any) => {
   // Handle resize events if needed
 };
+
+// Prevent splitpanes errors on ready
+const onSplitpanesReady = () => {
+  // Do nothing - just prevent errors
+};
+
+
 
 // Global keyboard shortcuts
 const handleKeydown = (event: KeyboardEvent) => {
@@ -477,25 +264,27 @@ watch(projectPath, (newPath, oldPath) => {
   }
 });
 
-// Watch for layout mode changes to adjust bottomTab
-watch(() => layoutStore.isKanbanClaudeMode, (isKanbanClaude) => {
-  if (isKanbanClaude && bottomTab.value === 'tasks') {
-    // In Kanban + Claude mode, Tasks tab is not available
-    // Switch to terminal tab instead
-    bottomTab.value = 'context';
-  }
-});
 
 onMounted(async () => {
   // Initialize command store
   await commandsStore.initialize();
   
-  // Load saved layout mode
-  layoutStore.loadSavedMode();
+  // Load saved layout configuration
+  layoutStore.loadLayoutConfig();
   
   document.addEventListener('keydown', handleKeydown);
   window.addEventListener('open-global-search', handleOpenGlobalSearch);
   window.addEventListener('switch-bottom-tab', handleSwitchBottomTab as EventListener);
+  
+  // Handle module switching from activity bar
+  window.addEventListener('module-switch', (event: Event) => {
+    const customEvent = event as CustomEvent;
+    const moduleId = customEvent.detail?.moduleId;
+    if (moduleId) {
+      // For now, just log it - we'll implement the logic to show/focus the module
+    
+    }
+  });
   
   // Listen for command-triggered events
   window.addEventListener('show-tasks-panel', () => {
@@ -712,58 +501,7 @@ onUnmounted(() => {
   position: relative;
 }
 
-/* Layout Mode Specific Styles */
-.layout-full-ide {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  max-height: calc(100vh - 1px); /* Prevent growing beyond viewport */
-  overflow: hidden;
-}
 
-.layout-kanban-claude {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  max-height: calc(100vh - 1px);
-  overflow: hidden;
-}
-
-.layout-kanban-only {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  max-height: calc(100vh - 1px);
-  overflow: hidden;
-}
-
-.layout-kanban-only .kanban-panel {
-  height: 100%;
-}
-
-.kanban-panel {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  background: #252526;
-  border: 1px solid #181818;
-}
-
-.kanban-panel .panel-header {
-  padding: 8px 16px;
-  background: #2d2d30;
-  border-bottom: 1px solid #181818;
-  flex-shrink: 0;
-}
-
-.kanban-panel .panel-header h3 {
-  margin: 0;
-  font-size: 13px;
-  font-weight: normal;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: #cccccc;
-}
 
 .loading-terminal {
   display: flex;
@@ -780,4 +518,76 @@ onUnmounted(() => {
   height: 100%;
   overflow: hidden;
 }
+
+/* Activity Bar Layout */
+.ide-with-activity-bar {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.ide-main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Three-Dock Layout */
+.layout-three-dock {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.editor-container {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #1e1e1e;
+}
+
+.editor-container .monaco-wrapper {
+  flex: 1;
+  min-height: 0;
+}
+
+
+/* Main content full height when bottom minimized */
+.main-content-full {
+  height: 100%;
+  position: relative;
+}
+
+/* Fix splitpanes for new layout */
+.layout-three-dock :deep(.splitpanes__pane) {
+  overflow: hidden;
+}
+
+.layout-three-dock :deep(.splitpanes--vertical > .splitpanes__splitter) {
+  width: 4px;
+  background-color: #1e1e1e;
+}
+
+.layout-three-dock :deep(.splitpanes--horizontal > .splitpanes__splitter) {
+  height: 4px;
+  background-color: #1e1e1e;
+}
+
+/* Minimized bottom dock */
+.bottom-dock-minimized {
+  position: fixed;
+  bottom: 22px; /* Above status bar */
+  left: 0;
+  right: 0;
+  z-index: 100;
+  pointer-events: none; /* Prevent interaction with underlying elements */
+}
+
+/* Allow interaction with the dock itself */
+.bottom-dock-minimized :deep(.bottom-dock) {
+  pointer-events: all;
+}
+
 </style>

@@ -275,3 +275,18 @@ body .modal-overlay :is(h1, h2, h3, h4, h5, h6) {
 *::-webkit-scrollbar-corner {
   background: transparent;
 }
+
+/* Module dragging styles */
+body.module-dragging {
+  user-select: none;
+  cursor: grabbing !important;
+}
+
+body.module-dragging * {
+  cursor: grabbing !important;
+}
+
+/* Ensure drop targets are visible during drag */
+body.module-dragging .drop-target {
+  transition: all 0.2s ease;
+}

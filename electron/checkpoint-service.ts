@@ -159,7 +159,7 @@ export class CheckpointService {
         }
       } catch (error) {
         // If git is not available, add all directories to be safe
-        console.log('Git not available, will add all Claude directories to .gitignore');
+      
         directoriesToAdd.push('.claude-checkpoints/', '.worktrees/');
       }
       

@@ -464,7 +464,7 @@ export class SnapshotService {
         contentToAppend += missingDirs.join('\n') + '\n';
         
         await fs.writeFile(gitignorePath, gitignoreContent + contentToAppend);
-        console.log(`Added ${missingDirs.join(', ')} to .gitignore`);
+      
       }
     } catch (error) {
       console.warn('Failed to update .gitignore:', error);
@@ -693,7 +693,7 @@ export class SnapshotService {
       
       // Log detection results for debugging dot files and common config files
       if (fileName.startsWith('.') || fileName.includes('lock') || fileName.includes('ignore')) {
-        console.log(`📋 [istextorbinary] ${fileName}: ${detectionResult} → ${isTextFile ? 'TEXT' : 'BINARY'} (buffer size: ${detectionBuffer.length})`);
+      
       }
       
       // Basic MIME type mapping for common extensions
@@ -763,7 +763,7 @@ export class SnapshotService {
     
     // Log fallback detection for debugging
     if (fileName.startsWith('.') || fileName.includes('lock') || fileName.includes('ignore')) {
-      console.log(`🔄 [fallback] ${fileName} (ext: ${ext}): ${isTextFile ? 'TEXT' : 'BINARY'}`);
+    
     }
     
     return {
@@ -848,8 +848,8 @@ export class SnapshotService {
       
       // Debug log for problematic files
       if (contentPath.includes('eslint') || contentPath.includes('yarn') || contentPath.includes('babel')) {
-        console.log(`🔍 [restore] ${contentPath.split('/').pop()}: encoding=${contentObject.encoding}, compression=${contentObject.compressionAlgorithm}, size=${decompressed.length}`);
-        console.log(`🔍 [content preview]:`, decompressed.substring(0, 50));
+      
+      
       }
       
       return decompressed;
@@ -997,14 +997,14 @@ export class SnapshotService {
       const allFiles = [...fileChanges.added, ...fileChanges.modified];
       
       // Debug: Log files being restored
-      console.log(`🔧 [restore] Processing ${allFiles.length} files for restoration`);
+    
       
       for (const fileChange of allFiles) {
         const fullPath = path.join(projectPath, fileChange.path);
         
         // Debug log for problematic files
         if (fileChange.path.includes('eslint') || fileChange.path.includes('yarn') || fileChange.path.includes('babel')) {
-          console.log(`🔧 [restore] Processing file: ${fileChange.path}, contentHash: ${fileChange.contentHash}, isTextFile: ${fileChange.isTextFile}`);
+        
         }
         
         if (fileChange.contentHash) {
@@ -1018,7 +1018,7 @@ export class SnapshotService {
               
               // Debug log after writing
               if (fileChange.path.includes('eslint') || fileChange.path.includes('yarn') || fileChange.path.includes('babel')) {
-                console.log(`✅ [restore] Successfully wrote text file: ${fileChange.path}`);
+              
               }
             } else {
               // For binary files, convert base64 back to buffer
@@ -1027,19 +1027,19 @@ export class SnapshotService {
               
               // Debug log after writing
               if (fileChange.path.includes('eslint') || fileChange.path.includes('yarn') || fileChange.path.includes('babel')) {
-                console.log(`✅ [restore] Successfully wrote binary file: ${fileChange.path}`);
+              
               }
             }
           } else {
             // Debug log for missing content
             if (fileChange.path.includes('eslint') || fileChange.path.includes('yarn') || fileChange.path.includes('babel')) {
-              console.log(`❌ [restore] No content found for: ${fileChange.path} (hash: ${fileChange.contentHash})`);
+            
             }
           }
         } else {
           // Debug log for missing hash
           if (fileChange.path.includes('eslint') || fileChange.path.includes('yarn') || fileChange.path.includes('babel')) {
-            console.log(`❌ [restore] No contentHash for: ${fileChange.path}`);
+          
           }
         }
       }

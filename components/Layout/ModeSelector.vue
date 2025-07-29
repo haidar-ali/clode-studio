@@ -5,16 +5,34 @@
       <span class="app-title">Clode Studio</span>
     </div>
     
-    <div class="mode-group">
+    <div class="controls">
+      <!-- Worktree Bar Toggle (only show if git repository) -->
       <button
-        v-for="mode in modes"
-        :key="mode.value"
-        :class="['mode-button', { active: currentMode === mode.value }]"
-        @click="setMode(mode.value)"
-        :title="mode.description"
+        v-if="sourceControlStore.isGitRepository"
+        class="control-btn"
+        @click="toggleWorktreeBar"
+        :title="layoutStore.worktreeBarVisible ? 'Hide worktree bar' : 'Show worktree bar'"
       >
-        <Icon :name="mode.icon" />
-        <span>{{ mode.label }}</span>
+        <Icon :name="layoutStore.worktreeBarVisible ? 'mdi:source-branch-remove' : 'mdi:source-branch-plus'" size="16" />
+      </button>
+      
+      <!-- Split View Toggle -->
+      <button
+        v-if="canSplit"
+        class="control-btn"
+        @click="toggleSplitView"
+        :title="layoutStore.rightSidebarSplitView ? 'Single view' : 'Split view'"
+      >
+        <Icon :name="layoutStore.rightSidebarSplitView ? 'mdi:view-sequential' : 'mdi:view-split-vertical'" size="16" />
+      </button>
+      
+      <!-- Right Sidebar Toggle -->
+      <button
+        class="control-btn"
+        @click="toggleRightSidebar"
+        :title="layoutStore.rightSidebarVisible ? 'Hide right panel' : 'Show right panel'"
+      >
+        <Icon :name="layoutStore.rightSidebarVisible ? 'mdi:dock-right' : 'mdi:dock-left'" size="16" />
       </button>
     </div>
   </div>
@@ -22,36 +40,28 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { useLayoutStore, type LayoutMode } from '~/stores/layout';
+import { useLayoutStore } from '~/stores/layout';
+import { useSourceControlStore } from '~/stores/source-control';
+import Icon from '~/components/Icon.vue';
 
 const layoutStore = useLayoutStore();
+const sourceControlStore = useSourceControlStore();
 
-const currentMode = computed(() => layoutStore.currentMode);
+// Can split if we have Claude in right dock or multiple modules
+const canSplit = computed(() => {
+  return layoutStore.activeRightModule === 'claude' || layoutStore.dockConfig.rightDock.length > 1;
+});
 
-const modes = [
-  {
-    value: 'full-ide' as LayoutMode,
-    label: 'Full IDE',
-    icon: 'mdi:view-dashboard',
-    description: 'Complete IDE with file tree, editor, kanban, and Claude'
-  },
-  {
-    value: 'kanban-claude' as LayoutMode,
-    label: 'Kanban + Claude',
-    icon: 'mdi:view-column',
-    description: 'Kanban board with Claude assistant (75/25 split)'
-  }
-  // Kanban Only mode is temporarily hidden
-  // {
-  //   value: 'kanban-only' as LayoutMode,
-  //   label: 'Kanban Only',
-  //   icon: 'mdi:view-agenda',
-  //   description: 'Full screen kanban board for task management'
-  // }
-];
+const toggleSplitView = () => {
+  layoutStore.toggleRightSidebarSplit();
+};
 
-const setMode = (mode: LayoutMode) => {
-  layoutStore.setMode(mode);
+const toggleRightSidebar = () => {
+  layoutStore.toggleRightSidebar();
+};
+
+const toggleWorktreeBar = () => {
+  layoutStore.toggleWorktreeBar();
 };
 </script>
 
@@ -66,47 +76,29 @@ const setMode = (mode: LayoutMode) => {
   -webkit-app-region: drag; /* Allow dragging the window */
 }
 
-.mode-group {
+.controls {
   display: flex;
-  background: #2d2d30;
-  border-radius: 6px;
-  padding: 2px;
-  gap: 2px;
+  gap: 8px;
   -webkit-app-region: no-drag; /* Make buttons clickable */
 }
 
-.mode-button {
+.control-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  background: transparent;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: none;
   border: none;
-  border-radius: 4px;
+  border-radius: 3px;
   color: #cccccc;
   cursor: pointer;
-  font-size: 12px;
-  font-weight: 500;
-  transition: all 0.2s ease;
-  white-space: nowrap;
+  transition: all 0.2s;
 }
 
-.mode-button:hover {
-  background: #37373d;
+.control-btn:hover {
+  background: #3e3e42;
   color: #ffffff;
-}
-
-.mode-button.active {
-  background: #007acc;
-  color: #ffffff;
-}
-
-.mode-button.active:hover {
-  background: #005a9e;
-}
-
-.mode-button span {
-  font-size: 11px;
 }
 
 .title-area {

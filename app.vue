@@ -14,13 +14,73 @@ import { ref } from 'vue';
 import FileSelector from '~/components/Knowledge/FileSelector.vue';
 import StartupLoader from '~/components/Layout/StartupLoader.vue';
 import { useWorkspaceManager } from '~/composables/useWorkspaceManager';
+import { useClaudeInstancesStore } from '~/stores/claude-instances';
 
 const workspaceReady = ref(false);
 const workspaceManager = useWorkspaceManager();
 
 async function onWorkspaceReady(workspace: string) {
   try {
-    // Use the workspace manager to properly set up the workspace
+  
+    
+    // Clear all Claude instance PIDs and status from storage on app startup
+    // This needs to happen before any store loads the data
+    
+    // Clear from general claudeInstances storage
+    const savedInstances = await window.electronAPI.store.get('claudeInstances');
+    if (savedInstances && Array.isArray(savedInstances)) {
+      const cleanedInstances = savedInstances.map((instance: any) => ({
+        ...instance,
+        status: 'disconnected',
+        pid: undefined
+      }));
+      await window.electronAPI.store.set('claudeInstances', cleanedInstances);
+    
+    }
+    
+    // Clear terminal instance PTY process IDs on app startup
+    // PTY processes don't persist across app restarts
+    const savedTerminalInstances = await window.electronAPI.store.get('terminalInstances');
+    if (savedTerminalInstances && Array.isArray(savedTerminalInstances)) {
+      const cleanedTerminalInstances = savedTerminalInstances.map((instance: any) => ({
+        ...instance,
+        ptyProcessId: undefined
+      }));
+      await window.electronAPI.store.set('terminalInstances', cleanedTerminalInstances);
+    
+    }
+    
+    // Clear from all worktree-specific configurations
+    const allStoreData = await window.electronAPI.store.getAll();
+    for (const [key, value] of Object.entries(allStoreData)) {
+      if (key.startsWith('worktree-') && value && typeof value === 'object' && 'instances' in value) {
+        const worktreeConfig = value as any;
+        if (worktreeConfig.instances && Array.isArray(worktreeConfig.instances)) {
+          worktreeConfig.instances = worktreeConfig.instances.map((inst: any) => ({
+            ...inst,
+            status: 'disconnected',
+            pid: undefined
+          }));
+          await window.electronAPI.store.set(key, worktreeConfig);
+        
+        }
+      }
+      
+      // Clear terminal worktree configurations PTY process IDs
+      if (key.startsWith('terminal-worktree-') && value && typeof value === 'object' && 'instances' in value) {
+        const terminalWorktreeConfig = value as any;
+        if (terminalWorktreeConfig.instances && Array.isArray(terminalWorktreeConfig.instances)) {
+          terminalWorktreeConfig.instances = terminalWorktreeConfig.instances.map((inst: any) => ({
+            ...inst,
+            ptyProcessId: undefined
+          }));
+          await window.electronAPI.store.set(key, terminalWorktreeConfig);
+        
+        }
+      }
+    }
+    
+    // Now proceed with normal workspace setup
     await workspaceManager.changeWorkspace(workspace);
     
     // Mark as ready

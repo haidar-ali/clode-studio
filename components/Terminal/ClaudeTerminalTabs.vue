@@ -111,7 +111,28 @@ import { computed, onMounted, onUnmounted, ref, nextTick } from 'vue';
 import { useClaudeInstancesStore } from '~/stores/claude-instances';
 import ClaudeTerminalTab from './ClaudeTerminalTab.vue';
 
+// Props for instance group support (for dual terminal view)
+interface Props {
+  instanceGroup?: string;
+  worktreePath?: string;
+}
+
+const props = defineProps<Props>();
 const instancesStore = useClaudeInstancesStore();
+
+// Filter instances by worktree if specified
+const instances = computed(() => {
+  const allInstances = instancesStore.instancesList;
+  
+  // If worktreePath is provided, filter instances by working directory
+  if (props.worktreePath) {
+    const filtered = allInstances.filter(instance => instance.workingDirectory === props.worktreePath);
+    return filtered;
+  }
+  
+  // Otherwise return all instances
+  return allInstances;
+});
 
 // Editing state
 const editingInstanceId = ref<string | null>(null);
@@ -126,9 +147,22 @@ const contextMenu = ref({
 });
 const contextMenuRef = ref<HTMLElement | null>(null);
 
-const instances = computed(() => instancesStore.instancesList);
-const activeInstanceId = computed(() => instancesStore.activeInstanceId);
-const activeInstance = computed(() => instancesStore.activeInstance);
+// Active module from store - use per-worktree active instance if available
+const activeInstanceId = computed(() => {
+  if (props.worktreePath) {
+    const worktreeActiveId = instancesStore.activeInstanceByWorktree.get(props.worktreePath);
+    // If we have instances for this worktree and a saved active instance, use it
+    if (worktreeActiveId && instances.value.some(inst => inst.id === worktreeActiveId)) {
+      return worktreeActiveId;
+    }
+    // Otherwise, use the first instance for this worktree
+    if (instances.value.length > 0) {
+      return instances.value[0].id;
+    }
+  }
+  return instancesStore.activeInstanceId;
+});
+const activeInstance = computed(() => activeInstanceId.value ? instancesStore.instances.get(activeInstanceId.value) : null);
 
 // Tab colors (matching Warp's color palette)
 const tabColors = ['#f87171', '#a3e635', '#fbbf24', '#60a5fa', '#f472b6', '#34d399'];
@@ -156,7 +190,10 @@ const setActiveInstance = (id: string) => {
 
 const createNewInstance = async () => {
   const count = instances.value.length + 1;
-  await instancesStore.createInstance(`Claude ${count}`);
+  const instanceName = `Claude ${count}`;
+  
+  // Pass the worktree path as working directory if available
+  await instancesStore.createInstance(instanceName, undefined, props.worktreePath);
 };
 
 const removeInstance = async (id: string) => {
@@ -373,6 +410,16 @@ onMounted(async () => {
       await instancesStore.loadWorkspaceConfiguration(currentWorkspacePath.value);
     }
     
+    // If this is for a specific worktree and no instances exist for it, create one
+    if (props.worktreePath && instances.value.length === 0) {
+      await instancesStore.createInstance(`Claude 1`, undefined, props.worktreePath);
+    }
+    
+    // Set the active instance for this worktree if not already set
+    if (props.worktreePath && activeInstanceId.value && instances.value.length > 0) {
+      instancesStore.setActiveInstance(activeInstanceId.value);
+    }
+    
     // Add event listeners
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('click', handleClickOutside);
@@ -458,6 +505,20 @@ onUnmounted(() => {
   background: #1e1e1e;
   border-color: #181818;
   border-bottom-color: #1e1e1e;
+  position: relative;
+}
+
+/* Dark overlay for active colored tabs */
+.tab.active::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+  border-radius: inherit;
 }
 
 .tab-icon {

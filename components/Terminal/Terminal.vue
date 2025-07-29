@@ -8,19 +8,33 @@
 import { ref, onMounted, onUnmounted } from 'vue';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
+import { SerializeAddon } from '@xterm/addon-serialize';
+import { useTerminalInstancesStore } from '~/stores/terminal-instances';
 import 'xterm/css/xterm.css';
 
 const props = defineProps<{
   projectPath?: string;
+  instanceId?: string;
+  existingPtyId?: string;
+}>();
+
+const emit = defineEmits<{
+  'pty-created': [ptyId: string];
+  'pty-destroyed': [];
 }>();
 
 const terminalElement = ref<HTMLElement>();
 let terminal: Terminal | null = null;
 let fitAddon: FitAddon | null = null;
+let serializeAddon: SerializeAddon | null = null;
 let ptyProcess: any = null;
+let dataListener: any = null;
+
+const terminalStore = useTerminalInstancesStore();
 
 onMounted(async () => {
   if (!terminalElement.value) return;
+  
   
   // Create terminal instance
   terminal = new Terminal({
@@ -56,6 +70,10 @@ onMounted(async () => {
   // Add fit addon
   fitAddon = new FitAddon();
   terminal.loadAddon(fitAddon);
+  
+  // Add serialize addon for state persistence
+  serializeAddon = new SerializeAddon();
+  terminal.loadAddon(serializeAddon);
   
   // Open terminal in the DOM
   terminal.open(terminalElement.value);
@@ -112,7 +130,7 @@ onMounted(async () => {
     return true;
   });
   
-  // Start PTY process
+  // Start PTY process or reconnect to existing one
   try {
     // Check if terminal API is available
     if (!window.electronAPI?.terminal) {
@@ -121,18 +139,60 @@ onMounted(async () => {
       return;
     }
     
-    const result = await window.electronAPI.terminal.create({
-      cols: terminal.cols,
-      rows: terminal.rows,
-      cwd: props.projectPath || process.cwd()
-    });
+    // Check if we should reconnect to an existing PTY
+    if (props.existingPtyId) {
+      ptyProcess = props.existingPtyId;
+      
+      try {
+        // Test if PTY is still alive by trying to write to it
+        const writeResult = await window.electronAPI.terminal.write(ptyProcess, '');
+        
+        if (writeResult && writeResult.success) {
+          // Resize the existing PTY to match our terminal
+          await window.electronAPI.terminal.resize(ptyProcess, terminal.cols, terminal.rows);
+          
+          // Restore terminal state if available from store
+          if (props.instanceId) {
+            const savedState = terminalStore.getTerminalBuffer(props.instanceId);
+            if (savedState) {
+              terminal.write(savedState);
+            } else {
+              // Fallback: Send Ctrl+L to at least show current prompt
+              await window.electronAPI.terminal.write(ptyProcess, '\x0c');
+            }
+          }
+          
+        } else {
+          ptyProcess = null;
+        }
+      } catch (error) {
+        // PTY doesn't exist, create a new one
+        ptyProcess = null;
+      }
+    }
     
-    ptyProcess = result.id;
+    if (!ptyProcess) {
+      // Create new PTY process
+      const result = await window.electronAPI.terminal.create({
+        cols: terminal.cols,
+        rows: terminal.rows,
+        cwd: props.projectPath || process.cwd()
+      });
+      
+      ptyProcess = result.id;
+      emit('pty-created', ptyProcess);
+      
+      // Write welcome message only for newly created terminals
+      terminal.write('\x1b[1;34mTerminal ready\x1b[0m\r\n');
+      terminal.write(`\x1b[90mWorking directory: ${props.projectPath || process.cwd()}\x1b[0m\r\n\r\n`);
+    }
     
     // Handle data from PTY
-    window.electronAPI.terminal.onData(ptyProcess, (data: string) => {
-      terminal?.write(data);
-    });
+    if (ptyProcess) {
+      dataListener = window.electronAPI.terminal.onData(ptyProcess, (data: string) => {
+        terminal?.write(data);
+      });
+    }
     
     // Track current command
     let currentCommand = '';
@@ -177,9 +237,6 @@ onMounted(async () => {
       window.electronAPI.terminal.resize(ptyProcess, cols, rows);
     });
     
-    // Write welcome message
-    terminal.write('\x1b[1;34mTerminal ready\x1b[0m\r\n');
-    terminal.write(`\x1b[90mWorking directory: ${props.projectPath || process.cwd()}\x1b[0m\r\n\r\n`);
     
   } catch (error) {
     console.error('Failed to create terminal:', error);
@@ -189,19 +246,48 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
-  if (ptyProcess) {
-    window.electronAPI.terminal.destroy(ptyProcess);
+  // Save terminal state before unmounting to store
+  if (props.instanceId && serializeAddon && terminal) {
+    try {
+      const serializedState = serializeAddon.serialize();
+      terminalStore.saveTerminalBuffer(props.instanceId, serializedState);
+    } catch (error) {
+    }
   }
+  
+  // Clean up data listener
+  if (dataListener) {
+    dataListener();
+    dataListener = null;
+  }
+  
+  // Don't destroy PTY process - keep it alive for reconnection
+  // The PTY will only be destroyed when explicitly removed by the user
+  
   if (terminal) {
     terminal.dispose();
   }
 });
 
+// Method to destroy PTY process when explicitly requested
+const destroyPty = async () => {
+  if (ptyProcess) {
+    try {
+      await window.electronAPI.terminal.destroy(ptyProcess);
+      emit('pty-destroyed');
+      ptyProcess = null;
+    } catch (error) {
+      console.error('Failed to destroy PTY:', error);
+    }
+  }
+};
+
 // Expose methods for parent components
 defineExpose({
   clear: () => terminal?.clear(),
   focus: () => terminal?.focus(),
-  write: (data: string) => terminal?.write(data)
+  write: (data: string) => terminal?.write(data),
+  destroyPty
 });
 </script>
 

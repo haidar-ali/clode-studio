@@ -151,11 +151,8 @@ export const useChatStore = defineStore('chat', {
     async updateWorkingDirectory(path: string) {
       this.workingDirectory = path;
       
-      // Don't auto-restart Claude - let user manually restart when ready
-      // This prevents race conditions and gives better control
-      if (this.claudeStatus === 'connected') {
-        await this.stopClaude();
-      }
+      // Don't stop Claude anymore - we have per-worktree instances now
+      // Each worktree maintains its own Claude instances
     }
   }
 });

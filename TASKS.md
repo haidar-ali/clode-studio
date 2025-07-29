@@ -1,9 +1,9 @@
 # Project Tasks
 
 *This file is synced with Clode Studio and Claude's native TodoWrite system.*  
-*Last updated: 2025-07-26*
+*Last updated: 2025-07-28*
 
-## Backlog (11)
+## Backlog (16)
 
 - [ ] **Replace remaining alert/confirm dialogs throughout the app**
   - Type: refactor
@@ -80,10 +80,106 @@
   - Description: Built-in profiler with automatic performance suggestions and memory leak detection
   - Files: electron/performance-profiler.ts (new), components/Performance/ProfilerPanel.vue (new)
 
+- [ ] **Design modular layout system with right sidebar and flexible panels**
+  - ID: LAYOUT-OLD-001
+  - Assignee: Claude
+  - Type: feature
+  - Priority: high
+  - Description: Design new layout with activity bar, three-dock system, and flexible module placement
+  - Resources: File: components/Layout/IDELayout.vue
+
+- [ ] **Create activity bar for quick module switching**
+  - ID: LAYOUT-OLD-002
+  - Assignee: Claude
+  - Type: feature
+  - Priority: high
+  - Description: Implement VS Code-style activity bar for quick navigation between modules
+  - Resources: Task: LAYOUT-OLD-001
+
+- [ ] **Build modular right sidebar with dockable panels**
+  - ID: LAYOUT-OLD-003
+  - Assignee: Claude
+  - Type: feature
+  - Priority: high
+  - Description: Create flexible right sidebar that can host various modules including dual Claude terminals
+  - Resources: Task: LAYOUT-OLD-001
+
+- [ ] **Refactor bottom panel to be smaller and terminal-focused**
+  - ID: LAYOUT-OLD-004
+  - Assignee: Claude
+  - Type: refactor
+  - Priority: medium
+  - Description: Reduce bottom panel size and focus on terminal functionality
+  - Resources: Task: LAYOUT-OLD-001
+
+- [ ] **Add support for multiple Claude terminal instances**
+  - ID: LAYOUT-OLD-005
+  - Assignee: Claude
+  - Type: feature
+  - Priority: high
+  - Description: Enable viewing two ClaudeTerminalTabs components simultaneously
+  - Resources: File: components/Terminal/ClaudeTerminalTabs.vue, Task: LAYOUT-OLD-003
 
 
 
-## To Do (10)
+
+## To Do (16)
+
+- [ ] **Build dual Claude terminal support in right sidebar**
+  - ID: LAYOUT-003
+  - Assignee: Claude
+  - Type: feature
+  - Priority: high
+  - Description: Enable split view in right sidebar to show two ClaudeTerminalTabs instances simultaneously with independent tab groups
+  - Resources: File: components/Layout/RightSidebar.vue, File: components/Terminal/ClaudeTerminalTabs.vue, Task: LAYOUT-002
+
+- [ ] **Create module docking manager**
+  - ID: LAYOUT-004
+  - Assignee: Claude
+  - Type: feature
+  - Priority: high
+  - Description: Implement drag-and-drop system for moving modules between docks, with visual indicators and smooth transitions
+  - Resources: File: composables/useModuleDocking.ts (new), File: stores/layout.ts, Task: LAYOUT-002
+
+- [ ] **Implement layout preset system**
+  - ID: LAYOUT-005
+  - Assignee: Claude
+  - Type: feature
+  - Priority: medium
+  - Description: Create predefined layouts (AI-First, Task Management, Deep Work) with quick switching and custom layout saving
+  - Resources: File: stores/layout-presets.ts (new), File: components/Layout/LayoutPresetSelector.vue (new), Task: LAYOUT-002
+
+- [ ] **Add keyboard shortcuts for layout control**
+  - ID: LAYOUT-006
+  - Assignee: Claude
+  - Type: feature
+  - Priority: medium
+  - Description: Implement shortcuts for layout switching (Cmd+Shift+1/2/3), dock toggling (Cmd+B, Cmd+J, Cmd+\\), and focus navigation
+  - Resources: File: composables/useLayoutShortcuts.ts (new), Task: LAYOUT-005
+
+- [ ] **Refactor bottom panel for terminal focus**
+  - ID: LAYOUT-007
+  - Assignee: Claude
+  - Type: refactor
+  - Priority: medium
+  - Description: Reduce default height to 15%, add terminal tabs, create quick access bar for lightweight module views
+  - Resources: File: components/Layout/BottomPanel.vue (new), Task: LAYOUT-002
+
+- [ ] **Create floating panel system**
+  - ID: LAYOUT-008
+  - Assignee: Claude
+  - Type: feature
+  - Priority: low
+  - Description: Allow modules to be detached as floating windows with position persistence and multi-monitor support
+  - Resources: File: composables/useFloatingPanels.ts (new), File: electron/window-manager.ts (new), Task: LAYOUT-004
+
+- [ ] **Implement module state persistence**
+  - ID: LAYOUT-009
+  - Assignee: Claude
+  - Type: feature
+  - Priority: medium
+  - Description: Save and restore module positions, sizes, and states across sessions per workspace
+  - Resources: File: stores/layout-persistence.ts (new), Task: LAYOUT-004
 
 - [ ] **Create autonomous agent mode store and types**
   - ID: AGENT-001
@@ -164,9 +260,33 @@
   - Description: Configure electron-builder and create installers for macOS, Windows, and Linux platforms
   - Resources: File: package.json, File: electron-builder.yml (new), File: .github/workflows/build.yml (new)
 
-## In Progress (0)
+## In Progress (1)
 
-## Completed (70)
+- [ ] **Build dual Claude terminal support in right sidebar** ⏳
+  - ID: LAYOUT-003
+  - Assignee: Claude
+  - Type: feature
+  - Priority: high
+  - Description: Enable split view in right sidebar to show two ClaudeTerminalTabs instances simultaneously with independent tab groups
+  - Resources: File: components/Layout/RightSidebar.vue, File: components/Terminal/ClaudeTerminalTabs.vue, Task: LAYOUT-002
+
+## Completed (72)
+
+- [x] ~~Create activity bar component with icon navigation~~
+  - ~~ID: LAYOUT-001~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Build VS Code-style activity bar with icons for Explorer, Claude AI, Tasks, Knowledge, Context, Source Control, Checkpoints, Worktrees, Prompts, and Terminal~~
+  - ~~Resources: File: components/Layout/ActivityBar.vue (created), File: stores/layout.ts (updated)~~
+
+- [x] ~~Implement three-dock layout system architecture~~
+  - ~~ID: LAYOUT-002~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Create flexible three-dock system (left, right, bottom) with Splitpanes for resizable panels, supporting module placement in any dock~~
+  - ~~Resources: File: components/Layout/IDELayout.vue (refactored), File: components/Layout/LeftDock.vue (created), File: components/Layout/RightSidebar.vue (created), File: components/Layout/BottomDock.vue (created), File: stores/layout.ts (enhanced)~~
 
 - [x] ~~Fix input modal not showing and Claude Time Machine integration~~
   - ~~Assignee: Claude~~

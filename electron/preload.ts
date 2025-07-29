@@ -105,6 +105,7 @@ const electronAPI = {
     get: (key: string) => ipcRenderer.invoke('store:get', key),
     set: (key: string, value: any) => ipcRenderer.invoke('store:set', key, value),
     delete: (key: string) => ipcRenderer.invoke('store:delete', key),
+    getAll: () => ipcRenderer.invoke('store:getAll'),
     getHomePath: () => ipcRenderer.invoke('store:getHomePath')
   },
   shell: {

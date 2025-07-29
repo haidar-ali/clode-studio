@@ -501,16 +501,16 @@ async function deleteSnapshot(snapshot: any) {
 
 async function viewSnapshotChanges(snapshot: any) {
   // Show detailed file changes in a modal or expand view
-  console.log('📸 Viewing changes for snapshot:', snapshot.name);
+
   
   if (snapshot.fileChanges) {
     const totalChanges = snapshot.fileChanges.summary.filesChanged;
-    console.log(`📸 Snapshot contains ${totalChanges} file changes:`);
-    console.log(`  + ${snapshot.fileChanges.added.length} added files`);
-    console.log(`  ~ ${snapshot.fileChanges.modified.length} modified files`);
-    console.log(`  - ${snapshot.fileChanges.removed.length} removed files`);
+  
+  
+  
+  
   } else {
-    console.log('📸 Legacy snapshot with no file content tracking');
+  
   }
 }
 
@@ -522,7 +522,7 @@ function showSelectiveRestore(snapshot: any) {
 async function handleSelectiveRestoreComplete() {
   // Refresh the source control view after selective restore
   await refresh();
-  console.log('✅ Selective restore completed');
+
 }
 
 function showCherryPick(snapshot: any) {
@@ -533,7 +533,7 @@ function showCherryPick(snapshot: any) {
 async function handleCherryPickComplete() {
   // Refresh the source control view after cherry-pick
   await refresh();
-  console.log('🍒 Cherry-pick completed');
+
 }
 
 async function switchWorkspace(path: string) {

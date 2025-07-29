@@ -369,7 +369,7 @@ async function restoreSelected() {
     const fileContentManager = useFileContentManager(props.snapshot.projectPath);
     await fileContentManager.restoreFiles(filteredChanges);
     
-    console.log(`✅ Successfully restored ${selectedCount.value} selected files`);
+  
     
     // Close modal and notify parent
     emit('restore-complete');

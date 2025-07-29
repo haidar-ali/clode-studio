@@ -61,7 +61,7 @@ export const useWorktreeStore = defineStore('worktree', () => {
     try {
       // Get worktrees
       const worktreeResult = await window.electronAPI.worktree.list();
-      console.log('[WorktreeStore] List worktrees result:', worktreeResult);
+    
       if (worktreeResult.success && worktreeResult.worktrees) {
         worktrees.value = worktreeResult.worktrees.map(w => ({
           ...w,
@@ -71,7 +71,7 @@ export const useWorktreeStore = defineStore('worktree', () => {
 
       // Get sessions
       const sessionResult = await window.electronAPI.worktree.sessions();
-      console.log('[WorktreeStore] List sessions result:', sessionResult);
+    
       if (sessionResult.success && sessionResult.sessions) {
         sessions.value = sessionResult.sessions.map(s => ({
           ...s,
@@ -79,12 +79,12 @@ export const useWorktreeStore = defineStore('worktree', () => {
           lastAccessed: new Date(s.lastAccessed),
           metadata: s.metadata || {}
         }));
-        console.log('[WorktreeStore] Processed sessions:', sessions.value);
+      
         console.log('[WorktreeStore] Session metadata:', sessions.value.map(s => ({ 
           name: s.name, 
           metadata: s.metadata 
         })));
-        console.log('[WorktreeStore] Claude sessions:', claudeSessions.value);
+      
       }
     } catch (err) {
       console.error('Failed to refresh worktrees:', err);
