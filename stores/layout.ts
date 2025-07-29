@@ -3,7 +3,7 @@ import { defineStore } from 'pinia';
 // Layout mode removed - always using full IDE mode with modular docks
 
 export type ModuleId = 'explorer' | 'explorer-editor' | 'claude' | 'tasks' | 'knowledge' | 'context' | 
-  'source-control' | 'checkpoints' | 'worktrees' | 'prompts' | 'terminal';
+  'source-control' | 'checkpoints' | 'worktrees' | 'prompts' | 'terminal' | 'snapshots';
 
 export interface DockConfiguration {
   leftDock: ModuleId[];

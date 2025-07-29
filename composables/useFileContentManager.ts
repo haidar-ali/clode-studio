@@ -325,6 +325,9 @@ export class FileContentManager {
               isTextFile: fileInfo.isTextFile // Use backend's istextorbinary result
             };
 
+            // Store the new content first
+            await this.storeContent(fileInfo.content, 'text/plain', fileInfo.encoding);
+            
             // Create diff for text files
             if (fileInfo.isTextFile && previousFile.contentHash) {
               try {
@@ -350,7 +353,6 @@ export class FileContentManager {
             }
             
             modified.push(fileChange);
-            await this.storeContent(fileInfo.content, 'text/plain', fileInfo.encoding);
             
             totalBytesChanged += Math.abs(fileInfo.size - (previousFile.size || 0));
             if (fileInfo.isTextFile) {

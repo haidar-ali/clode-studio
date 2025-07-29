@@ -61,6 +61,7 @@ import { useSourceControlStore } from '~/stores/source-control';
 import { useKnowledgeStore } from '~/stores/knowledge';
 import { useContextStore } from '~/stores/context';
 import { useCheckpointV2Store } from '~/stores/checkpoint-v2';
+import { useSnapshotsStore } from '~/stores/snapshots';
 import { useWorkspaceManager } from '~/composables/useWorkspaceManager';
 import { useModuleDragDrop } from '~/composables/useModuleDragDrop';
 import Icon from '~/components/Icon.vue';
@@ -78,6 +79,7 @@ const sourceControlStore = useSourceControlStore();
 const knowledgeStore = useKnowledgeStore();
 const contextStore = useContextStore();
 const checkpointStore = useCheckpointV2Store();
+const snapshotsStore = useSnapshotsStore();
 const { activeWorktrees } = useWorkspaceManager();
 const { dragDropState, startDrag, endDrag } = useModuleDragDrop();
 
@@ -139,6 +141,12 @@ const activityItems = computed<ActivityItem[]>(() => {
       label: 'Checkpoints',
       icon: 'mdi:history',
       badge: checkpointStore.checkpoints.length
+    },
+    {
+      id: 'snapshots',
+      label: 'Snapshots',
+      icon: 'mdi:camera',
+      badge: snapshotsStore.recentSnapshots.length
     },
     {
       id: 'worktrees',
