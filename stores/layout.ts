@@ -3,7 +3,7 @@ import { defineStore } from 'pinia';
 // Layout mode removed - always using full IDE mode with modular docks
 
 export type ModuleId = 'explorer' | 'explorer-editor' | 'claude' | 'tasks' | 'knowledge' | 'context' | 
-  'source-control' | 'checkpoints' | 'worktrees' | 'prompts' | 'terminal' | 'snapshots';
+  'source-control' | 'worktrees' | 'prompts' | 'terminal' | 'snapshots';
 
 export interface DockConfiguration {
   leftDock: ModuleId[];
@@ -120,6 +120,25 @@ export const useLayoutStore = defineStore('layout', {
       if (moduleId === 'terminal' && targetDock !== 'bottomDock') {
         console.warn('Cannot move Terminal from bottom dock');
         return;
+      }
+      
+      // Check which dock the module is currently in and update active module if needed
+      if (this.dockConfig.leftDock.includes(moduleId) && this.activeLeftModule === moduleId) {
+        // Switch to default or first available module in left dock
+        const defaultModule = this.dockConfig.leftDock.find(id => id !== moduleId) || 'explorer-editor';
+        this.activeLeftModule = defaultModule;
+      }
+      
+      if (this.dockConfig.rightDock.includes(moduleId) && this.activeRightModule === moduleId) {
+        // Switch to default or first available module in right dock
+        const defaultModule = this.dockConfig.rightDock.find(id => id !== moduleId) || 'claude';
+        this.activeRightModule = defaultModule;
+      }
+      
+      if (this.dockConfig.bottomDock.includes(moduleId) && this.activeBottomModule === moduleId) {
+        // Switch to default or first available module in bottom dock
+        const defaultModule = this.dockConfig.bottomDock.find(id => id !== moduleId) || 'terminal';
+        this.activeBottomModule = defaultModule;
       }
       
       // Remove from all docks

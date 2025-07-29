@@ -19,8 +19,6 @@ import { fileWatcherService } from './file-watcher.js';
 import { createKnowledgeCache } from './knowledge-cache.js';
 import { GitService } from './git-service.js';
 import { GitServiceManager } from './git-service-manager.js';
-import { CheckpointService } from './checkpoint-service.js';
-import { CheckpointServiceManager } from './checkpoint-service-manager.js';
 import { WorktreeManager } from './worktree-manager.js';
 import { WorktreeManagerGlobal } from './worktree-manager-global.js';
 import { GitHooksManagerGlobal } from './git-hooks-manager-global.js';
@@ -48,8 +46,6 @@ const knowledgeCaches: Map<string, any> = new Map();
 // Git service instances per workspace
 const gitServices: Map<string, GitService> = new Map();
 
-// Checkpoint service instances per workspace
-const checkpointServices: Map<string, CheckpointService> = new Map();
 
 // Worktree manager instances per workspace
 const worktreeManagers: Map<string, WorktreeManager> = new Map();
@@ -104,7 +100,6 @@ function createWindow() {
 app.whenReady().then(() => {
   // Initialize all service managers (singletons)
   GitServiceManager.getInstance();
-  CheckpointServiceManager.getInstance();
   WorktreeManagerGlobal.getInstance();
   GitHooksManagerGlobal.getInstance();
   
@@ -1020,7 +1015,7 @@ async function fallbackSearch(workingDir: string, options: any) {
   const regex = new RegExp(pattern, caseSensitive ? 'g' : 'gi');
 
   // Default exclude patterns
-  const defaultExcludes = ['node_modules', 'dist', '.git', '.next', 'build', 'out', '.claude', '.claude-checkpoints', '.worktrees', '.output', 'coverage', '.nyc_output', 'tmp', 'temp', '.cache', '.parcel-cache', '.vscode', '.idea', '__pycache__', '.DS_Store', '.nuxt'];
+  const defaultExcludes = ['node_modules', 'dist', '.git', '.next', 'build', 'out', '.claude', '', '.worktrees', '.output', 'coverage', '.nyc_output', 'tmp', 'temp', '.cache', '.parcel-cache', '.vscode', '.idea', '__pycache__', '.DS_Store', '.nuxt'];
   const excludes = excludePattern
     ? [...defaultExcludes, ...excludePattern.split(',').map((p: string) => p.trim().replace('**/', '').replace('/**', ''))]
     : defaultExcludes;
@@ -1748,29 +1743,7 @@ ipcMain.handle('workspace:updateWorkingFiles', async (event, workspacePath: stri
   }
 });
 
-ipcMain.handle('workspace:saveCheckpoint', async (event, workspacePath: string, checkpoint: any) => {
-  try {
-    await workspacePersistence.saveCheckpoint(workspacePath, checkpoint);
-    return { success: true };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to save checkpoint'
-    };
-  }
-});
 
-ipcMain.handle('workspace:removeCheckpoint', async (event, workspacePath: string, checkpointId: string) => {
-  try {
-    await workspacePersistence.removeCheckpoint(workspacePath, checkpointId);
-    return { success: true };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to remove checkpoint'
-    };
-  }
-});
 
 ipcMain.handle('workspace:getRecentHistory', async (event, workspacePath: string, limit: number) => {
   try {
@@ -1809,7 +1782,6 @@ ipcMain.handle('workspace:importContext', async (event, workspacePath: string, j
 });
 
 // Current active services
-let currentCheckpointService: CheckpointService | null = null;
 let currentWorktreeManager: WorktreeManager | null = null;
 // let currentGitHooksManager: GitHooksManager | null = null; - now handled by GitHooksManagerGlobal
 
@@ -1832,13 +1804,6 @@ ipcMain.handle('workspace:setPath', async (event, workspacePath: string) => {
       console.error('[Main] Error updating GitServiceManager:', error);
     }
 
-    try {
-      // Update the Checkpoint Service Manager with the new workspace
-      const checkpointServiceManager = CheckpointServiceManager.getInstance();
-      checkpointServiceManager.setWorkspace(workspacePath);
-    } catch (error) {
-      console.error('[Main] Error updating CheckpointServiceManager:', error);
-    }
 
     try {
       // Update the Worktree Manager with the new workspace

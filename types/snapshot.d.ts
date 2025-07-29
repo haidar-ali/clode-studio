@@ -116,6 +116,7 @@ export interface SnapshotConfig {
   autoCleanupDays: number;
   autoSnapshotInterval?: number; // milliseconds
   enableAutoSnapshots: boolean;
+  enableClaudePromptSnapshots?: boolean; // Auto-snapshot on Claude prompts
 }
 
 export interface SnapshotQuickAction {

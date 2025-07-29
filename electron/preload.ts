@@ -246,10 +246,6 @@ const electronAPI = {
       ipcRenderer.invoke('workspace:updateOptimizationTime', workspacePath, lastOptimization),
     updateWorkingFiles: (workspacePath: string, workingFiles: string[]) =>
       ipcRenderer.invoke('workspace:updateWorkingFiles', workspacePath, workingFiles),
-    saveCheckpoint: (workspacePath: string, checkpoint: any) =>
-      ipcRenderer.invoke('workspace:saveCheckpoint', workspacePath, checkpoint),
-    removeCheckpoint: (workspacePath: string, checkpointId: string) =>
-      ipcRenderer.invoke('workspace:removeCheckpoint', workspacePath, checkpointId),
     getRecentHistory: (workspacePath: string, limit: number) =>
       ipcRenderer.invoke('workspace:getRecentHistory', workspacePath, limit),
     exportContext: (workspacePath: string) =>
@@ -319,21 +315,6 @@ const electronAPI = {
     clone: (url: string, localPath?: string) => ipcRenderer.invoke('git:clone', url, localPath),
     checkIsRepo: () => ipcRenderer.invoke('git:checkIsRepo'),
     checkIgnore: (workspacePath: string, paths: string[]) => ipcRenderer.invoke('git:checkIgnore', workspacePath, paths)
-  },
-  checkpoint: {
-    init: () => ipcRenderer.invoke('checkpoint:init'),
-    create: (metadata: any) => ipcRenderer.invoke('checkpoint:create', metadata),
-    list: () => ipcRenderer.invoke('checkpoint:list'),
-    get: (checkpointId: string) => ipcRenderer.invoke('checkpoint:get', checkpointId),
-    restore: (checkpointId: string, options?: any) => 
-      ipcRenderer.invoke('checkpoint:restore', checkpointId, options),
-    delete: (checkpointId: string) => ipcRenderer.invoke('checkpoint:delete', checkpointId),
-    compare: (id1: string, id2: string) => ipcRenderer.invoke('checkpoint:compare', id1, id2),
-    export: (checkpointId: string, exportPath: string) => 
-      ipcRenderer.invoke('checkpoint:export', checkpointId, exportPath),
-    import: (importPath: string) => ipcRenderer.invoke('checkpoint:import', importPath),
-    stats: () => ipcRenderer.invoke('checkpoint:stats'),
-    clean: (options?: any) => ipcRenderer.invoke('checkpoint:clean', options)
   },
   worktree: {
     list: () => ipcRenderer.invoke('worktree:list'),

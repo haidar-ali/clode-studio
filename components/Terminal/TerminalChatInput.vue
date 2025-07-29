@@ -64,7 +64,6 @@
 
 <script setup lang="ts">
 import { ref, computed, nextTick, watch, onMounted, onUnmounted } from 'vue';
-import { useCheckpoints } from '~/composables/useCheckpoints';
 
 interface QuickPrompt {
   id: string;
@@ -88,8 +87,6 @@ const message = ref('');
 const textareaRef = ref<HTMLTextAreaElement>();
 const showPrompts = ref(false);
 
-// Checkpoint system
-const { createCheckpoint, isCreatingCheckpoint } = useCheckpoints();
 
 const quickPrompts: QuickPrompt[] = [
   {
@@ -190,19 +187,11 @@ function handleKeydown(event: KeyboardEvent) {
 }
 
 async function sendMessage() {
-  if (!message.value.trim() || isCreatingCheckpoint.value) return;
+  if (!message.value.trim()) return;
   
   const userMessage = message.value.trim();
   
   try {
-    // 🔍 Create checkpoint BEFORE sending to Claude
-  
-    const checkpointCreated = await createCheckpoint(props.instanceId, userMessage);
-    
-    if (!checkpointCreated) {
-      console.warn('[Checkpoint] Failed to create checkpoint, but continuing with message...');
-    }
-    
     // Send the message through the Claude API
     await window.electronAPI.claude.send(props.instanceId, userMessage);
     

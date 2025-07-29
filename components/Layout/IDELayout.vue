@@ -162,7 +162,6 @@ import KnowledgePanel from '~/components/Knowledge/KnowledgePanel.vue';
 import CommandStudio from '~/components/Commands/CommandStudio.vue';
 import PromptStudio from '~/components/Prompts/PromptStudio.vue';
 import InputModal from '~/components/Common/InputModal.vue';
-import CheckpointPanel from '~/components/Checkpoint/CheckpointPanel.vue';
 import WorktreePanel from '~/components/Worktree/WorktreePanel.vue';
 import WorktreeTabBar from '~/components/Layout/WorktreeTabBar.vue';
 import SourceControlV2 from '~/components/SourceControlV2/SourceControlV2.vue';
@@ -185,7 +184,7 @@ const contextManager = useContextManager();
 const commandsStore = useCommandsStore();
 const snapshotTriggers = useSnapshotTriggers();
 const { dragDropState } = useModuleDragDrop();
-const bottomTab = ref<'tasks' | 'terminal' | 'context' | 'knowledge' | 'prompts' | 'source-control' | 'checkpoints' | 'worktrees'>('tasks');
+const bottomTab = ref<'tasks' | 'terminal' | 'context' | 'knowledge' | 'prompts' | 'source-control' | 'worktrees'>('tasks');
 const showGlobalSearch = ref(false);
 const showMCPModal = ref(false);
 const showCommandsModal = ref(false);
@@ -198,9 +197,6 @@ const contextFilesCount = computed(() => contextManager.statistics.value?.totalF
 useFileWatcher();
 // Set up TASKS.md watching
 useTasksFileWatcher();
-// Set up auto-checkpoint DEPRECATED
-//const { useAutoCheckpoint } = await import('~/composables/useAutoCheckpoint');
-//useAutoCheckpoint();
 
 
 const handleResize = (event: any) => {

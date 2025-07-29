@@ -11,10 +11,12 @@
         <Icon name="mdi:menu" size="16" />
       </button>
       
+      <!-- Branch status commented out for now
       <span class="status-item">
         <Icon name="mdi:source-branch" />
         main
       </span>
+      -->
       <span class="status-item" v-if="activeTab">
         {{ activeTab.language }}
       </span>

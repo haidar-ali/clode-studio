@@ -7,9 +7,9 @@
       :class="{ capturing: isCapturing }"
       title="Capture snapshot (Cmd+Shift+S)"
     >
-      <Icon name="camera" v-if="!isCapturing" />
-      <Icon name="loader" v-else class="animate-spin" />
-      <span class="btn-text">{{ isCapturing ? 'Capturing...' : 'Snapshot' }}</span>
+      <Icon name="mdi:camera" v-if="!isCapturing" />
+      <Icon name="mdi:loading" v-else class="animate-spin" />
+      <span class="btn-text">{{ isCapturing ? 'Capturing...' : 'Quick Snapshot' }}</span>
     </button>
     
     <div class="snapshot-info" v-if="lastSnapshotTime">
@@ -25,7 +25,7 @@
         class="action-btn"
         title="Browse snapshots"
       >
-        <Icon name="list" />
+        <Icon name="mdi:format-list-bulleted" />
       </button>
       <button
         @click="toggleAutoSnapshots"
@@ -33,14 +33,14 @@
         :class="{ active: config.enableAutoSnapshots }"
         :title="`Auto-snapshots ${config.enableAutoSnapshots ? 'ON' : 'OFF'}`"
       >
-        <Icon name="clock" />
+        <Icon name="mdi:clock-outline" />
       </button>
     </div>
     
     <!-- Snapshot captured notification -->
     <Transition name="fade">
       <div v-if="showNotification" class="snapshot-notification">
-        <Icon name="check-circle" class="success-icon" />
+        <Icon name="mdi:check-circle" class="success-icon" />
         <span>Snapshot captured!</span>
       </div>
     </Transition>

@@ -244,6 +244,7 @@
     </div>
 
     <!-- Snapshots timeline -->
+    <!-- Temporarily commented out - snapshots now have their own tab
     <div class="snapshots-section" v-if="recentSnapshots.length > 0">
       <div class="section-header" @click="toggleSection('snapshots')">
         <Icon 
@@ -266,6 +267,7 @@
         />
       </div>
     </div>
+    -->
 
     <!-- Workspace/Worktree Switcher Modal -->
     <WorkspaceSwitcher

@@ -202,6 +202,17 @@
               </label>
             </div>
 
+            <div class="form-group">
+              <label class="checkbox-label">
+                <input 
+                  type="checkbox" 
+                  v-model="snapshotsStore.config.enableClaudePromptSnapshots"
+                  @change="updateClaudePromptSnapshots"
+                />
+                Auto-snapshot when sending prompts to Claude
+              </label>
+            </div>
+
             <div class="form-group" v-if="snapshotsStore.config.enableAutoSnapshots">
               <label>Auto-snapshot interval</label>
               <select v-model="snapshotsStore.config.autoSnapshotInterval" @change="updateAutoSnapshots" class="form-input">
@@ -429,6 +440,14 @@ function updateAutoSnapshots() {
   }
 }
 
+function updateClaudePromptSnapshots() {
+  if (snapshotsStore.config.enableClaudePromptSnapshots) {
+    snapshotsStore.startClaudePromptTracking();
+  } else {
+    snapshotsStore.stopClaudePromptTracking();
+  }
+}
+
 async function cleanOldSnapshots() {
   const confirmed = await dialogs.confirm(
     `This will remove snapshots older than ${snapshotsStore.config.autoCleanupDays} days. Continue?`,
@@ -450,11 +469,19 @@ watch(() => sourceControl.currentBranch, async (newBranch, oldBranch) => {
 
 // Initialize
 onMounted(async () => {
+  // Load saved config first
+  await snapshotsStore.loadConfig();
+  
   await refresh();
   
   // Start auto-snapshots if enabled
   if (snapshotsStore.config.enableAutoSnapshots) {
     snapshotsStore.startAutoSnapshots();
+  }
+  
+  // Start Claude prompt tracking if enabled
+  if (snapshotsStore.config.enableClaudePromptSnapshots) {
+    snapshotsStore.startClaudePromptTracking();
   }
 });
 </script>

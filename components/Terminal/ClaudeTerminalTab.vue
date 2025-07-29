@@ -28,15 +28,6 @@
           <Icon name="mdi:stop" size="16" />
           <span>Stop</span>
         </button>
-        <button
-          v-if="hasUndo"
-          @click="undoLastCheckpoint"
-          class="icon-button undo-button"
-          :disabled="isUndoing"
-          :title="checkpointInfo ? `Undo to checkpoint: ${checkpointInfo.message.substring(0, 30)}... (${checkpointInfo.time})` : 'Undo last Claude action'"
-        >
-          <Icon name="mdi:undo" size="16" />
-        </button>
         <ClaudeRunConfigSelector
           v-if="instance.status === 'disconnected'"
           @config-changed="onConfigChanged"
@@ -78,7 +69,6 @@ import TerminalChatInput from './TerminalChatInput.vue';
 import ClaudeRunConfigSelector from './ClaudeRunConfigSelector.vue';
 import type { ClaudeRunConfig } from '~/stores/claude-run-configs';
 import { useGitBranch } from '~/composables/useGitBranch';
-import { useCheckpoints } from '~/composables/useCheckpoints';
 import 'xterm/css/xterm.css';
 
 const props = defineProps<{
@@ -93,7 +83,6 @@ const instancesStore = useClaudeInstancesStore();
 const contextManager = useContextManager();
 const commandsStore = useCommandsStore();
 const { currentBranch, isWorktree } = useGitBranch();
-const { hasUndo, undoLastCheckpoint, isUndoing, checkpointInfo } = useCheckpoints();
 const terminalElement = ref<HTMLElement>();
 const showChatInput = ref(false);
 const selectedRunConfig = ref<ClaudeRunConfig | null>(null);
@@ -282,6 +271,11 @@ const initTerminal = () => {
     if (props.instance.status === 'connected') {
       // Send all data to Claude immediately for proper terminal handling
       window.electronAPI.claude.send(props.instance.id, data);
+      
+      // Fire event when user presses Enter (sends a prompt)
+      if (data === '\r' || data === '\n') {
+        window.dispatchEvent(new CustomEvent(`claude-prompt-sent-${props.instance.id}`));
+      }
     }
   });
 

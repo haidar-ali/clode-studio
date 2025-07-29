@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import type { ClaudeSnapshot, SnapshotConfig, SnapshotDiff } from '~/types/snapshot';
 import { useEditorStore } from './editor';
 import { useSourceControlStore } from './source-control';
@@ -15,13 +15,14 @@ export const useSnapshotsStore = defineStore('snapshots', () => {
   const lastSnapshotTime = ref<Date | null>(null);
   const selectedSnapshotId = ref<string | null>(null);
   
-  // Configuration
+  // Configuration with new defaults
   const config = ref<SnapshotConfig>({
-    maxSnapshots: 100,
-    maxSizeMb: 50,
+    maxSnapshots: 50,
+    maxSizeMb: 100,
     autoCleanupDays: 30,
     autoSnapshotInterval: 600000, // 10 minutes
-    enableAutoSnapshots: true
+    enableAutoSnapshots: true,
+    enableClaudePromptSnapshots: false // New setting for Claude prompt snapshots
   });
 
   // Computed
@@ -426,6 +427,142 @@ export const useSnapshotsStore = defineStore('snapshots', () => {
     }
   }
 
+  // Save config to workspace
+  async function saveConfig() {
+    if (typeof window !== 'undefined' && window.electronAPI?.store?.set) {
+      try {
+        const workspacePath = await window.electronAPI.workspace.getCurrentPath();
+        if (workspacePath) {
+          const key = `snapshots-config-${workspacePath.replace(/[^a-zA-Z0-9]/g, '_')}`;
+          // Create a plain object with only serializable data
+          const serializableConfig = {
+            maxSnapshots: config.value.maxSnapshots,
+            maxSizeMb: config.value.maxSizeMb,
+            autoCleanupDays: config.value.autoCleanupDays,
+            autoSnapshotInterval: config.value.autoSnapshotInterval,
+            enableAutoSnapshots: config.value.enableAutoSnapshots,
+            enableClaudePromptSnapshots: config.value.enableClaudePromptSnapshots
+          };
+          await window.electronAPI.store.set(key, serializableConfig);
+        }
+      } catch (error) {
+        console.error('Failed to save snapshot config:', error);
+      }
+    }
+  }
+
+  // Load config from workspace
+  async function loadConfig() {
+    if (typeof window !== 'undefined' && window.electronAPI?.store?.get) {
+      try {
+        const workspacePath = await window.electronAPI.workspace.getCurrentPath();
+        if (workspacePath) {
+          const key = `snapshots-config-${workspacePath.replace(/[^a-zA-Z0-9]/g, '_')}`;
+          const savedConfig = await window.electronAPI.store.get(key);
+          if (savedConfig) {
+            config.value = { ...config.value, ...savedConfig };
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load snapshot config:', error);
+      }
+    }
+  }
+
+  // Listen for Claude prompts and create snapshots
+  let claudePromptListeners = new Map<string, () => void>();
+  let lastPromptTime = 0;
+  const MIN_PROMPT_INTERVAL = 5000; // Minimum 5 seconds between prompt snapshots
+  
+  function startClaudePromptTracking() {
+    if (!config.value.enableClaudePromptSnapshots) return;
+    
+    // Get all Claude instances
+    const claudeStore = useClaudeInstancesStore();
+    claudeStore.instancesList.forEach(instance => {
+      trackClaudeInstance(instance);
+    });
+    
+    // Watch for new instances
+    const unwatch = watch(() => claudeStore.instancesList, (instances) => {
+      instances.forEach(instance => {
+        // Track if connected and not already tracking
+        if (instance.status === 'connected' && !claudePromptListeners.has(instance.id)) {
+          trackClaudeInstance(instance);
+        }
+        // Remove listener if disconnected
+        else if (instance.status !== 'connected' && claudePromptListeners.has(instance.id)) {
+          const cleanup = claudePromptListeners.get(instance.id);
+          if (cleanup) {
+            cleanup();
+            claudePromptListeners.delete(instance.id);
+          }
+        }
+      });
+      
+      // Clean up listeners for removed instances
+      claudePromptListeners.forEach((cleanup, id) => {
+        if (!instances.find(i => i.id === id)) {
+          cleanup();
+          claudePromptListeners.delete(id);
+        }
+      });
+    }, { deep: true });
+  }
+  
+  function trackClaudeInstance(instance: any) {
+    if (!config.value.enableClaudePromptSnapshots) {
+      return;
+    }
+    if (instance.status !== 'connected') {
+      return;
+    }
+    if (claudePromptListeners.has(instance.id)) {
+      return;
+    }
+    
+    // Listen for user sending prompts to Claude
+    const handleUserPrompt = async () => {
+      // Throttle snapshots to prevent too many in quick succession
+      const now = Date.now();
+      if (now - lastPromptTime >= MIN_PROMPT_INTERVAL) {
+        lastPromptTime = now;
+        // Capture snapshot when user sends a prompt
+        await captureSnapshot('User prompt sent', 'auto-checkpoint');
+      }
+    };
+    
+    // Listen for the custom event that's fired when user sends a prompt
+    const eventName = `claude-prompt-sent-${instance.id}`;
+    window.addEventListener(eventName, handleUserPrompt);
+    
+    // Store cleanup function
+    const cleanup = () => {
+      window.removeEventListener(eventName, handleUserPrompt);
+    };
+    
+    claudePromptListeners.set(instance.id, cleanup);
+  }
+  
+  function stopClaudePromptTracking() {
+    claudePromptListeners.forEach(cleanup => cleanup());
+    claudePromptListeners.clear();
+  }
+
+  // Watch config changes to save and handle Claude tracking
+  watch(config, (newConfig, oldConfig) => {
+    saveConfig();
+    
+    // Handle Claude prompt tracking toggle
+    if (newConfig.enableClaudePromptSnapshots !== oldConfig.enableClaudePromptSnapshots) {
+      if (newConfig.enableClaudePromptSnapshots) {
+        startClaudePromptTracking();
+      } else {
+        stopClaudePromptTracking();
+      }
+    }
+  }, { deep: true });
+
   return {
     // State
     snapshots,
@@ -452,6 +589,10 @@ export const useSnapshotsStore = defineStore('snapshots', () => {
     addTag,
     removeTag,
     startAutoSnapshots,
-    stopAutoSnapshots
+    stopAutoSnapshots,
+    saveConfig,
+    loadConfig,
+    startClaudePromptTracking,
+    stopClaudePromptTracking
   };
 });

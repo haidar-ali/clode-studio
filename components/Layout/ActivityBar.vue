@@ -60,7 +60,6 @@ import { useTasksStore } from '~/stores/tasks';
 import { useSourceControlStore } from '~/stores/source-control';
 import { useKnowledgeStore } from '~/stores/knowledge';
 import { useContextStore } from '~/stores/context';
-import { useCheckpointV2Store } from '~/stores/checkpoint-v2';
 import { useSnapshotsStore } from '~/stores/snapshots';
 import { useWorkspaceManager } from '~/composables/useWorkspaceManager';
 import { useModuleDragDrop } from '~/composables/useModuleDragDrop';
@@ -78,7 +77,6 @@ const tasksStore = useTasksStore();
 const sourceControlStore = useSourceControlStore();
 const knowledgeStore = useKnowledgeStore();
 const contextStore = useContextStore();
-const checkpointStore = useCheckpointV2Store();
 const snapshotsStore = useSnapshotsStore();
 const { activeWorktrees } = useWorkspaceManager();
 const { dragDropState, startDrag, endDrag } = useModuleDragDrop();
@@ -135,12 +133,6 @@ const activityItems = computed<ActivityItem[]>(() => {
       label: 'Source Control',
       icon: 'mdi:source-branch',
       badge: sourceControlStore.totalChanges
-    },
-    {
-      id: 'checkpoints',
-      label: 'Checkpoints',
-      icon: 'mdi:history',
-      badge: checkpointStore.checkpoints.length
     },
     {
       id: 'snapshots',
