@@ -1,8 +1,26 @@
 # Clode Studio
 
-A powerful, modern IDE specifically designed for developers using Claude Code CLI. This IDE provides a comprehensive graphical interface around the Claude Code CLI tool, solving context loss issues in long coding sessions through intelligent features like persistent knowledge base, multi-instance support, visual task management, and context optimization.
+A modular, AI-first IDE built specifically for developers using Claude Code CLI. This IDE reimagines the traditional development environment with a flexible 3-dock system that lets you customize your workspace exactly how you need it. Built around the Claude Code CLI tool, it solves context loss issues in long coding sessions through intelligent features like persistent knowledge base, multi-instance support, visual task management, and context optimization.
+
+## 🎨 What Makes Clode Studio Different?
+
+Unlike traditional IDEs with fixed layouts, Clode Studio introduces a revolutionary **3-dock modular system** that adapts to your workflow:
+
+- **🔧 Modular Everything**: Every feature is a draggable module
+- **🎯 AI-First Design**: Claude AI is deeply integrated, not an afterthought
+- **🚀 Workflow Flexibility**: Switch between coding, planning, and research modes instantly
+- **💾 State Preservation**: Your layout and context persist across sessions
+- **⚡ Performance Focus**: Lazy-loaded modules keep everything fast
 
 ## ✨ Key Features
+
+### 🎯 Modular 3-Dock System
+- **Left Dock**: Primary workspace (Explorer + Editor by default)
+- **Right Dock**: AI assistance (Claude instances by default)
+- **Bottom Dock**: Utilities and terminals
+- Drag & drop modules between docks
+- Create your perfect workspace layout
+- State preservation across sessions
 
 ### 🤖 Multi-Instance Claude Support
 - Run multiple Claude instances simultaneously
@@ -78,10 +96,14 @@ A powerful, modern IDE specifically designed for developers using Claude Code CL
 - **State Preservation**: All worktree states maintained during operations
 
 ### 🎨 Flexible Layout System
-- **Full IDE Mode**: Complete development environment
-- **Kanban + Claude Mode**: Task-focused with AI assistance
-- Resizable panels with persistence
-- Multi-monitor friendly
+- **Modular Design**: Place any module in any dock
+- **Smart Defaults**: Optimized starting layout
+- **Drag & Drop**: Reorganize modules on the fly
+- **Split Views**: Multiple modules in right dock
+- **State Persistence**: Your layout is always remembered
+- **Activity Bar**: Quick module switching
+- **Resizable panels**: Fine-tune your workspace
+- **Multi-monitor friendly**: Scales to any screen size
 
 ## 🚀 Technology Stack
 
@@ -109,18 +131,25 @@ A powerful, modern IDE specifically designed for developers using Claude Code CL
 
 ## 📸 Screenshots
 
-### Full IDE Mode
-Complete development environment with all tools integrated:
-- Multi-instance Claude terminals
-- File explorer and editor
-- Knowledge base and task management
-- MCP connections and hooks
+### Modular Workspace
+The flexible 3-dock system adapts to your workflow:
+- **Development Mode**: Editor in left dock, Claude in right, terminal below
+- **Task Management**: Kanban in left, Claude in right, context below
+- **Research Mode**: Knowledge base in left, Claude + Prompts split in right
+- **Source Control**: Git in left, Claude in right, worktrees below
 
-### Kanban + Claude Mode (75/25 split)
-Perfect for project management with AI assistance:
-- Large Kanban board for task tracking
-- Claude terminal for AI-powered insights
-- Clean, focused interface
+### Available Modules
+Drag and drop these modules between docks:
+- **Explorer + Editor**: Combined file browser and code editor
+- **Claude AI**: Multi-instance AI assistant terminals
+- **Tasks**: Visual Kanban board synced with TASKS.md
+- **Knowledge**: Project documentation and notes
+- **Terminal**: System command line interface
+- **Source Control**: Git operations and timeline
+- **Worktrees**: Git worktree management
+- **Snapshots**: Project state capture and restore
+- **Context**: Context usage visualization
+- **Prompts**: AI prompt builder and templates
 
 ## 🛠️ Installation
 
@@ -179,8 +208,16 @@ claude --version
 
 1. **Launch the application**
 2. **Select workspace** using the folder button
-3. **Choose layout mode** (Full IDE or Kanban+Claude)
+3. **Customize your layout** by dragging modules between docks
 4. **Start coding** with Claude assistance!
+
+### Quick Layout Tips
+
+- **For Development**: Keep Editor in left, Claude in right, Terminal below
+- **For Planning**: Move Tasks to left dock, keep Claude accessible in right
+- **For Research**: Put Knowledge in left, split Claude + Prompts in right
+- **Need Space?**: Hide right sidebar with the toggle, minimize bottom dock
+- **Reset Layout**: Settings → Reset Layout to restore defaults
 
 ### Multi-Instance Claude
 
@@ -275,6 +312,30 @@ claude --version
    - See files added/removed/modified
    - Apply changes from one worktree to another
 
+### Customizing Your Workspace
+
+1. **Moving Modules**
+   - Drag module tabs between docks
+   - Right-click tabs for quick actions
+   - Some modules have preferred docks (e.g., Claude prefers right dock)
+
+2. **Split Views**
+   - Right dock supports split view mode
+   - Show two modules simultaneously
+   - Perfect for Claude + Knowledge or Claude + Prompts
+
+3. **Minimizing Panels**
+   - Bottom dock can be minimized
+   - Right sidebar can be hidden
+   - Activity bar can be collapsed
+   - More space for your code when needed
+
+4. **Workspace Presets**
+   - Development: Editor + Claude + Terminal
+   - Planning: Tasks + Claude + Knowledge
+   - Research: Knowledge + Claude + Context
+   - DevOps: Terminal + Claude + Worktrees
+
 ## 🔧 Advanced Features
 
 ### Personality System
@@ -333,6 +394,33 @@ Comprehensive guides available in `/docs`:
 - [Hooks User Guide](docs/HOOKS_USER_GUIDE.md)
 - [Slash Commands Guide](docs/SLASH_COMMANDS_GUIDE.md)
 - [MCP Troubleshooting](docs/MCP_TROUBLESHOOTING.md)
+
+## 🏗️ Architecture
+
+### Modular Design Philosophy
+
+Clode Studio is built on a modular architecture where each feature is a self-contained module that can be placed in any of the three docks:
+
+- **Left Dock**: Primary workspace (typically editor, file explorer, or tasks)
+- **Right Dock**: Secondary tools (Claude AI, knowledge base, prompts)
+- **Bottom Dock**: Supporting utilities (terminal, logs, output)
+
+### Module System
+
+Each module is:
+- **Self-contained**: Complete functionality in one component
+- **State-preserving**: Maintains state when moved between docks
+- **Lazy-loaded**: Only loaded when needed for performance
+- **Draggable**: Can be repositioned via drag & drop
+- **Configurable**: Has its own settings and preferences
+
+### Benefits of Modular Architecture
+
+1. **Flexibility**: Arrange your workspace exactly how you want
+2. **Performance**: Only load the modules you need
+3. **Scalability**: Easy to add new modules without affecting others
+4. **Maintainability**: Each module can be developed independently
+5. **Customization**: Create workspace layouts for different workflows
 
 ## 🤝 Contributing
 
@@ -433,14 +521,25 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## 🚧 Roadmap
 
-- [ ] Plugin system for extensions
+### Recently Completed ✅
+- [x] Modular 3-dock architecture
+- [x] Drag & drop module system
+- [x] Multi-instance Claude support
+- [x] Git worktree integration
+- [x] Snapshot system
+- [x] Knowledge base with search
+
+### Coming Soon
+- [ ] Custom module development API
+- [ ] Workspace layout presets
+- [ ] Module marketplace
 - [ ] Collaborative features
 - [ ] Cloud sync for settings
-- [ ] Mobile companion app
 - [ ] Voice commands
 - [ ] AI-powered code review
 - [ ] Integrated debugging
 - [ ] Performance profiling
+- [ ] Mobile companion app
 
 ---
 
