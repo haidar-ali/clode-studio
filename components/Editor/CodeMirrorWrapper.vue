@@ -21,12 +21,19 @@ import { EditorView, basicSetup } from 'codemirror';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { EditorState, StateEffect, StateField } from '@codemirror/state';
 import { keymap, Decoration } from '@codemirror/view';
+import { acceptCompletion, startCompletion, closeCompletion } from '@codemirror/autocomplete';
 import { useEditorStore } from '~/stores/editor';
 import { useCodeMirrorLanguages } from '~/composables/useCodeMirrorLanguages';
+import { useAutocomplete } from '~/composables/useAutocomplete';
+import { useGhostText } from '~/composables/useGhostText';
+import { useAutocompleteStore } from '~/stores/autocomplete';
 import KnowledgeMetadataBar from '~/components/Knowledge/KnowledgeMetadataBar.vue';
 
 const editorStore = useEditorStore();
+const autocompleteStore = useAutocompleteStore();
 const { getLanguageSupport, getLanguageName } = useCodeMirrorLanguages();
+const { createAutocompleteExtension } = useAutocomplete();
+const { createGhostTextExtension } = useGhostText();
 
 const activeTab = computed(() => editorStore.activeTab);
 const editorContainer = ref<HTMLElement>();
@@ -67,8 +74,57 @@ const createEditorExtensions = (filename?: string): any[] => {
     basicSetup,
     oneDark,
     highlightLineField,
-    // Add Ctrl+S save keybinding
+    // Add autocomplete extension (for LSP dropdown)
+    createAutocompleteExtension(),
+    // Add ghost text extension (for Claude AI inline suggestions)
+    createGhostTextExtension(async (prefix: string, suffix: string) => {
+      try {
+        // Only query Claude for ghost text if enabled
+        if (!autocompleteStore.settings.providers.claude.enabled) {
+          return '';
+        }
+        
+        // Call the ghost text API
+        const result = await window.electronAPI.autocomplete.getGhostText({ prefix, suffix });
+        return result.success ? result.suggestion : '';
+      } catch (error) {
+        console.error('[GhostText] Error fetching suggestion:', error);
+        return '';
+      }
+    }, {
+      delay: autocompleteStore.settings.providers.claude.timeout || 1000,
+      acceptOnClick: true
+    }),
+    // Add keyboard shortcuts
     keymap.of([
+      // Manual trigger for autocomplete (Ctrl+Space, but use Ctrl+. on Mac to avoid Spotlight conflict)
+      {
+        key: 'Ctrl-Space',
+        mac: 'Ctrl-.',
+        run: (view) => {
+          console.log('[Editor] Manual autocomplete trigger');
+          return startCompletion(view);
+        }
+      },
+      // Alternative trigger for autocomplete
+      {
+        key: 'Alt-/',
+        run: (view) => {
+          console.log('[Editor] Alternative autocomplete trigger');
+          return startCompletion(view);
+        }
+      },
+      // Accept completion with Tab
+      {
+        key: 'Tab',
+        run: acceptCompletion
+      },
+      // Close completion with Escape
+      {
+        key: 'Escape',
+        run: closeCompletion
+      },
+      // Save file
       {
         key: 'Ctrl-s',
         mac: 'Cmd-s',
@@ -137,6 +193,44 @@ const createEditorExtensions = (filename?: string): any[] => {
         '50%': { backgroundColor: 'rgba(255, 255, 0, 0.15)' },
         '75%': { backgroundColor: 'rgba(255, 255, 0, 0.08)' },
         '100%': { backgroundColor: 'rgba(255, 255, 0, 0.03)' }
+      },
+      // Autocomplete styles
+      '.cm-tooltip-autocomplete': {
+        backgroundColor: '#2d2d30',
+        border: '1px solid #454545',
+        borderRadius: '4px',
+        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.5)'
+      },
+      '.cm-tooltip-autocomplete > ul': {
+        fontFamily: 'Consolas, Monaco, "Courier New", monospace',
+        fontSize: '13px'
+      },
+      '.cm-tooltip-autocomplete > ul > li': {
+        padding: '2px 8px',
+        color: '#cccccc'
+      },
+      '.cm-tooltip-autocomplete > ul > li[aria-selected]': {
+        backgroundColor: '#094771',
+        color: '#ffffff'
+      },
+      '.cm-completionIcon': {
+        width: '16px',
+        opacity: 0.7,
+        marginRight: '4px'
+      },
+      '.cm-completionLabel': {
+        flex: 1
+      },
+      '.cm-completionDetail': {
+        fontStyle: 'italic',
+        color: '#969696',
+        marginLeft: '1em'
+      },
+      '.cm-completion-source': {
+        fontSize: '11px',
+        color: '#969696',
+        marginLeft: '8px',
+        fontStyle: 'italic'
       }
     }),
     EditorView.updateListener.of((update) => {
@@ -213,9 +307,15 @@ const goToLine = (lineNumber: number) => {
   }
 };
 
+// Store event listener reference
+let gotoLineHandler: ((event: Event) => void) | null = null;
+
 // Initialize CodeMirror
 onMounted(async () => {
   if (!process.client || !editorContainer.value) return;
+
+  // Initialize autocomplete store
+  await autocompleteStore.init();
 
   try {
     const state = EditorState.create({
@@ -231,22 +331,21 @@ onMounted(async () => {
     // Load initial content if there's an active tab
     if (activeTab.value) {
       setEditorContent(activeTab.value);
+      // Preload file context for better autocomplete
+      if (activeTab.value.filepath && window.electronAPI?.autocomplete) {
+        window.electronAPI.autocomplete.preloadFileContext(activeTab.value.filepath);
+      }
     }
 
     // Listen for goto-line events
-    const handleGotoLine = (event: Event) => {
+    gotoLineHandler = (event: Event) => {
       const customEvent = event as CustomEvent;
       if (customEvent.detail && customEvent.detail.line) {
         goToLine(customEvent.detail.line);
       }
     };
 
-    window.addEventListener('editor:goto-line', handleGotoLine);
-
-    // Cleanup listener on unmount
-    onUnmounted(() => {
-      window.removeEventListener('editor:goto-line', handleGotoLine);
-    });
+    window.addEventListener('editor:goto-line', gotoLineHandler);
 
   } catch (error) {
     console.error('Failed to initialize CodeMirror:', error);
@@ -305,6 +404,11 @@ watch(activeTab, async (newTab, oldTab) => {
 
       // Update the editor
       editorView.setState(newState);
+      
+      // Preload file context for better autocomplete
+      if (newTab.filepath && window.electronAPI?.autocomplete) {
+        window.electronAPI.autocomplete.preloadFileContext(newTab.filepath);
+      }
 
       // Restore scroll position
       editorView.scrollDOM.scrollTop = scrollTop;
@@ -339,6 +443,9 @@ watch(
 onUnmounted(() => {
   if (editorView) {
     editorView.destroy();
+  }
+  if (gotoLineHandler) {
+    window.removeEventListener('editor:goto-line', gotoLineHandler);
   }
 });
 </script>
@@ -395,5 +502,78 @@ onUnmounted(() => {
   justify-content: center;
   height: 100%;
   color: #858585;
+}
+
+/* Autocomplete Popup Styling */
+:deep(.cm-tooltip-autocomplete) {
+  background: #2a2a2a !important;
+  border: 1px solid #444 !important;
+  border-radius: 4px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+  padding: 4px 0 !important;
+}
+
+:deep(.cm-tooltip-autocomplete > ul) {
+  font-family: 'Fira Code', monospace !important;
+  font-size: 13px !important;
+  max-height: 200px !important;
+}
+
+:deep(.cm-tooltip-autocomplete > ul > li) {
+  padding: 4px 12px !important;
+  color: #e0e0e0 !important;
+  min-height: 24px !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+:deep(.cm-tooltip-autocomplete > ul > li[aria-selected]) {
+  background: #3d7aed !important;
+  color: #fff !important;
+}
+
+:deep(.cm-completionLabel) {
+  flex: 1 !important;
+  white-space: pre !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+:deep(.cm-completionDetail) {
+  font-size: 11px !important;
+  opacity: 0.7 !important;
+  margin-left: 8px !important;
+  font-style: italic !important;
+}
+
+:deep(.cm-completion-custom) {
+  display: flex !important;
+  align-items: center !important;
+  width: 100% !important;
+  gap: 8px !important;
+}
+
+:deep(.cm-completion-source) {
+  font-size: 10px !important;
+  padding: 2px 6px !important;
+  border-radius: 3px !important;
+  font-weight: 500 !important;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+}
+
+:deep(.cm-completion-confidence) {
+  font-size: 10px !important;
+  opacity: 0.7 !important;
+  margin-left: 4px !important;
+  flex-shrink: 0 !important;
+}
+
+/* Completion icon styling */
+:deep(.cm-completionIcon) {
+  width: 16px !important;
+  margin-right: 4px !important;
+  opacity: 0.8 !important;
 }
 </style>

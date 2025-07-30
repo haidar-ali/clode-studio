@@ -90,7 +90,7 @@
           </Splitpanes>
         </div>
 
-    <StatusBar />
+    <StatusBar @show-autocomplete-settings="showAutocompleteSettings = true" />
     
     <!-- Global Search Modal -->
     <GlobalSearch 
@@ -107,6 +107,12 @@
     
     <!-- Memory Editor Modal -->
     <MemoryEditorModal />
+    
+    <!-- Autocomplete Settings Modal -->
+    <AutocompleteSettingsModal 
+      :is-open="showAutocompleteSettings"
+      @close="showAutocompleteSettings = false"
+    />
     
     <!-- Context Status Modal -->
     <ContextStatusModal />
@@ -133,6 +139,9 @@
     
     <!-- Drag Indicator -->
     <DragIndicator />
+    
+    <!-- Autocomplete Debug Panel (Ctrl+Shift+D to toggle) -->
+    <AutocompleteDebug />
     
       </div> <!-- ide-main-content -->
     </div> <!-- ide-with-activity-bar -->
@@ -167,6 +176,8 @@ import WorktreeTabBar from '~/components/Layout/WorktreeTabBar.vue';
 import SourceControlV2 from '~/components/SourceControlV2/SourceControlV2.vue';
 import MCPManagerModal from '~/components/MCP/MCPManagerModal.vue';
 import CommandStudioModal from '~/components/Commands/CommandStudioModal.vue';
+import AutocompleteSettingsModal from '~/components/Editor/AutocompleteSettingsModal.vue';
+import AutocompleteDebug from '~/components/Debug/AutocompleteDebug.vue';
 import ActivityBar from '~/components/Layout/ActivityBar.vue';
 import LeftDock from '~/components/Layout/LeftDock.vue';
 import RightSidebar from '~/components/Layout/RightSidebar.vue';
@@ -188,6 +199,7 @@ const bottomTab = ref<'tasks' | 'terminal' | 'context' | 'knowledge' | 'prompts'
 const showGlobalSearch = ref(false);
 const showMCPModal = ref(false);
 const showCommandsModal = ref(false);
+const showAutocompleteSettings = ref(false);
 
 const taskCount = computed(() => tasksStore.taskCount);
 const projectPath = computed(() => tasksStore.projectPath);

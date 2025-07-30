@@ -25,6 +25,8 @@ import { GitHooksManagerGlobal } from './git-hooks-manager-global.js';
 import { GitHooksManager } from './git-hooks.js';
 import { SnapshotService } from './snapshot-service.js';
 import { setupGitTimelineHandlers } from './git-timeline-handlers.js';
+import { autocompleteService } from './autocomplete-service.js';
+import { ghostTextService } from './ghost-text-service.js';
 
 // Load environment variables from .env file
 import { config } from 'dotenv';
@@ -97,11 +99,15 @@ function createWindow() {
   });
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // Initialize all service managers (singletons)
   GitServiceManager.getInstance();
   WorktreeManagerGlobal.getInstance();
   GitHooksManagerGlobal.getInstance();
+  
+  // Initialize autocomplete services
+  await autocompleteService.initialize();
+  await ghostTextService.initialize();
   
   // Setup Git Timeline handlers
   setupGitTimelineHandlers();
@@ -1237,8 +1243,138 @@ app.on('before-quit', () => {
   terminals.clear();
 });
 
+// Autocomplete operations
+
+ipcMain.handle('autocomplete:getCompletion', async (event, request) => {
+  try {
+    const response = await autocompleteService.getCompletion(request);
+    return response;
+  } catch (error) {
+    console.error('Autocomplete error:', error);
+    return {
+      id: request.id,
+      items: [],
+      duration: 0,
+      provider: 'error',
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+});
+
+// Ghost text handler (for inline AI suggestions)
+ipcMain.handle('autocomplete:getGhostText', async (event, { prefix, suffix }) => {
+  console.log('[Main] Ghost text suggestion requested');
+  try {
+    const suggestion = await ghostTextService.getGhostTextSuggestion(prefix, suffix);
+    console.log('[Main] Returning ghost text suggestion:', suggestion ? suggestion.substring(0, 50) + '...' : 'empty');
+    return { success: true, suggestion };
+  } catch (error) {
+    console.error('[Main] Ghost text error:', error);
+    return { success: false, suggestion: '', error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('autocomplete:streamCompletion', async (event, request) => {
+  try {
+    // For streaming, we'll collect chunks and send them via events
+    const chunks = [];
+    for await (const chunk of autocompleteService.streamCompletion(request)) {
+      chunks.push(chunk);
+      // Send chunk to renderer
+      mainWindow?.webContents.send(`autocomplete:chunk:${request.id}`, chunk);
+    }
+    return { success: true, chunks };
+  } catch (error) {
+    console.error('Stream completion error:', error);
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('autocomplete:clearCache', async () => {
+  try {
+    autocompleteService.clearCache();
+    return { success: true };
+  } catch (error) {
+    console.error('Clear cache error:', error);
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('autocomplete:preloadFileContext', async (event, filepath) => {
+  try {
+    await autocompleteService.preloadFileContext(filepath);
+    return { success: true };
+  } catch (error) {
+    console.error('Preload context error:', error);
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('autocomplete:cancelRequest', async (event, requestId) => {
+  try {
+    autocompleteService.cancelRequest(requestId);
+    return { success: true };
+  } catch (error) {
+    console.error('Cancel request error:', error);
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('autocomplete:checkHealth', async () => {
+  try {
+    return await autocompleteService.checkHealth();
+  } catch (error) {
+    console.error('Autocomplete health check error:', error);
+    return { available: false, status: 'error', error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('autocomplete:initializeProject', async (event, projectPath) => {
+  try {
+    await autocompleteService.initializeProject(projectPath);
+    await ghostTextService.initializeProject(projectPath);
+    return { success: true };
+  } catch (error) {
+    console.error('Autocomplete project initialization error:', error);
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('autocomplete:checkLSPServers', async () => {
+  try {
+    const { lspManager } = await import('./lsp-manager.js');
+    const servers = await lspManager.getAvailableServers();
+    return { success: true, servers };
+  } catch (error) {
+    console.error('LSP servers check error:', error);
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('autocomplete:getLSPStatus', async () => {
+  try {
+    const { lspManager } = await import('./lsp-manager.js');
+    const status = {
+      connected: lspManager.getConnectedServers(),
+      available: await lspManager.getAvailableServers()
+    };
+    return { success: true, status };
+  } catch (error) {
+    console.error('LSP status check error:', error);
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
 // Clean up Claude instances on app quit
-app.on('before-quit', () => {
+app.on('before-quit', async () => {
+  // Shutdown autocomplete service (including LSP servers)
+  try {
+    await autocompleteService.shutdown();
+  } catch (error) {
+    console.error('Failed to shutdown autocomplete service:', error);
+  }
+  
+  // Clean up Claude instances
   for (const [instanceId, claudePty] of claudeInstances) {
     try {
       claudePty.kill();
