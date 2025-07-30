@@ -67,6 +67,7 @@ export class FileWatcherService extends EventEmitter {
       ignored: [
         '**/node_modules/**',
         '**/.git/**',
+        '**/.worktrees/**',
         '**/dist/**',
         '**/build/**',
         '**/.DS_Store',

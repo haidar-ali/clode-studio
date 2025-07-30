@@ -338,7 +338,13 @@ export function useWorkspaceManager() {
   const initializeWorktrees = async () => {
     if (!currentWorkspacePath.value) return;
     
-  
+    // Save ALL Claude configurations before any changes
+    await claudeInstancesStore.saveAllWorkspaceConfigurations();
+    
+    // Save terminal configurations for all existing worktrees
+    for (const [path, _] of activeWorktrees.value) {
+      await terminalInstancesStore.saveWorkspaceConfiguration(path);
+    }
     
     // Clear existing worktrees first
     activeWorktrees.value.clear();
@@ -423,42 +429,150 @@ export function useWorkspaceManager() {
 
   // NEW: Create a new worktree
   const createWorktree = async (branchName: string, sessionName?: string, description?: string) => {
+    // Save ALL Claude configurations before creating new worktree
+    await claudeInstancesStore.saveAllWorkspaceConfigurations();
+    
+    // Save terminal configurations
+    for (const [path, _] of activeWorktrees.value) {
+      await terminalInstancesStore.saveWorkspaceConfiguration(path);
+    }
+    
     // Always create with a session - use branch name if no session name provided
     const finalSessionName = sessionName || branchName;
     const result = await window.electronAPI.worktree.create(branchName, finalSessionName, description);
-    if (result.success) {
-      await initializeWorktrees();
+    if (result.success && result.worktree) {
+      // Just add the new worktree to the list without reinitializing
+      await addWorktreeToList(result.worktree.path);
       return result.worktree;
     }
     throw new Error(result.error || 'Failed to create worktree');
   };
   
+  // NEW: Add a single worktree without clearing existing ones
+  const addWorktreeToList = async (worktreePath: string) => {
+    const result = await window.electronAPI.worktree.list();
+    if (result.success && result.worktrees) {
+      const newWorktree = result.worktrees.find(w => w.path === worktreePath);
+      if (newWorktree && !activeWorktrees.value.has(worktreePath)) {
+        // Save ALL Claude configurations before adding new one
+        await claudeInstancesStore.saveAllWorkspaceConfigurations();
+        
+        // Save terminal configurations
+        for (const [path, _] of activeWorktrees.value) {
+          await terminalInstancesStore.saveWorkspaceConfiguration(path);
+        }
+        
+        const session: WorktreeSession = {
+          path: newWorktree.path,
+          branch: newWorktree.branch,
+          isMainWorktree: false,
+          hasChanges: false,
+          ahead: 0,
+          behind: 0
+        };
+        activeWorktrees.value.set(worktreePath, session);
+        
+        // Create empty configuration for the new worktree
+        // This ensures it doesn't inherit or affect other worktree configurations
+        const key = `worktree-${worktreePath.replace(/[^a-zA-Z0-9]/g, '_')}`;
+        await window.electronAPI.store.set(key, {
+          instances: [],
+          activeInstanceId: null
+        });
+      }
+    }
+  };
+
   // NEW: Refresh git status for all worktrees
   const refreshWorktreeStatus = async () => {
-    for (const [path, session] of activeWorktrees.value) {
-      try {
-        // Temporarily set the git path to this worktree
-        await window.electronAPI.workspace.setPath(path);
-        
-        // Get git status
-        const statusResult = await window.electronAPI.git.status();
-        if (statusResult.success && statusResult.data) {
-          const status = statusResult.data;
-          session.hasChanges = (status.modified?.length || 0) + 
-                              (status.staged?.length || 0) + 
-                              (status.untracked?.length || 0) > 0;
-          session.ahead = status.ahead || 0;
-          session.behind = status.behind || 0;
+    // Save ALL Claude configurations before any updates
+    await claudeInstancesStore.saveAllWorkspaceConfigurations();
+    
+    // Save terminal configurations
+    for (const [path, _] of activeWorktrees.value) {
+      await terminalInstancesStore.saveWorkspaceConfiguration(path);
+    }
+    
+    // First check for any new worktrees
+    if (currentWorkspacePath.value) {
+      const result = await window.electronAPI.worktree.list();
+      if (result.success && result.worktrees) {
+        // Add any new worktrees that aren't already in our list
+        for (const worktree of result.worktrees) {
+          if (!activeWorktrees.value.has(worktree.path)) {
+            const session: WorktreeSession = {
+              path: worktree.path,
+              branch: worktree.branch,
+              isMainWorktree: worktree.path === currentWorkspacePath.value,
+              hasChanges: false,
+              ahead: 0,
+              behind: 0
+            };
+            activeWorktrees.value.set(worktree.path, session);
+            
+            // Create empty configuration for new worktrees discovered during refresh
+            const key = `worktree-${worktree.path.replace(/[^a-zA-Z0-9]/g, '_')}`;
+            const existingConfig = await window.electronAPI.store.get(key);
+            if (!existingConfig) {
+              await window.electronAPI.store.set(key, {
+                instances: [],
+                activeInstanceId: null
+              });
+            }
+          }
         }
-      } catch (error) {
-        console.warn(`Failed to get status for worktree ${path}:`, error);
       }
     }
     
-    // Restore the active worktree path
+    // Skip updating git status for now to avoid workspace path changes
+    // TODO: Implement a way to get git status without changing workspace path
+    // This would require a new IPC method that accepts a path parameter
+    
+    // For now, only update status for the current active worktree
     if (activeWorktreePath.value) {
-      await window.electronAPI.workspace.setPath(activeWorktreePath.value);
+      const session = activeWorktrees.value.get(activeWorktreePath.value);
+      if (session) {
+        try {
+          const statusResult = await window.electronAPI.git.status();
+          if (statusResult.success && statusResult.data) {
+            const status = statusResult.data;
+            session.hasChanges = (status.modified?.length || 0) + 
+                                (status.staged?.length || 0) + 
+                                (status.untracked?.length || 0) > 0;
+            session.ahead = status.ahead || 0;
+            session.behind = status.behind || 0;
+          }
+        } catch (error) {
+          console.warn(`Failed to get status for worktree ${activeWorktreePath.value}:`, error);
+        }
+      }
     }
+  };
+
+  // NEW: Remove a single worktree from the list without reinitializing
+  const removeWorktreeFromList = async (worktreePath: string) => {
+    // If we're removing the active worktree, switch to the main worktree
+    if (worktreePath === activeWorktreePath.value) {
+      // Find the main worktree
+      let mainWorktreePath = currentWorkspacePath.value;
+      for (const [path, session] of activeWorktrees.value) {
+        if (session.isMainWorktree) {
+          mainWorktreePath = path;
+          break;
+        }
+      }
+      
+      // Switch to main worktree if we're removing the active one
+      if (mainWorktreePath && mainWorktreePath !== worktreePath) {
+        await switchWorktreeWithinWorkspace(mainWorktreePath);
+      }
+    }
+    
+    // Remove the worktree from our list
+    activeWorktrees.value.delete(worktreePath);
+    
+    // Update git status for remaining worktrees
+    await refreshWorktreeStatus();
   };
 
   return {
@@ -476,6 +590,8 @@ export function useWorkspaceManager() {
     initializeWorktrees,
     createWorktree,
     refreshWorktreeStatus,
+    addWorktreeToList,
+    removeWorktreeFromList,
     hasMultipleWorktrees: computed(() => activeWorktrees.value.size > 1)
   };
 }

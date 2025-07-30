@@ -402,15 +402,10 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
     async saveWorkspaceConfiguration(workspacePath: string) {
       if (!workspacePath) return;
       
-      // Group instances by their working directory (worktree)
-      const instancesByWorktree = new Map<string, any[]>();
-      
-      Array.from(this.instances.values()).forEach(instance => {
-        const worktreePath = instance.workingDirectory;
-        if (!instancesByWorktree.has(worktreePath)) {
-          instancesByWorktree.set(worktreePath, []);
-        }
-        instancesByWorktree.get(worktreePath)!.push({
+      // Only save configuration for the specific worktree passed in
+      const instances = Array.from(this.instances.values())
+        .filter(instance => instance.workingDirectory === workspacePath)
+        .map(instance => ({
           id: instance.id,
           name: instance.name,
           personalityId: instance.personalityId,
@@ -419,25 +414,21 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
           color: instance.color,
           status: instance.status,
           pid: instance.pid
-        });
-      });
+        }));
       
-      // Save configuration for each worktree
-      for (const [worktreePath, instances] of instancesByWorktree) {
-        const key = `worktree-${worktreePath.replace(/[^a-zA-Z0-9]/g, '_')}`;
-        const worktreeConfig = {
-          instances,
-          // Store active instance ID per worktree
-          activeInstanceId: this.activeInstanceByWorktree.get(worktreePath) || 
-                          (instances.find(inst => inst.id === this.activeInstanceId) ? this.activeInstanceId : null)
-        };
-        
-        if (typeof window !== 'undefined' && window.electronAPI?.store?.set) {
-          try {
-            await window.electronAPI.store.set(key, worktreeConfig);
-          } catch (error) {
-            console.error('Failed to save worktree configuration:', error);
-          }
+      const key = `worktree-${workspacePath.replace(/[^a-zA-Z0-9]/g, '_')}`;
+      const worktreeConfig = {
+        instances,
+        // Store active instance ID per worktree
+        activeInstanceId: this.activeInstanceByWorktree.get(workspacePath) || 
+                        (instances.find(inst => inst.id === this.activeInstanceId) ? this.activeInstanceId : null)
+      };
+      
+      if (typeof window !== 'undefined' && window.electronAPI?.store?.set) {
+        try {
+          await window.electronAPI.store.set(key, worktreeConfig);
+        } catch (error) {
+          console.error('Failed to save worktree configuration:', error);
         }
       }
     },
@@ -455,17 +446,27 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
         
           
           if (config && config.instances) {
-            // Don't clear all instances - just load the ones for this worktree
-            // This allows multiple worktrees to maintain their own instances
+            // Get current active worktree to avoid affecting other worktrees
+            const { useWorkspaceManager } = await import('~/composables/useWorkspaceManager');
+            const workspaceManager = useWorkspaceManager();
+            const isCurrentWorktree = workspaceManager.activeWorktreePath.value === workspacePath;
             
-            // Restore instances from worktree config
+            // First, remove any existing instances for this worktree
+            // This prevents duplicates when switching back to a worktree
+            const instancesToRemove = Array.from(this.instances.values())
+              .filter(inst => inst.workingDirectory === workspacePath)
+              .map(inst => inst.id);
+            
+            instancesToRemove.forEach(id => this.instances.delete(id));
+            
+            // Then load instances from configuration
             config.instances.forEach((instanceData: any) => {
               const instance: ClaudeInstance = {
                 id: instanceData.id,
                 name: instanceData.name,
                 status: instanceData.status || 'disconnected', // Preserve status if available
                 personalityId: instanceData.personalityId,
-                workingDirectory: instanceData.workingDirectory, // Keep original worktree path
+                workingDirectory: instanceData.workingDirectory,
                 createdAt: instanceData.createdAt,
                 lastActiveAt: new Date().toISOString(),
                 color: instanceData.color,
@@ -478,16 +479,14 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
             if (config.activeInstanceId && this.instances.has(config.activeInstanceId)) {
               this.activeInstanceByWorktree.set(workspacePath, config.activeInstanceId);
               // Only set global active instance if we're loading the current worktree
-              const { useWorkspaceManager } = await import('~/composables/useWorkspaceManager');
-              const workspaceManager = useWorkspaceManager();
-              if (workspaceManager.activeWorktreePath.value === workspacePath) {
+              if (isCurrentWorktree) {
                 this.activeInstanceId = config.activeInstanceId;
               }
             }
             
           } else {
-            // No configuration found for this worktree
-          
+            // No configuration found for this worktree or empty configuration
+            // Don't do anything - this preserves existing instances
             // The ClaudeTerminalTabs component will create an instance if needed
           }
         } catch (error) {
@@ -511,6 +510,22 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
       // Clear instances map
       this.instances.clear();
       this.activeInstanceId = null;
+    },
+    
+    // Save all worktree configurations at once
+    async saveAllWorkspaceConfigurations() {
+      // Get all unique worktree paths from instances
+      const worktreePaths = new Set<string>();
+      Array.from(this.instances.values()).forEach(instance => {
+        if (instance.workingDirectory) {
+          worktreePaths.add(instance.workingDirectory);
+        }
+      });
+      
+      // Save configuration for each worktree
+      for (const path of worktreePaths) {
+        await this.saveWorkspaceConfiguration(path);
+      }
     },
     
     // Methods for checkpoint system

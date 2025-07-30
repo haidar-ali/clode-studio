@@ -220,8 +220,8 @@ async function loadWorktrees() {
   
   isLoading.value = true;
   try {
-    // Set workspace path first to ensure backend is initialized
-    await window.electronAPI.workspace.setPath(workspaceStore.currentPath);
+    // Don't set workspace path here as it might trigger reloads
+    // The workspace should already be set
     
     // Load worktrees
     const worktreeResult = await window.electronAPI.worktree.list();
@@ -263,17 +263,13 @@ async function handleRefresh() {
 async function handleCreate(branchName: string, sessionName?: string, description?: string) {
   isLoading.value = true;
   try {
-    // Always create with a session - use branch name if no session name provided
-    const finalSessionName = sessionName || branchName;
-    const result = await window.electronAPI.worktree.create(branchName, finalSessionName, description);
-    if (result.success) {
-      await loadWorktrees();
-      // Also refresh the workspace manager's worktree list
-      await workspaceManager.initializeWorktrees();
-      showCreateDialog.value = false;
-    } else {
-      console.error('Failed to create worktree:', result.error);
-    }
+    // Use workspace manager to create worktree to ensure proper handling
+    const newWorktree = await workspaceManager.createWorktree(branchName, sessionName, description);
+    await loadWorktrees();
+    showCreateDialog.value = false;
+  } catch (error) {
+    console.error('Failed to create worktree:', error);
+    alert(`Failed to create worktree: ${error}`);
   } finally {
     isLoading.value = false;
   }
@@ -299,8 +295,8 @@ async function handleRemove(worktree: Worktree, force: boolean = false) {
   const result = await window.electronAPI.worktree.remove(worktree.path, force);
   if (result.success) {
     await loadWorktrees();
-    // Also refresh the workspace manager's worktree list
-    await workspaceManager.initializeWorktrees();
+    // Remove the worktree from the active list without reinitializing everything
+    await workspaceManager.removeWorktreeFromList(worktree.path);
   } else if (!force && result.error?.includes('locked')) {
     if (confirm('Worktree is locked. Force remove?')) {
       await handleRemove(worktree, true);

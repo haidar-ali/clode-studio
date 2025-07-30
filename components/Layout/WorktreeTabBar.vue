@@ -92,20 +92,15 @@ const showCreateWorktreeDialog = () => {
 
 const handleCreateWorktree = async (branchName: string, sessionName?: string, description?: string) => {
   try {
-    await workspaceManager.createWorktree(branchName, sessionName, description);
+    const newWorktree = await workspaceManager.createWorktree(branchName, sessionName, description);
     
-    // Create a snapshot for the new worktree branch
-    const { useSnapshotsStore } = await import('~/stores/snapshots');
-    const snapshotsStore = useSnapshotsStore();
-    await snapshotsStore.captureSnapshot(
-      `New worktree: ${branchName}`,
-      'auto-branch'
-    );
+    // Don't capture snapshot immediately after creating worktree
+    // This was causing Claude instances to disconnect
+    // Users can manually create a snapshot if needed
     
     // Close dialog
     showCreateDialog.value = false;
-    // Refresh worktrees to show the new one
-    await workspaceManager.initializeWorktrees();
+    // Don't call any refresh - the worktree is already added by createWorktree
   } catch (error) {
     console.error('Failed to create worktree:', error);
     alert(`Failed to create worktree: ${error}`);
@@ -129,7 +124,7 @@ watch(() => sourceControlStore.isGitRepository, async (isGit) => {
     // Git repository was just initialized, load worktrees
     
     setTimeout(async () => {
-      await workspaceManager.initializeWorktrees();
+      await workspaceManager.refreshWorktreeStatus();
     }, 500); // Give git some time to fully initialize
   }
 });
@@ -139,7 +134,7 @@ watch(hasWorkspace, async (hasWs) => {
   if (hasWs && sourceControlStore.isGitRepository) {
     
     setTimeout(async () => {
-      await workspaceManager.initializeWorktrees();
+      await workspaceManager.refreshWorktreeStatus();
     }, 500);
   }
 });
@@ -152,7 +147,8 @@ onMounted(async () => {
     
     // Wait a bit for the backend to be fully initialized
     setTimeout(async () => {
-      await workspaceManager.initializeWorktrees();
+      // Only refresh status on mount, don't reinitialize
+      await workspaceManager.refreshWorktreeStatus();
     }, 100);
   } else {
     
