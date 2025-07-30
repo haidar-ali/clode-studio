@@ -1,27 +1,20 @@
 <template>
   <div class="worktree-panel">
     <!-- Header -->
-    <div class="panel-header">
+    <div class="timeline-header">
       <div class="header-title">
         <Icon name="mdi:source-branch-fork" class="header-icon" />
         <h3>Git Worktrees</h3>
       </div>
       <div class="header-actions">
         <button 
-          @click="handleRefresh" 
-          :disabled="isLoading"
-          class="icon-button"
-          title="Refresh"
-        >
-          <Icon name="mdi:refresh" :class="{ 'animate-spin': isLoading }" />
-        </button>
-        <button 
           @click="showCreateDialog = true" 
-          class="icon-button"
+          class="primary-button"
           title="Create worktree"
           :disabled="!isGitRepository"
         >
           <Icon name="mdi:plus" />
+          Create Worktree
         </button>
         <button 
           @click="showSessionComparison = true" 
@@ -30,14 +23,38 @@
         >
           <Icon name="mdi:compare" />
         </button>
+        <button 
+          @click="handleRefresh" 
+          :disabled="isLoading"
+          class="icon-button"
+          title="Refresh"
+        >
+          <Icon name="mdi:refresh" :class="{ 'animate-spin': isLoading }" />
+        </button>
+      </div>
+    </div>
+
+    <!-- Stats bar -->
+    <div class="stats-bar" v-if="initialized && isGitRepository">
+      <div class="stat">
+        <Icon name="mdi:source-branch-fork" />
+        <span>{{ worktrees.length }} worktree{{ worktrees.length !== 1 ? 's' : '' }}</span>
+      </div>
+      <div class="stat" v-if="sessions.length > 0">
+        <Icon name="mdi:bookmark" />
+        <span>{{ sessions.length }} session{{ sessions.length !== 1 ? 's' : '' }}</span>
+      </div>
+      <div class="stat" v-if="activeWorktreeBranch">
+        <Icon name="mdi:source-branch" />
+        <span>{{ activeWorktreeBranch }}</span>
       </div>
     </div>
 
     <!-- Not a git repository message -->
-    <div v-if="(!isGitRepository || worktrees.length === 0) && initialized && !isLoading" class="no-repo-message">
-      <Icon name="mdi:git" class="no-repo-icon" />
-      <p>{{ !isGitRepository ? 'This folder is not a Git repository' : 'No worktrees found' }}</p>
-      <p class="hint">{{ !isGitRepository ? 'Git worktrees require an initialized Git repository' : 'Create a worktree to get started' }}</p>
+    <div v-if="!isGitRepository && initialized && !isLoading" class="empty-state">
+      <Icon name="mdi:git" class="empty-icon" />
+      <p>This folder is not a Git repository</p>
+      <span>Git worktrees require an initialized Git repository</span>
     </div>
 
     <!-- Loading state -->
@@ -47,36 +64,29 @@
     </div>
 
     <!-- Worktree content -->
-    <div v-else class="worktree-content">
+    <div v-else class="timeline-container">
       <!-- Worktrees with sessions -->
-      <div v-if="worktrees.length > 0" class="section">
-        <div class="section-header">
-          <h4>Worktrees</h4>
-          <span class="count">{{ worktrees.length }}</span>
-        </div>
-        <div class="worktree-list">
-          <WorktreeCard
-            v-for="worktree in worktrees"
-            :key="worktree.path"
-            :worktree="worktree"
-            :session="findSessionForWorktree(worktree.path)"
-            @switch="handleSwitch"
-            @remove="handleRemove"
-            @lock="handleLock"
-            @create-session="handleCreateSession"
-            @delete-session="handleDeleteSession"
-          />
-        </div>
+      <div v-if="worktrees.length > 0" class="worktree-list">
+        <WorktreeCard
+          v-for="worktree in worktrees"
+          :key="worktree.path"
+          :worktree="worktree"
+          :session="findSessionForWorktree(worktree.path)"
+          :active-worktree-path="activeWorktreePath"
+          @switch="handleSwitch"
+          @remove="handleRemove"
+          @lock="handleLock"
+          @create-session="handleCreateSession"
+          @delete-session="handleDeleteSession"
+          @compare="handleCompare"
+        />
       </div>
 
       <!-- No worktrees message -->
       <div v-else class="empty-state">
-        <Icon name="mdi:source-branch-fork" />
+        <Icon name="mdi:source-branch-fork" class="empty-icon" />
         <p>No worktrees created yet</p>
-        <button @click="showCreateDialog = true" class="primary-button">
-          <Icon name="mdi:plus" />
-          Create Worktree
-        </button>
+        <span>Create a worktree to work on multiple branches simultaneously</span>
       </div>
     </div>
 
@@ -107,11 +117,11 @@
     <div v-if="showSessionComparison" class="session-comparison-panel">
       <div class="panel-header">
         <h3>Session Comparison</h3>
-        <button @click="showSessionComparison = false" class="close-button">
+        <button @click="showSessionComparison = false" class="close-button" title="Close">
           <Icon name="mdi:close" />
         </button>
       </div>
-      <SessionComparison />
+      <SessionComparison @close="showSessionComparison = false" />
     </div>
   </div>
 </template>
@@ -172,6 +182,13 @@ const showSessionComparison = ref(false);
 
 // Computed
 const isGitRepository = computed(() => sourceControlStore.isGitRepository);
+const activeWorktreePath = computed(() => workspaceManager.activeWorktreePath.value || '');
+const activeWorktreeBranch = computed(() => {
+  if (!activeWorktreePath.value) return null;
+  const activeWorktree = Array.from(workspaceManager.activeWorktrees.value.values())
+    .find(w => w.path === activeWorktreePath.value);
+  return activeWorktree?.branch || null;
+});
 
 // Helper function to find session for a worktree
 function findSessionForWorktree(worktreePath: string): WorktreeSession | undefined {
@@ -348,8 +365,12 @@ async function handleDeleteSession(sessionId: string) {
   }
 }
 
-function handleCompare(worktree1: Worktree, worktree2: Worktree) {
-  compareData.value = { worktree1, worktree2 };
+function handleCompare(worktree: Worktree, activeWorktreeData: { path: string }) {
+  // Find the actual active worktree object
+  const activeWorktree = worktrees.value.find(w => w.path === activeWorktreeData.path);
+  if (activeWorktree) {
+    compareData.value = { worktree1: activeWorktree, worktree2: worktree };
+  }
 }
 </script>
 
@@ -358,17 +379,17 @@ function handleCompare(worktree1: Worktree, worktree2: Worktree) {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: #252526;
+  background: #1e1e1e;
   color: #cccccc;
 }
 
-.panel-header {
+.timeline-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
-  border-bottom: 1px solid #454545;
-  background: #2d2d30;
+  padding: 16px 20px;
+  background: #252526;
+  border-bottom: 1px solid #3e3e42;
 }
 
 .header-title {
@@ -382,10 +403,11 @@ function handleCompare(worktree1: Worktree, worktree2: Worktree) {
   color: #007acc;
 }
 
-.panel-header h3 {
+.timeline-header h3 {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
+  color: #e1e1e1;
 }
 
 .header-actions {
@@ -399,13 +421,16 @@ function handleCompare(worktree1: Worktree, worktree2: Worktree) {
   padding: 6px;
   cursor: pointer;
   border-radius: 4px;
-  color: #858585;
+  color: #cccccc;
   transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .icon-button:hover:not(:disabled) {
   background: #3e3e42;
-  color: #cccccc;
+  color: #ffffff;
 }
 
 .icon-button:disabled {
@@ -422,7 +447,27 @@ function handleCompare(worktree1: Worktree, worktree2: Worktree) {
   to { transform: rotate(360deg); }
 }
 
-.no-repo-message,
+.stats-bar {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 12px 20px;
+  background: #252526;
+  border-bottom: 1px solid #3e3e42;
+  font-size: 13px;
+}
+
+.stat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #858585;
+}
+
+.stat Icon {
+  font-size: 16px;
+}
+
 .loading-state,
 .empty-state {
   flex: 1;
@@ -430,65 +475,42 @@ function handleCompare(worktree1: Worktree, worktree2: Worktree) {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 32px;
+  padding: 48px;
   text-align: center;
-  gap: 16px;
+  gap: 12px;
 }
 
-.no-repo-icon {
-  font-size: 48px;
-  color: #858585;
-  opacity: 0.5;
+.empty-icon {
+  font-size: 64px;
+  color: #525252;
+  margin-bottom: 8px;
 }
 
-.no-repo-message p {
+.empty-state p {
   margin: 0;
+  font-size: 16px;
+  color: #cccccc;
+  font-weight: 500;
+}
+
+.empty-state span {
+  font-size: 13px;
   color: #858585;
 }
 
-.hint {
-  font-size: 13px;
-  opacity: 0.7;
-}
-
-.worktree-content {
+.timeline-container {
   flex: 1;
   overflow-y: auto;
-  padding: 16px;
+  padding: 24px;
+  background: #1e1e1e;
 }
 
-.section {
-  margin-bottom: 24px;
-}
-
-.section-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.section-header h4 {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-  text-transform: uppercase;
-  color: #858585;
-}
-
-.count {
-  background: #3e3e42;
-  padding: 2px 8px;
-  border-radius: 12px;
-  font-size: 12px;
-  color: #858585;
-}
-
-.session-list,
 .worktree-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
+  max-width: 900px;
+  margin: 0 auto;
 }
 
 .primary-button {
@@ -498,7 +520,7 @@ function handleCompare(worktree1: Worktree, worktree2: Worktree) {
   padding: 8px 16px;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   transition: all 0.2s;
   display: flex;
@@ -506,8 +528,13 @@ function handleCompare(worktree1: Worktree, worktree2: Worktree) {
   gap: 6px;
 }
 
-.primary-button:hover {
+.primary-button:hover:not(:disabled) {
   background: #1a8cff;
+}
+
+.primary-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* Session comparison panel */

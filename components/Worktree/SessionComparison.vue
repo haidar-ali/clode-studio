@@ -2,7 +2,12 @@
   <div class="session-comparison">
     <!-- Header -->
     <div class="comparison-header">
-      <h3>Session Comparison</h3>
+      <div class="header-top">
+        <h3>Session Comparison</h3>
+        <button @click="$emit('close')" class="header-close-button" title="Close">
+          <Icon name="mdi:close" />
+        </button>
+      </div>
       <div class="session-selectors">
         <div class="selector-group">
           <label>Session 1:</label>
@@ -232,6 +237,10 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import Icon from '~/components/Icon.vue';
 
+const emit = defineEmits<{
+  close: [];
+}>();
+
 interface WorktreeSession {
   id: string;
   name: string;
@@ -446,10 +455,35 @@ function formatDate(date: Date) {
   background: #2d2d30;
 }
 
+.header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
 .comparison-header h3 {
-  margin: 0 0 12px 0;
+  margin: 0;
   font-size: 16px;
   font-weight: 600;
+}
+
+.header-close-button {
+  background: none;
+  border: none;
+  padding: 6px;
+  cursor: pointer;
+  border-radius: 4px;
+  color: #cccccc;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.header-close-button:hover {
+  background: #3e3e42;
+  color: #ffffff;
 }
 
 .session-selectors {

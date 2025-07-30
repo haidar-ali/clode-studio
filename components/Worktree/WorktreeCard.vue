@@ -12,6 +12,14 @@
         <span v-if="worktree.prunable" class="badge prunable-badge">Prunable</span>
       </div>
       <div class="card-actions">
+        <button
+          v-if="!worktree.isActive && activeWorktreePath && activeWorktreePath !== worktree.path"
+          @click="handleCompare"
+          class="icon-button"
+          title="Compare with active worktree"
+        >
+          <Icon name="mdi:compare" />
+        </button>
         <button 
           @click="$emit('lock', worktree, !worktree.isLocked)"
           class="icon-button"
@@ -65,6 +73,25 @@
         <Icon name="mdi:check-circle" />
         Currently Active
       </div>
+      <template v-else>
+        <button
+          @click="$emit('switch', worktree.path)"
+          class="action-button primary"
+          title="Switch to this worktree"
+        >
+          <Icon name="mdi:swap-horizontal" />
+          Switch
+        </button>
+        <button
+          v-if="activeWorktreePath && activeWorktreePath !== worktree.path"
+          @click="handleCompare"
+          class="action-button"
+          title="Compare with active worktree"
+        >
+          <Icon name="mdi:compare" />
+          Compare
+        </button>
+      </template>
       
       <!-- Session actions -->
       <button 
@@ -118,6 +145,7 @@ interface Session {
 const props = defineProps<{
   worktree: Worktree;
   session?: Session;
+  activeWorktreePath?: string;
 }>();
 
 const emit = defineEmits<{
@@ -126,6 +154,7 @@ const emit = defineEmits<{
   lock: [worktree: Worktree, lock: boolean];
   'create-session': [worktree: Worktree];
   'delete-session': [sessionId: string];
+  compare: [worktree1: Worktree, worktree2: Worktree];
 }>();
 
 function formatPath(path: string): string {
@@ -152,25 +181,35 @@ function formatDate(date: Date | string): string {
   if (minutes > 0) return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
   return 'just now';
 }
+
+function handleCompare() {
+  // Find the active worktree to compare with
+  if (props.activeWorktreePath && props.activeWorktreePath !== '') {
+    // We need to emit both worktrees, but we only have this one
+    // The parent component will need to find the active worktree
+    emit('compare', props.worktree, { path: props.activeWorktreePath } as Worktree);
+  }
+}
 </script>
 
 <style scoped>
 .worktree-card {
-  background: #2d2d30;
-  border: 1px solid #454545;
+  background: #252526;
+  border: 1px solid #3e3e42;
   border-radius: 8px;
-  padding: 16px;
+  padding: 20px;
   transition: all 0.2s;
+  cursor: pointer;
 }
 
 .worktree-card:hover {
-  border-color: #007acc;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-color: #505050;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 .worktree-card.active {
   border-color: #007acc;
-  background: var(--color-primary-soft);
+  background: rgba(0, 122, 204, 0.1);
 }
 
 .card-header {
@@ -198,10 +237,10 @@ function formatDate(date: Date | string): string {
 }
 
 .badge {
-  padding: 2px 8px;
-  border-radius: 4px;
+  padding: 3px 8px;
+  border-radius: 12px;
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 600;
   text-transform: uppercase;
   display: flex;
   align-items: center;
@@ -214,8 +253,8 @@ function formatDate(date: Date | string): string {
 }
 
 .locked-badge {
-  background: var(--color-warning-soft);
-  color: var(--color-warning);
+  background: rgba(255, 193, 7, 0.2);
+  color: #ffc107;
 }
 
 .prunable-badge {
@@ -231,16 +270,19 @@ function formatDate(date: Date | string): string {
 .icon-button {
   background: none;
   border: none;
-  padding: 4px;
+  padding: 6px;
   cursor: pointer;
   border-radius: 4px;
-  color: #858585;
+  color: #cccccc;
   transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .icon-button:hover:not(:disabled) {
   background: #3e3e42;
-  color: #cccccc;
+  color: #ffffff;
 }
 
 .icon-button.danger:hover:not(:disabled) {
@@ -289,12 +331,12 @@ function formatDate(date: Date | string): string {
 .card-footer {
   display: flex;
   gap: 8px;
-  padding-top: 12px;
-  border-top: 1px solid #454545;
+  padding-top: 16px;
+  margin-top: 12px;
+  border-top: 1px solid #3e3e42;
 }
 
 .action-button {
-  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -306,6 +348,15 @@ function formatDate(date: Date | string): string {
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
+  background: #3e3e42;
+  color: #cccccc;
+  border: 1px solid #505050;
+}
+
+.action-button:hover {
+  background: #505050;
+  border-color: #626262;
+  color: #ffffff;
 }
 
 .action-button.primary {

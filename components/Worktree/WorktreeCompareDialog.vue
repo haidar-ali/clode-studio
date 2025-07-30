@@ -103,9 +103,15 @@
                 Modified Files
               </h4>
               <div class="file-list">
-                <div v-for="file in comparison.filesModified" :key="file" class="file-item modified">
+                <div 
+                  v-for="file in comparison.filesModified" 
+                  :key="file" 
+                  class="file-item modified clickable"
+                  @click="showDiff(file)"
+                >
                   <Icon name="mdi:file-edit" />
                   <span>{{ file }}</span>
+                  <Icon name="mdi:eye" class="view-icon" />
                 </div>
               </div>
             </div>
@@ -114,11 +120,20 @@
       </div>
     </div>
   </teleport>
+  
+  <!-- File Diff Viewer -->
+  <WorktreeDiffViewer
+    v-model="showDiffViewer"
+    :file="selectedFile"
+    :worktree1="worktree1"
+    :worktree2="worktree2"
+  />
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import Icon from '~/components/Icon.vue';
+import WorktreeDiffViewer from './WorktreeDiffViewer.vue';
 
 interface Worktree {
   path: string;
@@ -152,6 +167,8 @@ defineEmits<{
 // State
 const isLoading = ref(true);
 const comparison = ref<WorktreeComparisonResult | null>(null);
+const showDiffViewer = ref(false);
+const selectedFile = ref<string | null>(null);
 
 // Load comparison on mount
 onMounted(async () => {
@@ -177,6 +194,11 @@ function formatPath(path: string): string {
     return '~' + path.slice(home.length);
   }
   return path;
+}
+
+function showDiff(file: string) {
+  selectedFile.value = file;
+  showDiffViewer.value = true;
 }
 </script>
 
@@ -408,6 +430,25 @@ function formatPath(path: string): string {
 
 .file-item.modified {
   color: var(--color-warning);
+}
+
+.file-item.clickable {
+  cursor: pointer;
+  justify-content: space-between;
+}
+
+.file-item.clickable:hover {
+  background: #3e3e42;
+}
+
+.view-icon {
+  font-size: 16px;
+  color: #858585;
+  margin-left: auto;
+}
+
+.file-item.clickable:hover .view-icon {
+  color: #cccccc;
 }
 
 
