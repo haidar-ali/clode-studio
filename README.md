@@ -59,13 +59,23 @@ A powerful, modern IDE specifically designed for developers using Claude Code CL
 - Memory management (CLAUDE.md)
 - Context-aware file operations
 
+### 📸 Snapshots & Checkpoints
+- **Quick Snapshots**: Capture project state instantly with one click
+- **Scheduled Snapshots**: Automatic snapshots at configured intervals
+- **Visual Comparison**: Built-in diff viewer to compare any two snapshots
+- **Selective Restore**: Restore specific files or entire project state
+- **Smart Storage**: Only tracks changed files to save space
+- **Git Integration**: Works alongside Git without conflicts
+- **Metadata Tracking**: Tags, descriptions, and timestamps for each snapshot
+
 ### 🌳 Git Worktrees & Sessions
-- **Isolated Development Branches**: Create separate working directories for features
+- **Isolated Development**: Create separate working directories for features
+- **Multi-Instance Support**: Each worktree maintains its own Claude instances
 - **Session Management**: Track work contexts with metadata and tags
-- **Quick Switching**: One-click switch between worktrees
-- **Session Comparison**: Compare changes across different sessions
+- **Worktree Comparison**: Visual diff viewer to compare code between worktrees
+- **Quick Switching**: One-click switch preserves all Claude instances
 - **Automatic Setup**: Claude configuration copied to each worktree
-- **Checkpoint Integration**: Link worktrees with checkpoints
+- **State Preservation**: All worktree states maintained during operations
 
 ### 🎨 Flexible Layout System
 - **Full IDE Mode**: Complete development environment
@@ -218,6 +228,26 @@ claude --version
 4. Configure custom servers
 5. Monitor connection status
 
+### Snapshots & Checkpoints
+
+1. **Creating Snapshots**
+   - Click camera icon for instant snapshot
+   - Schedule automatic snapshots (hourly/daily)
+   - Add tags and descriptions
+   - Smart storage only saves changed files
+
+2. **Comparing Snapshots**
+   - Select any two snapshots to compare
+   - Visual diff viewer shows all changes
+   - File-by-file comparison available
+   - Export differences as patches
+
+3. **Restoring from Snapshots**
+   - Browse snapshot contents visually
+   - Restore entire project or specific files
+   - Preview changes before applying
+   - Non-destructive restore options
+
 ### Git Worktrees & Sessions
 
 1. **Creating a Worktree**
@@ -225,24 +255,25 @@ claude --version
    - Enter branch name (new or existing)
    - Optionally provide session name and description
    - Claude settings automatically copied to new worktree
+   - All Claude instances preserved during creation
 
 2. **Managing Sessions**
-   - Each worktree creates an associated session
-   - Sessions track when created, last accessed
-   - Add metadata like task descriptions and tags
-   - Compare sessions to see differences
+   - Each worktree can have an associated session
+   - Sessions track metadata, descriptions, and tags
+   - Visual indicators show active worktree
+   - Lock worktrees to prevent accidental deletion
 
 3. **Switching Worktrees**
-   - Click on any worktree card to switch
-   - All IDE features update to new context
-   - Claude instances restart in new directory
-   - File explorer refreshes automatically
+   - Click "Switch" on any worktree card
+   - All Claude instances maintain their state
+   - File explorer updates to new directory
+   - Terminal sessions preserved across switches
 
-4. **Session Comparison**
-   - Click compare button to see differences
-   - View files added/removed/modified
-   - See commit divergence from main branch
-   - Useful for reviewing changes before merge
+4. **Comparing Worktrees**
+   - Click compare button between any two worktrees
+   - Visual diff viewer shows code differences
+   - See files added/removed/modified
+   - Apply changes from one worktree to another
 
 ## 🔧 Advanced Features
 
@@ -277,13 +308,22 @@ claude --version
 - Ripgrep integration
 - Minimum 3-character search requirement
 
+### Snapshot Management
+- **Instant Capture**: One-click project state snapshots
+- **Scheduled Backups**: Automatic snapshots at intervals
+- **Smart Storage**: Only changed files tracked
+- **Visual Comparison**: Built-in diff viewer
+- **Selective Restore**: File-level or full restore
+- **Git Compatible**: Works alongside version control
+
 ### Worktree Management
 - **Isolated Feature Development**: Each feature in its own directory
 - **Zero-Conflict Switching**: No stashing or committing required
 - **Session Tracking**: Remember why each worktree was created
 - **Automatic Configuration**: .claude settings copied to each worktree
 - **Branch Protection**: Lock worktrees to prevent accidental deletion
-- **Cleanup Tools**: Prune old worktrees when done
+- **Visual Comparison**: Compare code between worktrees
+- **State Preservation**: Claude instances maintained across operations
 
 ## 📚 Documentation
 
