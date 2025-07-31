@@ -12,6 +12,7 @@ export class LSPManager {
     this.servers = new Map(); // language -> server info
     this.connections = new Map(); // language -> connection
     this.capabilities = new Map(); // language -> server capabilities
+    this.workspaceRoots = new Map(); // cache workspace roots
     
     // Increase max listeners to prevent warnings when multiple LSP servers start
     process.setMaxListeners(20);
@@ -93,8 +94,10 @@ export class LSPManager {
       return this.connections.get(language);
     }
     
-    // Start new server
-    return await this.startServer(language);
+    // Start new server with workspace URI
+    const workspaceUri = await this.findWorkspaceRoot(filepath);
+    console.log(`[LSP] Starting server for ${filepath} with workspace: ${workspaceUri}`);
+    return await this.startServer(language, workspaceUri);
   }
 
   /**
@@ -135,13 +138,13 @@ export class LSPManager {
   /**
    * Start a language server
    */
-  async startServer(language) {
+  async startServer(language, workspaceUri = null) {
     const config = this.serverConfigs[language];
     if (!config) {
       throw new Error(`No language server configured for ${language}`);
     }
     
-    console.log(`[LSP] Starting ${language} language server...`);
+    console.log(`[LSP] Starting ${language} language server with workspace: ${workspaceUri || 'none'}`);
     
     try {
       // Spawn the language server process
@@ -181,19 +184,73 @@ export class LSPManager {
           name: 'Clode Studio',
           version: '1.0.0'
         },
-        rootUri: null, // Will be set per workspace
+        rootUri: workspaceUri || null,
+        rootPath: workspaceUri ? new URL(workspaceUri).pathname : null,
+        initializationOptions: {
+          preferences: {
+            // Completion preferences
+            includeCompletionsForModuleExports: false, // Disable auto-imports to reduce noise
+            includeCompletionsForImportStatements: true,
+            includeCompletionsWithSnippetText: true,
+            includeCompletionsWithInsertText: true,
+            includeAutomaticOptionalChainCompletions: true,
+            includeCompletionsWithClassMemberSnippets: true,
+            includeCompletionsWithObjectLiteralMethodSnippets: true,
+            allowIncompleteCompletions: true,
+            
+            // Import preferences
+            importModuleSpecifierPreference: 'shortest',
+            importModuleSpecifierEnding: 'auto',
+            includePackageJsonAutoImports: 'auto',
+            
+            // Other preferences
+            providePrefixAndSuffixTextForRename: true,
+            allowRenameOfImportPath: true,
+            quotePreference: 'auto',
+            
+            // Disable some suggestions to reduce noise
+            includeInlayParameterNameHints: 'none',
+            includeInlayParameterNameHintsWhenArgumentMatchesName: false,
+            includeInlayFunctionParameterTypeHints: false,
+            includeInlayVariableTypeHints: false,
+            includeInlayPropertyDeclarationTypeHints: false,
+            includeInlayFunctionLikeReturnTypeHints: false,
+            includeInlayEnumMemberValueHints: false
+          },
+          maxTsServerMemory: 4096,
+          tsserver: {
+            logDirectory: null,
+            logVerbosity: 'off',
+            trace: 'off'
+          },
+          completions: {
+            completeFunctionCalls: true
+          }
+        },
         capabilities: {
           textDocument: {
             completion: {
               completionItem: {
                 snippetSupport: true,
+                commitCharactersSupport: true,
                 documentationFormat: ['markdown', 'plaintext'],
+                deprecatedSupport: true,
+                preselectSupport: true,
+                tagSupport: {
+                  valueSet: [1] // Deprecated
+                },
+                insertReplaceSupport: true,
                 resolveSupport: {
-                  properties: ['documentation', 'detail', 'additionalTextEdits']
-                }
+                  properties: ['documentation', 'detail', 'additionalTextEdits', 'command']
+                },
+                insertTextModeSupport: {
+                  valueSet: [1, 2]
+                },
+                labelDetailsSupport: true
               },
               contextSupport: true,
-              dynamicRegistration: true
+              dynamicRegistration: true,
+              insertTextMode: 2
             },
             hover: {
               contentFormat: ['markdown', 'plaintext'],
@@ -307,19 +364,26 @@ export class LSPManager {
       // Build completion context with proper trigger
       let completionContext;
       
-      if (triggerCharacter === '.') {
+      // Common trigger characters for TypeScript
+      const triggerChars = ['.', '(', '[', '{', '"', "'", ':', '/', '<', '>', '@', '#'];
+      
+      if (triggerCharacter && triggerChars.includes(triggerCharacter)) {
         completionContext = {
           triggerKind: lsp.CompletionTriggerKind.TriggerCharacter,
-          triggerCharacter: '.'
+          triggerCharacter: triggerCharacter
         };
       } else {
+        // Regular typing, not a trigger character
         completionContext = {
           triggerKind: lsp.CompletionTriggerKind.Invoked
         };
       }
       
-      // Request completions
-      console.log(`[LSP] Requesting completions at line ${position.line}, char ${position.character}, trigger: ${triggerCharacter}`);
+      // Get the current line text to understand what the user is typing
+      const lines = content.split('\n');
+      const currentLine = lines[position.line - 1] || '';
+      const beforeCursor = currentLine.substring(0, position.character);
+      const currentWord = beforeCursor.match(/(\w+)$/)?.[1] || '';
       
       const completions = await connection.sendRequest(lsp.CompletionRequest.type, {
         textDocument: { uri },
@@ -330,16 +394,87 @@ export class LSPManager {
         context: completionContext
       });
       
-      console.log(`[LSP] Received ${Array.isArray(completions) ? completions.length : (completions?.items?.length || 0)} completions for ${language}`);
-      
       // Convert LSP completions to our format
+      let items = [];
       if (Array.isArray(completions)) {
-        return completions.map(item => this.convertLSPCompletion(item));
+        items = completions;
       } else if (completions && completions.items) {
-        return completions.items.map(item => this.convertLSPCompletion(item));
+        items = completions.items;
       }
       
-      return [];
+      // Simple approach: Trust the language server's ordering
+      // Just apply a reasonable limit to prevent UI overload
+      const MAX_COMPLETIONS = 200;
+      
+      // Sort with intelligent ordering prioritizing relevant matches
+      items.sort((a, b) => {
+        const aSortText = a.sortText || a.label;
+        const bSortText = b.sortText || b.label;
+        
+        // STRONG preference for prefix matches when user is typing
+        if (currentWord && currentWord.length > 0) {
+          const aStartsWith = a.label.toLowerCase().startsWith(currentWord.toLowerCase());
+          const bStartsWith = b.label.toLowerCase().startsWith(currentWord.toLowerCase());
+          
+          // If only one matches prefix, it wins regardless of sortText
+          if (aStartsWith && !bStartsWith) return -1;
+          if (!aStartsWith && bStartsWith) return 1;
+          
+          // If both match prefix, prioritize exact match
+          if (aStartsWith && bStartsWith) {
+            const aExact = a.label.toLowerCase() === currentWord.toLowerCase();
+            const bExact = b.label.toLowerCase() === currentWord.toLowerCase();
+            
+            if (aExact && !bExact) return -1;
+            if (!aExact && bExact) return 1;
+            
+            // Both are prefix matches, use regular sorting
+            return regularSort(a, b, aSortText, bSortText);
+          }
+          
+          // Neither matches prefix - de-prioritize auto-imports (sortText 11)
+          const aMatch = aSortText.match(/^(\d+)(.*)$/);
+          const bMatch = bSortText.match(/^(\d+)(.*)$/);
+          
+          if (aMatch && bMatch) {
+            const aNum = parseInt(aMatch[1], 10);
+            const bNum = parseInt(bMatch[1], 10);
+            
+            // Auto-imports (11) go to bottom when no prefix match
+            if (aNum === 11 && bNum !== 11) return 1;
+            if (aNum !== 11 && bNum === 11) return -1;
+          }
+        }
+        
+        return regularSort(a, b, aSortText, bSortText);
+      });
+      
+      function regularSort(a, b, aSortText, bSortText) {
+        // Check if both start with numbers
+        const aMatch = aSortText.match(/^(\d+)(.*)$/);
+        const bMatch = bSortText.match(/^(\d+)(.*)$/);
+        
+        if (aMatch && bMatch) {
+          // Compare numbers first
+          const aNum = parseInt(aMatch[1], 10);
+          const bNum = parseInt(bMatch[1], 10);
+          
+          if (aNum !== bNum) {
+            return aNum - bNum; // Lower numbers come first
+          }
+          
+          // If numbers are equal, compare the rest
+          return aMatch[2].localeCompare(bMatch[2]);
+        }
+        
+        // Fallback to string comparison
+        return aSortText.localeCompare(bSortText);
+      }
+      
+      // Take only the first MAX_COMPLETIONS items
+      const limitedItems = items.slice(0, MAX_COMPLETIONS);
+      
+      return limitedItems.map(item => this.convertLSPCompletion(item));
     } catch (error) {
       console.error(`[LSP] Failed to get completions from ${language} server:`, error);
       return [];
@@ -359,7 +494,15 @@ export class LSPManager {
       source: 'lsp',
       confidence: 90, // LSP completions are high confidence
       insertText: item.insertText || item.label,
-      kind: this.mapCompletionKind(item.kind)
+      insertTextFormat: item.insertTextFormat,
+      kind: this.mapCompletionKind(item.kind),
+      sortText: item.sortText || item.label,
+      filterText: item.filterText || item.label,
+      preselect: item.preselect,
+      commitCharacters: item.commitCharacters,
+      additionalTextEdits: item.additionalTextEdits,
+      command: item.command,
+      data: item.data // Keep data for completion resolve
     };
   }
 
@@ -388,6 +531,33 @@ export class LSPManager {
     };
     
     return kindMap[kind] || 'text';
+  }
+
+  /**
+   * Resolve a completion item for additional details
+   */
+  async resolveCompletion(filepath, item) {
+    const language = this.detectLanguage(filepath);
+    if (!language) return item;
+    
+    const connection = await this.getServerForFile(filepath);
+    if (!connection) return item;
+    
+    try {
+      console.log(`[LSP] Resolving completion item: ${item.label}`);
+      
+      const resolved = await connection.sendRequest(lsp.CompletionResolveRequest.type, item);
+      
+      if (resolved) {
+        // Merge resolved data back into the item
+        return { ...item, ...resolved };
+      }
+      
+      return item;
+    } catch (error) {
+      console.error(`[LSP] Failed to resolve completion from ${language} server:`, error);
+      return item;
+    }
   }
 
   /**
@@ -475,6 +645,42 @@ export class LSPManager {
   }
 
   /**
+   * Get diagnostics for a document
+   */
+  async getDiagnostics(filepath, content) {
+    const language = this.detectLanguage(filepath);
+    if (!language) return [];
+    
+    const connection = await this.getServerForFile(filepath);
+    if (!connection) return [];
+    
+    try {
+      const uri = `file://${filepath}`;
+      
+      // First, ensure the document is open and synced
+      await connection.sendNotification(lsp.DidOpenTextDocumentNotification.type, {
+        textDocument: {
+          uri,
+          languageId: language,
+          version: 1,
+          text: content
+        }
+      });
+      
+      // Request diagnostics - note that many LSP servers send diagnostics
+      // via notifications rather than request/response
+      // For now, we'll return empty array as diagnostics are usually pushed
+      console.log(`[LSP] Diagnostics requested for ${language} file`);
+      
+      // TODO: Implement proper diagnostic handling with notification listeners
+      return [];
+    } catch (error) {
+      console.error(`[LSP] Failed to get diagnostics from ${language} server:`, error);
+      return [];
+    }
+  }
+
+  /**
    * Shutdown all language servers
    */
   async shutdown() {
@@ -500,6 +706,51 @@ export class LSPManager {
     this.connections.clear();
     this.servers.clear();
     this.capabilities.clear();
+  }
+
+  /**
+   * Find workspace root by looking for project markers
+   */
+  async findWorkspaceRoot(filepath) {
+    const path = await import('path');
+    const fs = await import('fs').then(m => m.promises);
+    
+    let currentDir = path.dirname(filepath);
+    const root = path.parse(currentDir).root;
+    
+    // Look for common project markers
+    const markers = [
+      'package.json', 'tsconfig.json', '.git', 
+      'pom.xml', 'build.gradle', 'build.gradle.kts', // Java
+      'Cargo.toml', // Rust
+      'go.mod', // Go
+      'requirements.txt', 'setup.py', 'pyproject.toml', 'Pipfile', // Python
+      'composer.json', // PHP
+      'Gemfile', // Ruby
+      '.vscode', '.idea' // IDE folders
+    ];
+    
+    while (currentDir !== root) {
+      for (const marker of markers) {
+        try {
+          const markerPath = path.join(currentDir, marker);
+          await fs.access(markerPath);
+          // Found a project marker
+          const workspaceUri = `file://${currentDir}`;
+          this.workspaceRoots.set(filepath, workspaceUri);
+          console.log(`[LSP] Found workspace root at ${currentDir}`);
+          return workspaceUri;
+        } catch {
+          // Marker not found, continue
+        }
+      }
+      currentDir = path.dirname(currentDir);
+    }
+    
+    // No workspace root found, use file's directory
+    const fallbackUri = `file://${path.dirname(filepath)}`;
+    console.log(`[LSP] No workspace root found, using file directory`);
+    return fallbackUri;
   }
 
   /**

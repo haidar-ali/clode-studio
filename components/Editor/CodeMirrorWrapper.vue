@@ -17,22 +17,26 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
-import { EditorView, basicSetup } from 'codemirror';
+import { EditorView } from 'codemirror';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { EditorState, StateEffect, StateField } from '@codemirror/state';
 import { keymap, Decoration } from '@codemirror/view';
-import { acceptCompletion, startCompletion, closeCompletion } from '@codemirror/autocomplete';
+import { acceptCompletion, startCompletion, closeCompletion, autocompletion } from '@codemirror/autocomplete';
+import { history, defaultKeymap, historyKeymap } from '@codemirror/commands';
+import { searchKeymap, highlightSelectionMatches, search } from '@codemirror/search';
+import { bracketMatching, foldGutter, indentOnInput, syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
+import { closeBrackets, closeBracketsKeymap, completionKeymap } from '@codemirror/autocomplete';
+import { lineNumbers, highlightActiveLineGutter } from '@codemirror/view';
+import { drawSelection, dropCursor, highlightActiveLine, rectangularSelection, crosshairCursor } from '@codemirror/view';
 import { useEditorStore } from '~/stores/editor';
 import { useCodeMirrorLanguages } from '~/composables/useCodeMirrorLanguages';
-import { useAutocomplete } from '~/composables/useAutocomplete';
+import { useLSPBridge } from '~/composables/useLSPBridge';
 import { useGhostText } from '~/composables/useGhostText';
-import { useAutocompleteStore } from '~/stores/autocomplete';
 import KnowledgeMetadataBar from '~/components/Knowledge/KnowledgeMetadataBar.vue';
 
 const editorStore = useEditorStore();
-const autocompleteStore = useAutocompleteStore();
 const { getLanguageSupport, getLanguageName } = useCodeMirrorLanguages();
-const { createAutocompleteExtension } = useAutocomplete();
+const { createLSPCompletionSource } = useLSPBridge();
 const { createGhostTextExtension } = useGhostText();
 
 const activeTab = computed(() => editorStore.activeTab);
@@ -71,38 +75,58 @@ const highlightLineField = StateField.define({
 // Create editor extensions based on file type
 const createEditorExtensions = (filename?: string): any[] => {
   const extensions: any[] = [
-    basicSetup,
+    // Basic editor features (replacing basicSetup but without default autocompletion)
+    lineNumbers(),
+    highlightActiveLineGutter(),
+    history(),
+    foldGutter(),
+    drawSelection(),
+    dropCursor(),
+    EditorState.allowMultipleSelections.of(true),
+    indentOnInput(),
+    bracketMatching(),
+    closeBrackets(),
+    rectangularSelection(),
+    crosshairCursor(),
+    highlightActiveLine(),
+    highlightSelectionMatches(),
+    search(),
+    syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+    
+    // Theme and styling
     oneDark,
     highlightLineField,
-    // Add autocomplete extension (for LSP dropdown)
-    createAutocompleteExtension(),
+    
+    // LSP completion integration
+    autocompletion({
+      override: [createLSPCompletionSource()]
+    }),
     // Add ghost text extension (for Claude AI inline suggestions)
     createGhostTextExtension(async (prefix: string, suffix: string) => {
       try {
-        // Only query Claude for ghost text if enabled
-        if (!autocompleteStore.settings.providers.claude.enabled) {
-          return '';
-        }
-        
-        // Call the ghost text API
+        // Check if ghost text is enabled in settings
+        // Since we don't have the autocomplete store here, we'll let the ghost text service handle the check
         const result = await window.electronAPI.autocomplete.getGhostText({ prefix, suffix });
         return result.success ? result.suggestion : '';
       } catch (error) {
-        console.error('[GhostText] Error fetching suggestion:', error);
         return '';
       }
     }, {
-      delay: autocompleteStore.settings.providers.claude.timeout || 1000,
+      delay: 1000, // 1 second delay for ghost text
       acceptOnClick: true
     }),
-    // Add keyboard shortcuts
+    // Keyboard shortcuts
     keymap.of([
+      ...defaultKeymap,
+      ...historyKeymap,
+      ...searchKeymap,
+      ...closeBracketsKeymap,
+      ...completionKeymap,
       // Manual trigger for autocomplete (Ctrl+Space, but use Ctrl+. on Mac to avoid Spotlight conflict)
       {
         key: 'Ctrl-Space',
         mac: 'Ctrl-.',
         run: (view) => {
-          console.log('[Editor] Manual autocomplete trigger');
           return startCompletion(view);
         }
       },
@@ -110,7 +134,6 @@ const createEditorExtensions = (filename?: string): any[] => {
       {
         key: 'Alt-/',
         run: (view) => {
-          console.log('[Editor] Alternative autocomplete trigger');
           return startCompletion(view);
         }
       },
@@ -314,8 +337,7 @@ let gotoLineHandler: ((event: Event) => void) | null = null;
 onMounted(async () => {
   if (!process.client || !editorContainer.value) return;
 
-  // Initialize autocomplete store
-  await autocompleteStore.init();
+  // No need to initialize old autocomplete store anymore
 
   try {
     const state = EditorState.create({

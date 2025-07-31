@@ -224,6 +224,14 @@ const electronAPI = {
       return () => ipcRenderer.removeAllListeners(channel);
     }
   },
+  lsp: {
+    getCompletions: (params: any) => 
+      ipcRenderer.invoke('lsp:getCompletions', params),
+    getHover: (params: any) => 
+      ipcRenderer.invoke('lsp:getHover', params),
+    getDiagnostics: (params: any) => 
+      ipcRenderer.invoke('lsp:getDiagnostics', params)
+  },
   mcp: {
     list: (workspacePath?: string) => ipcRenderer.invoke('mcp:list', workspacePath),
     add: (config: {

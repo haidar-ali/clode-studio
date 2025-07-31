@@ -105,7 +105,7 @@ export const useAutocompleteStore = defineStore('autocomplete', {
           servers: new Map<string, LSPServerConfig>()
         },
         claude: {
-          enabled: true,
+          enabled: false, // Disabled by default - user can enable if needed
           timeout: 5000, // 5 seconds for quality completions
           streaming: true,
           contextLines: 100, // Industry standard for semantic understanding
@@ -127,7 +127,14 @@ export const useAutocompleteStore = defineStore('autocomplete', {
         showSource: true,
         showConfidence: false,
         showLatency: false,
-        debounceDelay: 300
+        debounceDelay: 300,
+        fontSize: 14
+      },
+      performance: {
+        maxConcurrentRequests: 3,
+        requestTimeout: 5000,
+        cacheSize: 100,
+        enablePrefetch: false
       },
       privacy: {
         mode: 'full' as const,
@@ -248,26 +255,23 @@ export const useAutocompleteStore = defineStore('autocomplete', {
   actions: {
     // Initialization
     async init() {
-      console.log('[Autocomplete] Initializing autocomplete store...');
-      
       // Load settings from storage if available
       if (typeof window !== 'undefined' && window.electronAPI?.store) {
         try {
           const savedSettings = await window.electronAPI.store.get('autocompleteSettings');
           if (savedSettings) {
+            // Convert servers object back to Map if it exists, otherwise create empty Map
+            if (savedSettings.providers?.lsp?.servers && typeof savedSettings.providers.lsp.servers === 'object' && !Array.isArray(savedSettings.providers.lsp.servers)) {
+              savedSettings.providers.lsp.servers = new Map(Object.entries(savedSettings.providers.lsp.servers));
+            } else if (savedSettings.providers?.lsp) {
+              savedSettings.providers.lsp.servers = new Map();
+            }
             this.settings = { ...this.settings, ...savedSettings };
-            console.log('[Autocomplete] Loaded saved settings:', this.settings.enabled ? 'enabled' : 'disabled');
           }
         } catch (error) {
           console.error('[Autocomplete] Failed to load settings:', error);
         }
       }
-      
-      console.log('[Autocomplete] Initialization complete. Providers:', {
-        claude: this.settings.providers.claude.enabled,
-        lsp: this.settings.providers.lsp.enabled,
-        cache: this.settings.providers.cache.enabled
-      });
       
       // Check Claude SDK health if Claude provider is enabled
       if (this.settings.providers.claude.enabled) {
@@ -299,16 +303,12 @@ export const useAutocompleteStore = defineStore('autocomplete', {
     },
     
     async checkLSPServers() {
-      console.log('[Autocomplete] Checking available LSP servers...');
-      
       if (typeof window === 'undefined' || !window.electronAPI?.autocomplete?.checkLSPServers) {
-        console.warn('[Autocomplete] LSP check API not available');
         return;
       }
       
       try {
         const result = await window.electronAPI.autocomplete.checkLSPServers();
-        console.log('[Autocomplete] LSP servers check result:', result);
         
         if (result.success && result.servers) {
           this.lspStatus.availableServers = result.servers.map(s => s.language);
@@ -338,8 +338,6 @@ export const useAutocompleteStore = defineStore('autocomplete', {
     
     // Check Claude SDK health
     async checkClaudeSDKHealth() {
-      console.log('[Autocomplete] Checking Claude SDK health...');
-      
       if (typeof window === 'undefined' || !window.electronAPI?.autocomplete?.checkHealth) {
         this.claudeSDKHealth = {
           available: false,
@@ -352,7 +350,6 @@ export const useAutocompleteStore = defineStore('autocomplete', {
       
       try {
         const health = await window.electronAPI.autocomplete.checkHealth();
-        console.log('[Autocomplete] Claude SDK health check result:', health);
         
         this.claudeSDKHealth = {
           available: health.available,
@@ -378,11 +375,55 @@ export const useAutocompleteStore = defineStore('autocomplete', {
       // Persist to storage
       if (typeof window !== 'undefined' && window.electronAPI?.store) {
         try {
-          await window.electronAPI.store.set('autocompleteSettings', this.settings);
+          // Create a deep serializable copy of settings
+          const serializableSettings = this.createSerializableSettings(this.settings);
+          await window.electronAPI.store.set('autocompleteSettings', serializableSettings);
         } catch (error) {
           console.error('Failed to save autocomplete settings:', error);
         }
       }
+    },
+
+    // Helper method to create a serializable version of settings
+    createSerializableSettings(settings: AutocompleteSettings) {
+      return {
+        enabled: settings.enabled,
+        providers: {
+          lsp: {
+            enabled: settings.providers.lsp.enabled,
+            timeout: settings.providers.lsp.timeout,
+            servers: {} // Don't persist servers for now
+          },
+          claude: {
+            enabled: settings.providers.claude.enabled,
+            timeout: settings.providers.claude.timeout,
+            streaming: settings.providers.claude.streaming,
+            contextLines: settings.providers.claude.contextLines,
+            useCache: settings.providers.claude.useCache,
+            cacheTTL: settings.providers.claude.cacheTTL,
+            model: settings.providers.claude.model
+          },
+          cache: {
+            enabled: settings.providers.cache.enabled,
+            maxSize: settings.providers.cache.maxSize,
+            ttl: settings.providers.cache.ttl
+          }
+        },
+        ui: {
+          maxSuggestions: settings.ui?.maxSuggestions || 10,
+          showSource: settings.ui?.showSource || true,
+          showConfidence: settings.ui?.showConfidence || false,
+          showLatency: settings.ui?.showLatency || false,
+          debounceDelay: settings.ui?.debounceDelay || 300,
+          fontSize: settings.ui?.fontSize || 14
+        },
+        performance: {
+          maxConcurrentRequests: settings.performance?.maxConcurrentRequests || 3,
+          requestTimeout: settings.performance?.requestTimeout || 5000,
+          cacheSize: settings.performance?.cacheSize || 100,
+          enablePrefetch: settings.performance?.enablePrefetch || false
+        }
+      };
     },
 
     // Provider management
