@@ -27,7 +27,38 @@ Examples:
               ref="promptInput"
             />
             
+            <!-- Resources section -->
+            <div v-if="selectedResources.length > 0" class="resources-section">
+              <div class="resources-header">
+                <span class="resources-label">Resources:</span>
+                <button @click="clearResources" class="clear-resources-btn">
+                  <Icon name="mdi:close-circle-outline" size="14" />
+                  Clear
+                </button>
+              </div>
+              <div class="resource-chips">
+                <div 
+                  v-for="(resource, index) in selectedResources" 
+                  :key="index" 
+                  class="resource-chip"
+                >
+                  <Icon :name="getResourceIcon(resource.type)" size="14" />
+                  <span>{{ resource.name }}</span>
+                  <button @click="removeResource(index)" class="remove-btn">
+                    <Icon name="mdi:close" size="12" />
+                  </button>
+                </div>
+              </div>
+            </div>
+            
             <div class="actions">
+              <button 
+                @click="openResourceModal" 
+                class="add-resources-btn"
+              >
+                <Icon name="mdi:folder-plus" size="16" />
+                Add Resources
+              </button>
               <button 
                 @click="handleGenerate" 
                 class="generate-btn"
@@ -50,8 +81,12 @@ Examples:
           
           <div v-if="generatedCode && !error" class="preview-section">
             <div class="preview-header">
-              <h4>Generated Code</h4>
+              <h4>{{ showDiff ? 'Changes' : 'Generated Code' }}</h4>
               <div class="preview-actions">
+                <button @click="toggleDiff" class="action-btn" :title="showDiff ? 'Show full code' : 'Show changes'">
+                  <Icon :name="showDiff ? 'mdi:file-code' : 'mdi:file-compare'" size="16" />
+                  {{ showDiff ? 'Full' : 'Diff' }}
+                </button>
                 <button @click="copyCode" class="action-btn" title="Copy code">
                   <Icon name="mdi:content-copy" size="16" />
                 </button>
@@ -62,20 +97,42 @@ Examples:
               </div>
             </div>
             
-            <div class="code-preview">
+            <div v-if="!showDiff" class="code-preview">
               <pre><code>{{ generatedCode }}</code></pre>
+            </div>
+            <div v-else class="diff-container" ref="diffContainer">
+              <!-- Diff view will be mounted here -->
             </div>
           </div>
         </div>
       </div>
     </Transition>
+    
+    <!-- Resource Modal -->
+    <ResourceModal 
+      :is-open="showResourceModal" 
+      context="codegeneration"
+      @close="showResourceModal = false"
+      @add="handleAddResource"
+    />
   </Teleport>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue';
+import { ref, watch, nextTick, shallowRef } from 'vue';
 import { useCodeGeneration } from '~/composables/useCodeGeneration';
 import { useEditorStore } from '~/stores/editor';
+import ResourceModal from '~/components/Prompts/ResourceModal.vue';
+import type { ResourceReference } from '~/stores/prompt-engineering';
+import { MergeView } from '@codemirror/merge';
+import { EditorView, basicSetup } from 'codemirror';
+import { EditorState } from '@codemirror/state';
+import { oneDark } from '@codemirror/theme-one-dark';
+import { javascript } from '@codemirror/lang-javascript';
+import { python } from '@codemirror/lang-python';
+import { css } from '@codemirror/lang-css';
+import { html } from '@codemirror/lang-html';
+import { json } from '@codemirror/lang-json';
 
 const emit = defineEmits<{
   accept: [code: string]
@@ -88,6 +145,7 @@ const {
   prompt, 
   isGenerating, 
   generatedCode, 
+  originalCode,
   error,
   open,
   close: closeGeneration,
@@ -95,6 +153,47 @@ const {
 } = useCodeGeneration();
 
 const promptInput = ref<HTMLTextAreaElement>();
+const showResourceModal = ref(false);
+const selectedResources = ref<ResourceReference[]>([]);
+const showDiff = ref(false);
+const diffContainer = ref<HTMLDivElement>();
+const mergeView = shallowRef<MergeView | null>(null);
+
+const openResourceModal = () => {
+  showResourceModal.value = true;
+};
+
+const handleAddResource = (resource: ResourceReference) => {
+  // Check if resource already exists
+  const exists = selectedResources.value.some(r => 
+    r.type === resource.type && 
+    (r.id === resource.id || (r.path === resource.path && resource.path))
+  );
+  
+  if (!exists && selectedResources.value.length < 5) {
+    selectedResources.value.push(resource);
+  }
+};
+
+const removeResource = (index: number) => {
+  selectedResources.value.splice(index, 1);
+};
+
+const clearResources = () => {
+  selectedResources.value = [];
+};
+
+const getResourceIcon = (type: string): string => {
+  const icons: Record<string, string> = {
+    file: 'mdi:file-code',
+    knowledge: 'mdi:lightbulb',
+    hook: 'mdi:hook',
+    mcp: 'mdi:server',
+    command: 'mdi:console',
+    task: 'mdi:checkbox-marked-circle'
+  };
+  return icons[type] || 'mdi:folder';
+};
 
 const handleGenerate = async () => {
   if (!prompt.value.trim() || isGenerating.value) return;
@@ -104,11 +203,20 @@ const handleGenerate = async () => {
   
   const language = activeTab.name.split('.').pop() || 'text';
   
+  // Create serializable resources
+  const serializableResources = selectedResources.value.map(resource => ({
+    type: resource.type,
+    name: resource.name,
+    id: resource.id,
+    path: resource.path
+  }));
+  
   await generate({
     prompt: prompt.value,
     fileContent: activeTab.content || '',
     filePath: activeTab.filepath || activeTab.name,
-    language
+    language,
+    resources: serializableResources
   });
 };
 
@@ -130,8 +238,85 @@ const copyCode = async () => {
   }
 };
 
+const toggleDiff = () => {
+  showDiff.value = !showDiff.value;
+  if (showDiff.value) {
+    nextTick(() => createDiffView());
+  } else {
+    destroyDiffView();
+  }
+};
+
+const getLanguageSupport = (filename: string) => {
+  const ext = filename.split('.').pop()?.toLowerCase();
+  switch (ext) {
+    case 'js':
+    case 'jsx':
+    case 'ts':
+    case 'tsx':
+      return javascript({ jsx: true, typescript: ext.includes('ts') });
+    case 'py':
+      return python();
+    case 'css':
+    case 'scss':
+    case 'sass':
+      return css();
+    case 'html':
+    case 'htm':
+      return html();
+    case 'json':
+      return json();
+    default:
+      return [];
+  }
+};
+
+const createDiffView = () => {
+  if (!diffContainer.value || !originalCode.value || !generatedCode.value) return;
+  
+  destroyDiffView();
+  
+  const activeTab = editorStore.activeTab;
+  const langSupport = activeTab ? getLanguageSupport(activeTab.name) : [];
+  
+  mergeView.value = new MergeView({
+    parent: diffContainer.value,
+    a: {
+      doc: originalCode.value,
+      extensions: [
+        basicSetup,
+        oneDark,
+        langSupport,
+        EditorView.editable.of(false)
+      ]
+    },
+    b: {
+      doc: generatedCode.value,
+      extensions: [
+        basicSetup,
+        oneDark,
+        langSupport,
+        EditorView.editable.of(false)
+      ]
+    },
+    highlightChanges: true,
+    gutter: true,
+    collapseUnchanged: { margin: 3, minSize: 4 }
+  });
+};
+
+const destroyDiffView = () => {
+  if (mergeView.value) {
+    mergeView.value.destroy();
+    mergeView.value = null;
+  }
+};
+
 const close = () => {
   closeGeneration();
+  selectedResources.value = []; // Clear resources when closing
+  showDiff.value = false;
+  destroyDiffView();
   emit('close');
 };
 
@@ -232,10 +417,108 @@ defineExpose({
   cursor: not-allowed;
 }
 
+.resources-section {
+  margin-top: 16px;
+  padding: 12px;
+  background: #252526;
+  border: 1px solid #3c3c3c;
+  border-radius: 6px;
+}
+
+.resources-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.resources-label {
+  color: #b0b0b0;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.clear-resources-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  color: #858585;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.clear-resources-btn:hover {
+  background: #3c3c3c;
+  color: #e0e0e0;
+}
+
+.resource-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.resource-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: #1e1e1e;
+  border: 1px solid #3c3c3c;
+  border-radius: 16px;
+  font-size: 12px;
+  color: #e0e0e0;
+}
+
+.resource-chip .remove-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  background: none;
+  border: none;
+  color: #858585;
+  cursor: pointer;
+  border-radius: 50%;
+  transition: all 0.2s;
+  margin-left: 4px;
+}
+
+.resource-chip .remove-btn:hover {
+  background: #3c3c3c;
+  color: #e0e0e0;
+}
+
 .actions {
   margin-top: 16px;
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.add-resources-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: #2d2d30;
+  color: #e0e0e0;
+  border: 1px solid #3c3c3c;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.add-resources-btn:hover {
+  background: #3c3c3c;
+  border-color: #545454;
 }
 
 .generate-btn {
@@ -353,6 +636,39 @@ defineExpose({
   line-height: 1.5;
 }
 
+/* Diff container */
+.diff-container {
+  flex: 1;
+  overflow: auto;
+  background: #1e1e1e;
+}
+
+/* CodeMirror Merge styles */
+.diff-container :deep(.cm-merge) {
+  height: 100%;
+}
+
+.diff-container :deep(.cm-editor) {
+  font-family: 'Fira Code', monospace;
+  font-size: 13px;
+}
+
+.diff-container :deep(.cm-changedLine) {
+  background-color: rgba(255, 235, 59, 0.1);
+}
+
+.diff-container :deep(.cm-changedText) {
+  background-color: rgba(255, 235, 59, 0.2);
+}
+
+.diff-container :deep(.cm-deletedChunk) {
+  background-color: rgba(244, 67, 54, 0.1);
+}
+
+.diff-container :deep(.cm-insertedChunk) {
+  background-color: rgba(76, 175, 80, 0.1);
+}
+
 /* Scrollbar styling */
 .code-preview::-webkit-scrollbar {
   width: 12px;
@@ -394,5 +710,6 @@ defineExpose({
 
 .spinning {
   animation: spin 1s linear infinite;
+  display: inline-block;
 }
 </style>

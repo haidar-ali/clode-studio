@@ -1595,13 +1595,50 @@ ipcMain.handle('lsp:checkCommand', async (event, command) => {
 });
 
 // Code generation handler
-ipcMain.handle('codeGeneration:generate', async (event, { prompt, fileContent, filePath, language }) => {
+ipcMain.handle('codeGeneration:generate', async (event, { prompt, fileContent, filePath, language, resources = [] }) => {
   try {
     // Import Claude SDK
     const { query } = await import('@anthropic-ai/claude-code');
     
+    // Load resource contents
+    const loadedResources = await Promise.all(resources.map(async (resource: any) => {
+      if (resource.type === 'file' && resource.path) {
+        try {
+          const content = await readFile(resource.path, 'utf-8');
+          return { ...resource, content };
+        } catch (error) {
+          console.error(`Failed to read resource file ${resource.path}:`, error);
+          return resource;
+        }
+      } else if (resource.type === 'knowledge' && resource.id) {
+        // Load from knowledge store
+        const knowledgeData = (store as any).get('knowledgeBases');
+        for (const kbName in knowledgeData) {
+          const kb = knowledgeData[kbName];
+          if (kb.entries && kb.entries[resource.id]) {
+            return { ...resource, content: kb.entries[resource.id].content };
+          }
+        }
+      }
+      return resource;
+    }));
+    
     // Construct the system prompt for code generation
-    const systemPrompt = `You are an expert code generation assistant. When given a file and a request to modify it, you must return ONLY the complete updated file contents. No explanations, no markdown code blocks, no comments about what changed - just the raw code for the entire file.`;
+    const systemPrompt = `You are an expert code generation assistant. When given a file and a request to modify it, you must return ONLY the complete updated file contents. No explanations, no markdown code blocks, no comments about what changed - just the raw code for the entire file.
+
+CRITICAL: Your response must be ONLY code. Do not include any text before or after the code. Do not wrap the code in markdown blocks. Do not explain what you're doing. Just output the raw code that should replace the file contents.`;
+    
+    // Build resource context
+    let resourceContext = '';
+    if (loadedResources.length > 0) {
+      resourceContext = '\n\nReference Resources:\n';
+      loadedResources.forEach((resource, index) => {
+        if (resource.content) {
+          resourceContext += `\n--- Resource ${index + 1}: ${resource.name} (${resource.type}) ---\n`;
+          resourceContext += resource.content + '\n';
+        }
+      });
+    }
     
     // Build the user prompt with context
     const userPrompt = `Current file: ${filePath}
@@ -1609,19 +1646,19 @@ Language: ${language}
 
 Current file contents:
 ${fileContent}
-
+${resourceContext}
 Request: ${prompt}
 
-Generate the complete updated file contents based on the request above.`;
+Remember: Return ONLY the complete code for the file. No explanations. No markdown. Just the raw code.`;
 
     console.log('[Code Generation] Sending request to Claude...');
     
     // Create an AbortController for timeout
     const abortController = new AbortController();
     const timeoutId = setTimeout(() => {
-      console.log('[Code Generation] Request timed out after 30 seconds');
+      console.log('[Code Generation] Request timed out after 60 seconds');
       abortController.abort();
-    }, 30000); // 30 second timeout
+    }, 60000); // 60 second timeout
     
     try {
       // Use Claude SDK to generate code

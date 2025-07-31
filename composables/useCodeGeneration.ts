@@ -7,6 +7,7 @@ export interface CodeGenerationRequest {
   fileContent: string;
   filePath: string;
   language?: string;
+  resources?: any[];
 }
 
 export interface CodeGenerationResult {
