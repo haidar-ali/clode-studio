@@ -105,6 +105,32 @@ Unlike traditional IDEs with fixed layouts, Clode Studio introduces a revolution
 - **Resizable panels**: Fine-tune your workspace
 - **Multi-monitor friendly**: Scales to any screen size
 
+### 🤖 AI-Powered Code Intelligence
+- **Ghost Text AI**: Inline code suggestions that appear as you type (like GitHub Copilot)
+- **Smart Autocomplete**: Multi-provider completion system (LSP, Claude AI, local cache)
+- **Code Generation**: AI-powered code generation with visual loading indicators
+- **Intelligent Context**: AI understands your project structure and coding patterns
+- **Manual Trigger**: Press Cmd/Ctrl+G to request AI suggestions on demand
+
+### ⚡ Language Server Protocol (LSP) Integration
+- **Real-time Diagnostics**: Instant error and warning detection
+- **Hover Information**: Type info, documentation, and signatures on hover
+- **Smart Completions**: Context-aware code completions
+- **Multi-language Support**: TypeScript, JavaScript, Python, Rust, Go, Vue, and more
+- **Auto-fix Suggestions**: Quick fixes for common issues
+- **Go to Definition**: Navigate code intelligently
+- **Find References**: Locate all usages across your project
+
+### ⌨️ Keyboard Shortcuts
+- **Cmd/Ctrl+P**: Open prompt/command palette
+- **Cmd/Ctrl+G**: Trigger AI ghost text manually
+- **Cmd/Ctrl+Space**: Trigger code completion
+- **Tab**: Accept ghost text suggestion
+- **Escape**: Dismiss suggestions
+- **Cmd/Ctrl+Shift+H**: Open Hook Manager
+- **Cmd/Ctrl+Enter**: Execute in modals
+- **Alt+/**: Alternative completion trigger
+
 ## 🚀 Technology Stack
 
 ### Core Technologies
@@ -115,19 +141,32 @@ Unlike traditional IDEs with fixed layouts, Clode Studio introduces a revolution
 - **Node.js 22.x LTS** - Runtime environment
 
 ### Editor & UI
-- **CodeMirror 6** - Advanced code editing
+- **CodeMirror 6** - Advanced code editing with LSP support
 - **XTerm.js** - Terminal emulation
 - **Splitpanes** - Flexible layouts
 - **Pinia** - State management
+- **Chart.js** - Data visualization and analytics
 - **gray-matter** - Frontmatter parsing
+- **@formkit/drag-and-drop** - Enhanced drag & drop
+- **VueUse** - Collection of Vue utilities
+- **Naive UI** - UI component library
 
-### Integration
+### Integration & Advanced Features
 - **Node-PTY** - Pseudo terminal for Claude
 - **Ripgrep** - Fast file searching
 - **Lunr.js** - Client-side search
 - **File System Watchers** - Real-time updates
 - **JSON-RPC** - MCP protocol communication
 - **Simple-git** - Git worktree management
+- **Isomorphic-git** - Browser-based git operations
+- **@marimo-team/codemirror-languageserver** - LSP integration
+- **CodeMirror Language Service** - Enhanced language support
+- **Electron Store** - Persistent settings storage
+- **Archiver & Tar** - Compression and archiving
+- **Diff** - Advanced file comparison
+- **istextorbinary** - File type detection
+- **mime-types** - MIME type identification
+- **mitt** - Event bus for component communication
 
 ## 📸 Screenshots
 
@@ -244,11 +283,33 @@ claude --version
 
 ### Prompt Engineering
 
-1. Open **Prompt Studio** tab
+1. Open **Prompt Studio** tab or press **Cmd/Ctrl+P**
 2. Build complex prompts with templates
 3. Design sub-agents for specialized tasks
 4. Manage prompt resources
 5. Save to template library
+
+### AI Code Intelligence
+
+1. **Ghost Text**
+   - Automatically appears as you type after a short delay
+   - Press **Tab** to accept suggestions
+   - Press **Escape** to dismiss
+   - Press **Cmd/Ctrl+G** to manually trigger
+   - Configure delay in Autocomplete Settings
+
+2. **Smart Autocomplete**
+   - Press **Cmd/Ctrl+Space** for dropdown completions
+   - Multiple providers: LSP, Claude AI, and local cache
+   - Real-time filtering as you type
+   - Provider indicators show source
+
+3. **Code Generation**
+   - Press **Cmd/Ctrl+P** for quick prompt
+   - Describe what you want to generate
+   - AI loading indicator shows progress
+   - Diff view shows changes by default
+   - Accept or reject generated code
 
 ### Hooks Automation
 
@@ -368,6 +429,15 @@ claude --version
 - Search history
 - Ripgrep integration
 - Minimum 3-character search requirement
+
+### Language Server Features
+- **Error Detection**: Real-time syntax and semantic errors
+- **Quick Fixes**: Auto-fix common issues
+- **Refactoring**: Smart rename, extract method
+- **Code Navigation**: Go to definition, find references
+- **Documentation**: Inline documentation on hover
+- **Type Information**: See types without leaving editor
+- **Multi-Language**: Support for 15+ programming languages
 
 ### Snapshot Management
 - **Instant Capture**: One-click project state snapshots
@@ -529,6 +599,15 @@ MIT License - see [LICENSE](LICENSE) file for details.
 - [x] Snapshot system
 - [x] Knowledge base with search
 
+### Recently Added 🎉
+- [x] AI Ghost Text (inline code suggestions)
+- [x] Smart Autocomplete with multiple providers
+- [x] Language Server Protocol (LSP) integration
+- [x] Real-time error detection and quick fixes
+- [x] Code generation with AI loading indicators
+- [x] Advanced keyboard shortcuts system
+- [x] Enhanced diff view with merge capabilities
+
 ### Coming Soon
 - [ ] Custom module development API
 - [ ] Workspace layout presets
@@ -540,6 +619,10 @@ MIT License - see [LICENSE](LICENSE) file for details.
 - [ ] Integrated debugging
 - [ ] Performance profiling
 - [ ] Mobile companion app
+- [ ] Extended language server support
+- [ ] AI model selection for ghost text
+- [ ] Code formatting integration
+- [ ] Git conflict resolution AI
 
 ---
 
