@@ -20,6 +20,7 @@
       <span class="status-item" v-if="activeTab">
         {{ activeTab.language }}
       </span>
+      <AutocompleteStatus @show-settings="$emit('show-autocomplete-settings')" />
     </div>
     
     <div class="status-bar-center">
@@ -47,6 +48,11 @@ import { useClaudeInstancesStore } from '~/stores/claude-instances';
 import { useLayoutStore } from '~/stores/layout';
 import QuickAccessToolbar from '~/components/Layout/QuickAccessToolbar.vue';
 import SnapshotButton from '~/components/Snapshots/SnapshotButton.vue';
+import AutocompleteStatus from '~/components/Editor/AutocompleteStatus.vue';
+
+const emit = defineEmits<{
+  'show-autocomplete-settings': [];
+}>();
 
 const editorStore = useEditorStore();
 const chatStore = useChatStore();

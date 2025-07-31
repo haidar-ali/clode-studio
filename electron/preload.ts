@@ -197,6 +197,47 @@ const electronAPI = {
       return () => ipcRenderer.removeAllListeners(channel);
     }
   },
+  autocomplete: {
+    getCompletion: (request: any) => 
+      ipcRenderer.invoke('autocomplete:getCompletion', request),
+    streamCompletion: (request: any) => 
+      ipcRenderer.invoke('autocomplete:streamCompletion', request),
+    clearCache: () => 
+      ipcRenderer.invoke('autocomplete:clearCache'),
+    preloadFileContext: (filepath: string) => 
+      ipcRenderer.invoke('autocomplete:preloadFileContext', filepath),
+    cancelRequest: (requestId: string) => 
+      ipcRenderer.invoke('autocomplete:cancelRequest', requestId),
+    checkHealth: () =>
+      ipcRenderer.invoke('autocomplete:checkHealth'),
+    getGhostText: (params: { prefix: string; suffix: string }) => 
+      ipcRenderer.invoke('autocomplete:getGhostText', params),
+    initializeProject: (projectPath: string) =>
+      ipcRenderer.invoke('autocomplete:initializeProject', projectPath),
+    checkLSPServers: () =>
+      ipcRenderer.invoke('autocomplete:checkLSPServers'),
+    getLSPStatus: () =>
+      ipcRenderer.invoke('autocomplete:getLSPStatus'),
+    onChunk: (requestId: string, callback: (chunk: any) => void) => {
+      const channel = `autocomplete:chunk:${requestId}`;
+      ipcRenderer.on(channel, (_, chunk) => callback(chunk));
+      return () => ipcRenderer.removeAllListeners(channel);
+    }
+  },
+  lsp: {
+    getCompletions: (params: any) => 
+      ipcRenderer.invoke('lsp:getCompletions', params),
+    getHover: (params: any) => 
+      ipcRenderer.invoke('lsp:getHover', params),
+    getDiagnostics: (params: any) => 
+      ipcRenderer.invoke('lsp:getDiagnostics', params),
+    install: (params: { id: string; command: string; packageManager: string }) => 
+      ipcRenderer.invoke('lsp:install', params),
+    uninstall: (params: { id: string; packageManager: string }) => 
+      ipcRenderer.invoke('lsp:uninstall', params),
+    checkCommand: (command: string) => 
+      ipcRenderer.invoke('lsp:checkCommand', command)
+  },
   mcp: {
     list: (workspacePath?: string) => ipcRenderer.invoke('mcp:list', workspacePath),
     add: (config: {
@@ -365,6 +406,16 @@ const electronAPI = {
   },
   removeTimeMachineListener: () => {
     ipcRenderer.removeAllListeners('time-machine:first-file-operation');
+  },
+  
+  // Code Generation
+  codeGeneration: {
+    generate: (params: {
+      prompt: string;
+      fileContent: string;
+      filePath: string;
+      language?: string;
+    }) => ipcRenderer.invoke('codeGeneration:generate', params)
   }
 };
 

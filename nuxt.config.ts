@@ -28,6 +28,7 @@ export default defineNuxtConfig({
   css: [
     '~/assets/css/main.css',
     '~/assets/css/modal-theme.css',
+    '~/assets/css/ghost-text.css',
     'splitpanes/dist/splitpanes.css'
   ],
   build: {

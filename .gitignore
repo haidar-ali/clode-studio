@@ -30,7 +30,6 @@ logs
 !.env.example
 
 # Compiled Electron files
-electron/*.js
 electron/*.js.map
 !electron/tsconfig.json
 !electron/tsconfig.preload.json

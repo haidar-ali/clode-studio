@@ -1,3 +1,5 @@
+@import './ghost-text.css';
+
 * {
   box-sizing: border-box;
 }

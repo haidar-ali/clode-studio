@@ -25,6 +25,7 @@ import { GitHooksManagerGlobal } from './git-hooks-manager-global.js';
 import { GitHooksManager } from './git-hooks.js';
 import { SnapshotService } from './snapshot-service.js';
 import { setupGitTimelineHandlers } from './git-timeline-handlers.js';
+import { ghostTextService } from './ghost-text-service.js';
 
 // Load environment variables from .env file
 import { config } from 'dotenv';
@@ -97,11 +98,14 @@ function createWindow() {
   });
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // Initialize all service managers (singletons)
   GitServiceManager.getInstance();
   WorktreeManagerGlobal.getInstance();
   GitHooksManagerGlobal.getInstance();
+  
+  // Initialize autocomplete services
+  await ghostTextService.initialize();
   
   // Setup Git Timeline handlers
   setupGitTimelineHandlers();
@@ -1237,8 +1241,515 @@ app.on('before-quit', () => {
   terminals.clear();
 });
 
+// Ghost text handler (for inline AI suggestions)
+ipcMain.handle('autocomplete:getGhostText', async (event, { prefix, suffix, forceManual = false }) => {
+  try {
+    // Check if ghost text is enabled in settings (but skip check if manual trigger)
+    if (!forceManual) {
+      const settings = (store as any).get('autocompleteSettings');
+      
+      // If no settings exist yet, ghost text should be disabled by default
+      if (!settings || !settings.providers || !settings.providers.claude || !settings.providers.claude.enabled) {
+        return { success: true, suggestion: '' }; // Return empty if disabled or settings don't exist
+      }
+    }
+
+    const suggestion = await ghostTextService.getGhostTextSuggestion(prefix, suffix);
+    return { success: true, suggestion };
+  } catch (error) {
+    console.error('[Main] Ghost text error:', error);
+    return { success: false, suggestion: '', error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+
+
+
+
+
+ipcMain.handle('autocomplete:initializeProject', async (event, projectPath) => {
+  try {
+    await ghostTextService.initializeProject(projectPath);
+    return { success: true };
+  } catch (error) {
+    console.error('Ghost text project initialization error:', error);
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+// Ghost text health check
+ipcMain.handle('autocomplete:checkHealth', async () => {
+  try {
+    return await ghostTextService.checkHealth();
+  } catch (error) {
+    console.error('Ghost text health check error:', error);
+    return { available: false, status: 'error', error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+// Debug: Check what settings are actually stored
+ipcMain.handle('debug:getStoredSettings', async () => {
+  try {
+    const settings = (store as any).get('autocompleteSettings');
+    return { success: true, settings };
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('autocomplete:checkLSPServers', async () => {
+  try {
+    const { lspManager } = await import('./lsp-manager.js');
+    const servers = await lspManager.getAvailableServers();
+    return { success: true, servers };
+  } catch (error) {
+    console.error('LSP servers check error:', error);
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('autocomplete:getLSPStatus', async () => {
+  try {
+    const { lspManager } = await import('./lsp-manager.js');
+    const status = {
+      connected: lspManager.getConnectedServers(),
+      available: await lspManager.getAvailableServers()
+    };
+    return { success: true, status };
+  } catch (error) {
+    console.error('LSP status check error:', error);
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+// LSP Bridge handlers for codemirror-languageservice
+ipcMain.handle('lsp:getCompletions', async (event, params) => {
+  try {
+    const { lspManager } = await import('./lsp-manager.js');
+    const completions = await lspManager.getCompletions(
+      params.filepath,
+      params.content,
+      params.position,
+      params.context?.triggerCharacter
+    );
+    
+    // Return in LSP format expected by codemirror-languageservice
+    return { 
+      success: true, 
+      completions: completions.map(item => ({
+        label: item.label,
+        kind: item.kind,
+        detail: item.detail,
+        documentation: item.documentation,
+        insertText: item.insertText,
+        insertTextFormat: item.insertTextFormat,
+        filterText: item.filterText,
+        sortText: item.sortText,
+        preselect: item.preselect,
+        commitCharacters: item.commitCharacters,
+        additionalTextEdits: item.additionalTextEdits,
+        command: item.command,
+        data: item.data
+      }))
+    };
+  } catch (error) {
+    console.error('LSP completions error:', error);
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('lsp:getHover', async (event, params) => {
+  try {
+    const { lspManager } = await import('./lsp-manager.js');
+    const hover = await lspManager.getHover(
+      params.filepath,
+      params.content,
+      params.position
+    );
+    
+    if (!hover) {
+      return { success: true, hover: null };
+    }
+    
+    return { 
+      success: true, 
+      hover: {
+        content: hover.content,
+        range: hover.range
+      }
+    };
+  } catch (error) {
+    console.error('LSP hover error:', error);
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('lsp:getDiagnostics', async (event, params) => {
+  try {
+    const { lspManager } = await import('./lsp-manager.js') as any;
+    const diagnostics = await lspManager.getDiagnostics(
+      params.filepath,
+      params.content
+    );
+    
+    return { 
+      success: true, 
+      diagnostics: diagnostics || []
+    };
+  } catch (error) {
+    console.error('LSP diagnostics error:', error);
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+// LSP Installation handlers
+ipcMain.handle('lsp:install', async (event, params) => {
+  try {
+    const { id, command, packageManager } = params;
+    
+    console.log(`Installing LSP server: ${id} using ${packageManager}`);
+    
+    return new Promise((resolve) => {
+      // Parse the command into executable and arguments
+      const commandParts = command.split(' ');
+      const executable = commandParts[0];
+      const args = commandParts.slice(1);
+      
+      const installProcess = spawn(executable, args, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        shell: true
+      });
+      
+      let stdout = '';
+      let stderr = '';
+      
+      installProcess.stdout?.on('data', (data) => {
+        stdout += data.toString();
+      });
+      
+      installProcess.stderr?.on('data', (data) => {
+        stderr += data.toString();
+      });
+      
+      installProcess.on('close', (code) => {
+        if (code === 0) {
+          console.log(`Successfully installed LSP server: ${id}`);
+          resolve({ success: true, output: stdout });
+        } else {
+          console.error(`Failed to install LSP server: ${id}`, stderr);
+          resolve({ 
+            success: false, 
+            error: `Installation failed with code ${code}: ${stderr || 'Unknown error'}` 
+          });
+        }
+      });
+      
+      installProcess.on('error', (error) => {
+        console.error(`Error installing LSP server: ${id}`, error);
+        resolve({ 
+          success: false, 
+          error: `Failed to start installation: ${error.message}` 
+        });
+      });
+      
+      // Set timeout for installation (5 minutes)
+      setTimeout(() => {
+        try {
+          installProcess.kill();
+        } catch (e) {
+          // Ignore kill errors
+        }
+        resolve({ 
+          success: false, 
+          error: 'Installation timed out after 5 minutes' 
+        });
+      }, 5 * 60 * 1000);
+    });
+    
+  } catch (error) {
+    console.error('LSP install error:', error);
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('lsp:uninstall', async (event, params) => {
+  try {
+    const { id, packageManager } = params;
+    
+    console.log(`Uninstalling LSP server: ${id} using ${packageManager}`);
+    
+    // Define uninstall commands for different package managers
+    const uninstallCommands: Record<string, string[]> = {
+      npm: ['npm', 'uninstall', '-g'],
+      pip: ['pip', 'uninstall', '-y'],
+      brew: ['brew', 'uninstall'],
+      go: ['rm', '-f'], // Go modules are in GOPATH/bin
+      gem: ['gem', 'uninstall'],
+      rustup: ['rustup', 'component', 'remove'],
+      dotnet: ['dotnet', 'tool', 'uninstall', '-g']
+    };
+    
+    // Map server IDs to package names
+    const packageNames: Record<string, string> = {
+      typescript: 'typescript-language-server',
+      python: 'python-lsp-server',
+      rust: 'rust-analyzer',
+      go: `${homedir()}/go/bin/gopls`,
+      vue: '@vue/language-server',
+      html: 'vscode-langservers-extracted',
+      php: 'intelephense',
+      csharp: 'omnisharp',
+      kotlin: 'kotlin-language-server',
+      ruby: 'ruby-lsp',
+      svelte: 'svelte-language-server',
+      lua: 'lua-language-server',
+      yaml: 'yaml-language-server',
+      java: 'jdtls',
+      cpp: 'llvm'
+    };
+    
+    const command = uninstallCommands[packageManager];
+    const packageName = packageNames[id];
+    
+    if (!command || !packageName) {
+      return { success: false, error: `Unsupported uninstall for ${id} with ${packageManager}` };
+    }
+    
+    return new Promise((resolve) => {
+      const uninstallProcess = spawn(command[0], [...command.slice(1), packageName], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        shell: true
+      });
+      
+      let stdout = '';
+      let stderr = '';
+      
+      uninstallProcess.stdout?.on('data', (data) => {
+        stdout += data.toString();
+      });
+      
+      uninstallProcess.stderr?.on('data', (data) => {
+        stderr += data.toString();
+      });
+      
+      uninstallProcess.on('close', (code) => {
+        if (code === 0) {
+          console.log(`Successfully uninstalled LSP server: ${id}`);
+          resolve({ success: true, output: stdout });
+        } else {
+          console.error(`Failed to uninstall LSP server: ${id}`, stderr);
+          resolve({ 
+            success: false, 
+            error: `Uninstallation failed with code ${code}: ${stderr || 'Unknown error'}` 
+          });
+        }
+      });
+      
+      uninstallProcess.on('error', (error) => {
+        console.error(`Error uninstalling LSP server: ${id}`, error);
+        resolve({ 
+          success: false, 
+          error: `Failed to start uninstallation: ${error.message}` 
+        });
+      });
+    });
+    
+  } catch (error) {
+    console.error('LSP uninstall error:', error);
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+// Check if a command is available
+ipcMain.handle('lsp:checkCommand', async (event, command) => {
+  try {
+    return new Promise((resolve) => {
+      const checkProcess = spawn('which', [command], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        shell: true
+      });
+      
+      checkProcess.on('close', (code) => {
+        resolve({ available: code === 0 });
+      });
+      
+      checkProcess.on('error', () => {
+        resolve({ available: false });
+      });
+      
+      // Timeout after 2 seconds
+      setTimeout(() => {
+        try {
+          checkProcess.kill();
+        } catch (e) {
+          // Ignore kill errors
+        }
+        resolve({ available: false });
+      }, 2000);
+    });
+    
+  } catch (error) {
+    console.error('Command check error:', error);
+    return { available: false };
+  }
+});
+
+// Code generation handler
+ipcMain.handle('codeGeneration:generate', async (event, { prompt, fileContent, filePath, language, resources = [] }) => {
+  try {
+    // Import Claude SDK
+    const { query } = await import('@anthropic-ai/claude-code');
+    
+    // Load resource contents
+    const loadedResources = await Promise.all(resources.map(async (resource: any) => {
+      if (resource.type === 'file' && resource.path) {
+        try {
+          const content = await readFile(resource.path, 'utf-8');
+          return { ...resource, content };
+        } catch (error) {
+          console.error(`Failed to read resource file ${resource.path}:`, error);
+          return resource;
+        }
+      } else if (resource.type === 'knowledge' && resource.id) {
+        // Load from knowledge store
+        const knowledgeData = (store as any).get('knowledgeBases');
+        for (const kbName in knowledgeData) {
+          const kb = knowledgeData[kbName];
+          if (kb.entries && kb.entries[resource.id]) {
+            return { ...resource, content: kb.entries[resource.id].content };
+          }
+        }
+      }
+      return resource;
+    }));
+    
+    // Construct the system prompt for code generation
+    const systemPrompt = `You are an expert code generation assistant. When given a file and a request to modify it, you must return ONLY the complete updated file contents. No explanations, no markdown code blocks, no comments about what changed - just the raw code for the entire file.
+
+CRITICAL: Your response must be ONLY code. Do not include any text before or after the code. Do not wrap the code in markdown blocks. Do not explain what you're doing. Just output the raw code that should replace the file contents.`;
+    
+    // Build resource context
+    let resourceContext = '';
+    if (loadedResources.length > 0) {
+      resourceContext = '\n\nReference Resources:\n';
+      loadedResources.forEach((resource, index) => {
+        if (resource.content) {
+          resourceContext += `\n--- Resource ${index + 1}: ${resource.name} (${resource.type}) ---\n`;
+          resourceContext += resource.content + '\n';
+        }
+      });
+    }
+    
+    // Build the user prompt with context
+    const userPrompt = `Current file: ${filePath}
+Language: ${language}
+
+Current file contents:
+${fileContent}
+${resourceContext}
+Request: ${prompt}
+
+Remember: Return ONLY the complete code for the file. No explanations. No markdown. Just the raw code.`;
+
+    console.log('[Code Generation] Sending request to Claude...');
+    
+    // Create an AbortController for timeout
+    const abortController = new AbortController();
+    const timeoutId = setTimeout(() => {
+      console.log('[Code Generation] Request timed out after 60 seconds');
+      abortController.abort();
+    }, 60000); // 60 second timeout
+    
+    try {
+      // Use Claude SDK to generate code
+      const response = query({
+        prompt: userPrompt,
+        abortController,
+        options: {
+          model: 'claude-sonnet-4-20250514', // Fast model for code generation
+          maxTurns: 1,
+          allowedTools: [],
+          customSystemPrompt: systemPrompt
+        }
+      });
+      
+      let generatedCode = '';
+      
+      // Iterate through the response messages
+      for await (const message of response) {
+        if (message.type === 'assistant' && message.message?.content) {
+          // Extract text from content blocks
+          for (const block of message.message.content) {
+            if (block.type === 'text') {
+              generatedCode += block.text;
+            }
+          }
+        } else if (message.type === 'result') {
+          console.log('[Code Generation] Query complete');
+          break;
+        }
+      }
+      
+      clearTimeout(timeoutId);
+      
+      if (generatedCode) {
+        console.log('[Code Generation] Successfully generated code');
+        
+        // Clean the response - remove any markdown code blocks if present
+        generatedCode = generatedCode.trim();
+        
+        // Remove markdown code blocks if they exist
+        const codeBlockRegex = /^```[\w]*\n([\s\S]*?)\n```$/;
+        const match = generatedCode.match(codeBlockRegex);
+        if (match) {
+          generatedCode = match[1];
+        }
+        
+        return { 
+          success: true, 
+          generatedCode,
+          replaceWholeFile: true 
+        };
+      } else {
+        return { 
+          success: false, 
+          error: 'No response from Claude' 
+        };
+      }
+      
+    } catch (queryError: unknown) {
+      clearTimeout(timeoutId);
+      
+      if (queryError instanceof Error && queryError.name === 'AbortError') {
+        return { 
+          success: false, 
+          error: 'Request timed out. Try a simpler request.' 
+        };
+      }
+      
+      throw queryError;
+    }
+    
+  } catch (error) {
+    console.error('[Code Generation] Error:', error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    };
+  }
+});
+
 // Clean up Claude instances on app quit
-app.on('before-quit', () => {
+app.on('before-quit', async () => {
+  // Shutdown LSP servers
+  try {
+    const { lspManager } = await import('./lsp-manager.js');
+    await lspManager.shutdown();
+  } catch (error) {
+    console.error('Failed to shutdown LSP servers:', error);
+  }
+  
+  // Clean up Claude instances
   for (const [instanceId, claudePty] of claudeInstances) {
     try {
       claudePty.kill();
