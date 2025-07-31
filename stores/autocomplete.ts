@@ -615,7 +615,7 @@ export const useAutocompleteStore = defineStore('autocomplete', {
     
     // Ghost text loading management
     setGhostTextLoading(loading: boolean) {
-      console.log('[AutocompleteStore] Setting ghost text loading:', loading);
+    
       this.ghostTextLoading = loading;
     }
   }

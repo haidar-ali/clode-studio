@@ -56,7 +56,7 @@ export class AIReviewMonitor {
         this.watcher.on('add', () => this.handleTrigger());
         this.watcher.on('change', () => this.handleTrigger());
         this.isMonitoring = true;
-        console.log('AI Review Monitor started for:', this.repoPath);
+      
     }
     async stop() {
         if (!this.isMonitoring)
@@ -71,7 +71,7 @@ export class AIReviewMonitor {
         }
         await this.cleanup();
         this.isMonitoring = false;
-        console.log('AI Review Monitor stopped');
+      
     }
     async handleTrigger() {
         try {

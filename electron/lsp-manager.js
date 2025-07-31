@@ -179,7 +179,7 @@ export class LSPManager {
     
     // Start new server with workspace URI
     const workspaceUri = await this.findWorkspaceRoot(filepath);
-    console.log(`[LSP] Starting server for ${filepath} with workspace: ${workspaceUri}`);
+  
     return await this.startServer(language, workspaceUri);
   }
 
@@ -227,7 +227,7 @@ export class LSPManager {
       throw new Error(`No language server configured for ${language}`);
     }
     
-    console.log(`[LSP] Starting ${language} language server with workspace: ${workspaceUri || 'none'}`);
+  
     
     // For Vue, dynamically find TypeScript SDK and ensure TypeScript server is also running
     if (language === 'vue') {
@@ -237,14 +237,14 @@ export class LSPManager {
           const npmRoot = execSync('npm root -g', { encoding: 'utf8' }).trim();
           const tsdk = `${npmRoot}/typescript/lib`;
           config.initOptions.typescript.tsdk = tsdk;
-          console.log(`[LSP] Vue server using TypeScript SDK at: ${tsdk}`);
+        
         } catch (e) {
           console.warn('[LSP] Could not find TypeScript SDK, Vue completions might not work');
         }
       }
       
       // Skip TypeScript server for now - let's test Vue server alone
-      console.log('[LSP] Starting Vue server in standalone mode');
+    
     }
     
     try {
@@ -276,18 +276,18 @@ export class LSPManager {
       });
       
       serverProcess.on('exit', (code) => {
-        console.log(`[LSP] ${language} server exited with code ${code}`);
+      
         this.connections.delete(language);
         this.servers.delete(language);
       });
       
       // Handle requests from the server
       connection.onRequest((method, params) => {
-        console.log(`[LSP] Received request: ${method}`);
+      
         
         // Handle Vue-specific requests
         if (method === '_vue:projectInfo') {
-          console.log(`[LSP] Handling Vue project info request:`, params);
+        
           // Vue LS needs detailed project info for completions to work
           return {
             version: 1,
@@ -302,32 +302,32 @@ export class LSPManager {
           case 'client/registerCapability':
             // Vue Language Server wants to register capabilities dynamically
             // We'll accept all capability registrations
-            console.log(`[LSP] Registering capabilities:`, params);
+          
             return {}; // Empty response indicates success
             
           case 'window/showMessage':
-            console.log(`[LSP] Message from server:`, params);
+          
             return null;
             
           case 'window/showMessageRequest':
-            console.log(`[LSP] Message request from server:`, params);
+          
             // Return the first action if available
             return params.actions ? params.actions[0] : null;
             
           case 'window/logMessage':
-            console.log(`[LSP] Log from server:`, params);
+          
             return null;
             
           case 'window/showMessage':
-            console.log(`[LSP] Show message from server:`, params);
+          
             return null;
             
           case 'workspace/configuration':
-            console.log(`[LSP] Configuration request:`, params);
+          
             // Return configuration based on what's requested
             if (params.items) {
               return params.items.map(item => {
-                console.log(`[LSP] Configuration requested for section: ${item.section}`);
+              
                 
                 // Vue Language Server might request specific configurations
                 if (item.section === 'vue' || item.section === 'volar') {
@@ -472,7 +472,7 @@ export class LSPManager {
             return [];
             
           case 'workspace/applyEdit':
-            console.log(`[LSP] Apply edit request:`, params);
+          
             // Accept the edit
             return { applied: true };
             
@@ -492,7 +492,7 @@ export class LSPManager {
       connection.onNotification((method, params) => {
         // Only log non-diagnostic notifications to reduce spam
         if (method !== 'textDocument/publishDiagnostics') {
-          console.log(`[LSP] Received notification: ${method}`);
+        
         }
         
         switch (method) {
@@ -507,7 +507,7 @@ export class LSPManager {
                           JSON.stringify(prevDiagnostics) !== JSON.stringify(newDiagnostics);
             
             if (changed) {
-              console.log(`[LSP] Diagnostics for ${params.uri}:`, newDiagnostics.length, 'issues');
+            
               
               // Log detailed diagnostic info for Vue files with errors
               if (params.uri.endsWith('.vue') && newDiagnostics.length > 0) {
@@ -524,20 +524,20 @@ export class LSPManager {
             break;
             
           case 'window/logMessage':
-            console.log(`[LSP] Log message:`, params);
+          
             break;
             
           case '$/progress':
             // Handle progress notifications
-            console.log(`[LSP] Progress:`, params);
+          
             break;
             
           default:
             // Only log Vue-specific unhandled notifications in detail
             if (language === 'vue' && !method.startsWith('$/')) {
-              console.log(`[LSP] Vue unhandled notification: ${method}`, params);
+            
             } else if (!method.startsWith('$/') && !method.startsWith('tsserver/')) {
-              console.log(`[LSP] Unhandled notification: ${method}`);
+            
             }
         }
       });
@@ -649,7 +649,7 @@ export class LSPManager {
       // Notify initialized
       await connection.sendNotification(lsp.InitializedNotification.type, {});
       
-      console.log(`[LSP] ${language} server initialized successfully`);
+    
       
       // For Vue, send a didChangeConfiguration notification to trigger full initialization
       if (language === 'vue') {
@@ -678,14 +678,14 @@ export class LSPManager {
             }
           }
         });
-        console.log('[LSP] Sent Vue configuration');
+      
         
         // Try to trigger Vue server initialization with a command
         try {
           await connection.sendRequest('workspace/executeCommand', {
             command: 'volar.action.restartServer'
           });
-          console.log('[LSP] Sent restart command to Vue server');
+        
         } catch (e) {
           // Command might not exist, that's ok
         }
@@ -774,7 +774,7 @@ export class LSPManager {
         
         // For Vue files, wait longer for initial processing
         if (language === 'vue') {
-          console.log('[LSP] Waiting for Vue server to process document...');
+        
           await new Promise(resolve => setTimeout(resolve, 500)); // Increased to 500ms
         }
       } else {
@@ -865,7 +865,7 @@ export class LSPManager {
         completions = await Promise.race([completionPromise, timeoutPromise]);
       } catch (timeoutError) {
         if (language === 'vue') {
-          console.log(`[LSP] Vue completion request timed out or failed:`, timeoutError.message);
+        
         }
         // Return empty completions on timeout
         completions = [];
@@ -885,7 +885,7 @@ export class LSPManager {
         
         // If we got timeout, try a simple hover request to test if server is responsive
         if (completions.length === 0) {
-          console.log('[LSP] Testing Vue server responsiveness with hover request...');
+        
           try {
             const hoverTest = await connection.sendRequest(lsp.HoverRequest.type, {
               textDocument: { uri },
@@ -894,9 +894,9 @@ export class LSPManager {
                 character: position.character
               }
             });
-            console.log('[LSP] Vue hover test result:', !!hoverTest);
+          
           } catch (e) {
-            console.log('[LSP] Vue hover test failed:', e.message);
+          
           }
         }
       }
@@ -1061,7 +1061,7 @@ export class LSPManager {
     if (!connection) return item;
     
     try {
-      console.log(`[LSP] Resolving completion item: ${item.label}`);
+    
       
       const resolved = await connection.sendRequest(lsp.CompletionResolveRequest.type, item);
       
@@ -1213,7 +1213,7 @@ export class LSPManager {
       // Return stored diagnostics for this file
       // LSP servers send diagnostics via notifications after document changes
       const diagnostics = this.diagnostics.get(uri) || [];
-      console.log(`[LSP] Returning ${diagnostics.length} diagnostics for ${filepath}`);
+    
       
       return diagnostics;
     } catch (error) {
@@ -1246,7 +1246,7 @@ export class LSPManager {
       // Clear diagnostics for this file
       this.diagnostics.delete(uri);
       
-      console.log(`[LSP] Closed document: ${filepath}`);
+    
     } catch (error) {
       console.error(`[LSP] Failed to close document:`, error);
     }
@@ -1280,7 +1280,7 @@ export class LSPManager {
    * Shutdown all language servers
    */
   async shutdown() {
-    console.log('[LSP] Shutting down all language servers...');
+  
     
     for (const [language, connection] of this.connections) {
       try {
@@ -1334,7 +1334,7 @@ export class LSPManager {
           // Found a project marker
           const workspaceUri = `file://${currentDir}`;
           this.workspaceRoots.set(filepath, workspaceUri);
-          console.log(`[LSP] Found workspace root at ${currentDir}`);
+        
           return workspaceUri;
         } catch {
           // Marker not found, continue
@@ -1345,7 +1345,7 @@ export class LSPManager {
     
     // No workspace root found, use file's directory
     const fallbackUri = `file://${path.dirname(filepath)}`;
-    console.log(`[LSP] No workspace root found, using file directory`);
+  
     return fallbackUri;
   }
 

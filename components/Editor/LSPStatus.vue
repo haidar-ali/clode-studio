@@ -360,7 +360,7 @@ const copyCommand = async (command: string) => {
   try {
     await navigator.clipboard.writeText(command);
     // Show success feedback
-    console.log('Command copied to clipboard');
+  
   } catch (error) {
     console.error('Failed to copy command:', error);
   }
@@ -394,9 +394,9 @@ const refreshStatus = async () => {
   activeServers.value = autocompleteStore.lspStatus.availableServers;
   
   // Debug logging to see what's happening
-  console.log('Available servers:', autocompleteStore.lspStatus.availableServers);
-  console.log('Connected servers:', autocompleteStore.lspStatus.connectedServers);
-  console.log('Active servers:', activeServers.value);
+
+
+
 };
 
 onMounted(() => {

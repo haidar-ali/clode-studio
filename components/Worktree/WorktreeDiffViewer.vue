@@ -173,7 +173,7 @@ async function loadDiff() {
     const file1Path = `${props.worktree1.path}/${cleanFile}`.replace(/\/\/+/g, '/');
     const file2Path = `${props.worktree2.path}/${cleanFile}`.replace(/\/\/+/g, '/');
     
-    console.log('Loading diff for:', { file1Path, file2Path });
+  
     
     // Load file content from both worktrees
     const [result1, result2] = await Promise.all([

@@ -24,7 +24,7 @@ const autocompleteStore = useAutocompleteStore();
 
 const isLoading = computed(() => {
   const loading = autocompleteStore.ghostTextLoading;
-  console.log('[GhostTextIndicator] Loading state:', loading);
+
   return loading;
 });
 

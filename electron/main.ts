@@ -1407,7 +1407,7 @@ ipcMain.handle('lsp:install', async (event, params) => {
   try {
     const { id, command, packageManager } = params;
     
-    console.log(`Installing LSP server: ${id} using ${packageManager}`);
+  
     
     return new Promise((resolve) => {
       // Parse the command into executable and arguments
@@ -1433,7 +1433,7 @@ ipcMain.handle('lsp:install', async (event, params) => {
       
       installProcess.on('close', (code) => {
         if (code === 0) {
-          console.log(`Successfully installed LSP server: ${id}`);
+        
           resolve({ success: true, output: stdout });
         } else {
           console.error(`Failed to install LSP server: ${id}`, stderr);
@@ -1476,7 +1476,7 @@ ipcMain.handle('lsp:uninstall', async (event, params) => {
   try {
     const { id, packageManager } = params;
     
-    console.log(`Uninstalling LSP server: ${id} using ${packageManager}`);
+  
     
     // Define uninstall commands for different package managers
     const uninstallCommands: Record<string, string[]> = {
@@ -1534,7 +1534,7 @@ ipcMain.handle('lsp:uninstall', async (event, params) => {
       
       uninstallProcess.on('close', (code) => {
         if (code === 0) {
-          console.log(`Successfully uninstalled LSP server: ${id}`);
+        
           resolve({ success: true, output: stdout });
         } else {
           console.error(`Failed to uninstall LSP server: ${id}`, stderr);
@@ -1651,12 +1651,12 @@ Request: ${prompt}
 
 Remember: Return ONLY the complete code for the file. No explanations. No markdown. Just the raw code.`;
 
-    console.log('[Code Generation] Sending request to Claude...');
+  
     
     // Create an AbortController for timeout
     const abortController = new AbortController();
     const timeoutId = setTimeout(() => {
-      console.log('[Code Generation] Request timed out after 60 seconds');
+    
       abortController.abort();
     }, 60000); // 60 second timeout
     
@@ -1685,7 +1685,7 @@ Remember: Return ONLY the complete code for the file. No explanations. No markdo
             }
           }
         } else if (message.type === 'result') {
-          console.log('[Code Generation] Query complete');
+        
           break;
         }
       }
@@ -1693,7 +1693,7 @@ Remember: Return ONLY the complete code for the file. No explanations. No markdo
       clearTimeout(timeoutId);
       
       if (generatedCode) {
-        console.log('[Code Generation] Successfully generated code');
+      
         
         // Clean the response - remove any markdown code blocks if present
         generatedCode = generatedCode.trim();

@@ -18,7 +18,7 @@ export function useAutocomplete() {
   // Convert CodeMirror context to our extended context
   const createCompletionContext = (cmContext: CMCompletionContext): CompletionContext => {
     const activeTab = editorStore.activeTab;
-    console.log('[Autocomplete] Active tab:', activeTab ? { id: activeTab.id, path: activeTab.path, filepath: activeTab.filepath, language: activeTab.language } : 'none');
+  
     const pos = cmContext.pos;
     const line = cmContext.state.doc.lineAt(pos);
     const lineNumber = line.number;
@@ -97,7 +97,7 @@ export function useAutocomplete() {
     const cacheKey = autocompleteStore.cacheKey(context.language, context.prefix, context.suffix);
     const cached = autocompleteStore.getCachedCompletion(cacheKey);
     if (cached && cached.length > 0) {
-      console.log('[Autocomplete] Found cached completions:', cached.length);
+    
       // Calculate the correct 'from' position for cached results too
       const lineText = context.prefix.split('\n').pop() || '';
       const wordMatch = lineText.match(/(\w*)$/);
@@ -141,17 +141,17 @@ export function useAutocomplete() {
     // Claude is now handled by ghost text, not in dropdown
     
     try {
-      console.log('[Autocomplete] Requesting completions with providers:', request.providers);
+    
       
       // Use the full completion service for now - progressive loading will be handled there
       const completions = await getCompletions(request);
       
       if (completions.length === 0) {
-        console.log('[Autocomplete] No completions available');
+      
         return null;
       }
       
-      console.log('[Autocomplete] Got completions:', completions.length);
+    
       
       // Cache successful completions
       if (completions.length > 0) {
@@ -174,7 +174,7 @@ export function useAutocomplete() {
       const currentWord = wordMatch ? wordMatch[1] : '';
       const fromPos = context.pos - currentWord.length;
       
-      console.log('[Autocomplete] Current word:', currentWord, 'from position:', fromPos, 'to:', context.pos);
+    
       
       const result = {
         from: fromPos, // Start of current word, not cursor position
@@ -186,14 +186,14 @@ export function useAutocomplete() {
       // Store the result for potential reuse
       lastCompletionResult.value = result;
       
-      console.log('[Autocomplete] Returning completion result with', cmCompletions.length, 'options');
+    
       return result;
     } catch (error) {
       if (error.name !== 'AbortError') {
         console.error('[Autocomplete] Completion error:', error);
         return null;
       } else {
-        console.log('[Autocomplete] Request aborted, returning last result if available');
+      
         // Return the last successful result to keep the dropdown open
         return lastCompletionResult.value;
       }
@@ -207,7 +207,7 @@ export function useAutocomplete() {
   
   // Get completions from all enabled providers
   const getCompletions = async (request: CompletionRequest): Promise<CompletionItem[]> => {
-    console.log('[Autocomplete] getCompletions called with providers:', request.providers);
+  
     
     if (!window.electronAPI?.autocomplete) {
       console.warn('[Autocomplete] Autocomplete API not available');
@@ -216,7 +216,7 @@ export function useAutocomplete() {
     
     try {
       const response = await window.electronAPI.autocomplete.getCompletion(request);
-      console.log('[Autocomplete] Service response:', response);
+    
       return response.items || [];
     } catch (error) {
       console.error('[Autocomplete] Service error:', error);
@@ -252,7 +252,7 @@ export function useAutocomplete() {
   
   // Get Claude completions
   const getClaudeCompletions = async (request: CompletionRequest): Promise<CompletionItem[]> => {
-    console.log('[Autocomplete] Getting Claude completions for:', request.context.language, 'at position', request.context.pos);
+  
     
     if (!window.electronAPI?.autocomplete) {
       console.warn('[Autocomplete] Autocomplete API not available in window.electronAPI');
@@ -263,14 +263,14 @@ export function useAutocomplete() {
     
     try {
       const response = await window.electronAPI.autocomplete.getCompletion(request);
-      console.log('[Autocomplete] Claude response:', response);
+    
       
       // Track metrics
       const latency = Date.now() - startTime;
       autocompleteStore.updateMetrics('claude-streaming', latency, true);
       
       if (!response.items || response.items.length === 0) {
-        console.log('[Autocomplete] No completion items returned from Claude');
+      
       }
       
       return response.items || [];
@@ -396,7 +396,7 @@ export function useAutocomplete() {
   
   // Create CodeMirror extension
   const createAutocompleteExtension = () => {
-    console.log('[Autocomplete] Creating autocomplete extension');
+  
     return autocompletion({
       override: [completionSource],
       defaultKeymap: true, // Enable default keymap for arrow key navigation

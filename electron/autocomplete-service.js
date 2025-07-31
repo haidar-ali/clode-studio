@@ -48,23 +48,23 @@ ONLY output the exact characters to insert at █.`;
    * Initialize the autocomplete service
    */
   async initialize() {
-    console.log('[AutocompleteService] Initializing service...');
+  
     // Initialize LSP manager if needed
     // No Claude initialization needed anymore - moved to ghost-text-service
-    console.log('[AutocompleteService] Service initialized (LSP-only mode)');
+  
   }
 
   /**
    * Initialize project context by analyzing key files
    */
   async initializeProject(projectPath) {
-    console.log('[AutocompleteService] Initializing project context for:', projectPath);
+  
     
     try {
       // Initialize LSP manager
-      console.log('[AutocompleteService] Checking available language servers...');
+    
       const availableServers = await lspManager.getAvailableServers();
-      console.log('[AutocompleteService] Available LSP servers:', availableServers.map(s => s.language));
+    
       
       const fs = await import('fs').then(m => m.promises);
       const path = await import('path').then(m => m.default);
@@ -80,9 +80,9 @@ ONLY output the exact characters to insert at █.`;
           dependencies: Object.keys(packageJson.dependencies || {}),
           devDependencies: Object.keys(packageJson.devDependencies || {})
         };
-        console.log('[AutocompleteService] Project info:', this.projectInfo);
+      
       } catch (e) {
-        console.log('[AutocompleteService] No package.json found');
+      
       }
       
       // Read README for project description
@@ -94,7 +94,7 @@ ONLY output the exact characters to insert at █.`;
           this.projectInfo.description = firstParagraph;
         }
       } catch (e) {
-        console.log('[AutocompleteService] No README found');
+      
       }
       
       // Analyze code patterns (sample a few files)
@@ -179,11 +179,11 @@ ONLY output the exact characters to insert at █.`;
       this.projectPatterns = [...new Set(this.projectPatterns)];
       this.commonImports = [...new Set(this.commonImports)].slice(0, 10);
       
-      console.log('[AutocompleteService] Found patterns:', this.projectPatterns);
-      console.log('[AutocompleteService] Common imports:', this.commonImports.length);
+    
+    
       
     } catch (error) {
-      console.log('[AutocompleteService] Pattern analysis skipped:', error.message);
+    
     }
   }
 
@@ -243,7 +243,7 @@ Rules:
 
 Output format: Return only the raw completion text that should be inserted at the cursor position.`;
     
-    console.log('[AutocompleteService] Updated system prompt with project context');
+  
   }
 
   /**
@@ -267,7 +267,7 @@ Output format: Return only the raw completion text that should be inserted at th
       const cacheKey = this.getCacheKey(context);
       const cached = this.getFromCache(cacheKey);
       if (cached) {
-        console.log('[AutocompleteService] Returning cached completion');
+      
         return {
           id: request.id,
           items: cached,
@@ -302,7 +302,7 @@ Output format: Return only the raw completion text that should be inserted at th
         };
         const ext = extMap[context.language] || context.language;
         const lspFilepath = context.filepath || `/tmp/untitled.${ext}`;
-        console.log('[AutocompleteService] Requesting LSP completions for language:', context.language, 'filepath:', lspFilepath);
+      
         
         // Check if LSP server is available for this language
         const serverAvailable = await lspManager.checkServerAvailable(context.language);
@@ -334,7 +334,7 @@ Output format: Return only the raw completion text that should be inserted at th
                 line: context.line, 
                 character: dotIndex + 1 // Position right after the dot
               };
-              console.log(`[AutocompleteService] Member access: ${objectName}.${partialMember} -> position after dot:`, adjustedPosition);
+            
             }
           } else if (lineUpToCursor.endsWith('.')) {
             triggerChar = '.';
@@ -348,7 +348,7 @@ Output format: Return only the raw completion text that should be inserted at th
           if (memberMatch) {
             // If we're doing member access, ensure content has proper structure
             const objectName = memberMatch[1];
-            console.log(`[AutocompleteService] Ensuring proper context for ${objectName} member access`);
+          
             
             // Add common JavaScript objects if they're not defined
             if (objectName === 'console' && !fullContent.includes('console')) {
@@ -361,7 +361,7 @@ Output format: Return only the raw completion text that should be inserted at th
             character: adjustedPosition ? adjustedPosition.character : context.column
           };
           
-          console.log('[AutocompleteService] LSP request - file length:', fullContent.length, 'cursor:', cursorPosition);
+        
           
           const lspCompletions = await Promise.race([
             lspManager.getCompletions(
@@ -395,11 +395,11 @@ Output format: Return only the raw completion text that should be inserted at th
               // Member access: object.partial
               partialWord = memberMatch[2]; // The part after the dot
               isMemberAccess = true;
-              console.log('[AutocompleteService] Member access detected:', memberMatch[1] + '.' + partialWord);
+            
             } else if (partialWordMatch) {
               // Partial word completion (including empty string)
               partialWord = partialWordMatch[1];
-              console.log('[AutocompleteService] Partial word:', partialWord);
+            
             }
             
             // Filter and score LSP completions
@@ -451,20 +451,20 @@ Output format: Return only the raw completion text that should be inserted at th
               .sort((a, b) => (b.confidence || 0) - (a.confidence || 0))
               .slice(0, 20); // Keep top 20 LSP completions
             
-            console.log('[AutocompleteService] Filtered to', relevantLspCompletions.length, 'relevant LSP completions');
+          
             if (relevantLspCompletions.length > 0) {
               console.log('[AutocompleteService] Top 5 LSP completions:', 
                 relevantLspCompletions.slice(0, 5).map(c => `${c.label} (${c.kind}, score: ${c.confidence})`));
             }
             allCompletions.push(...relevantLspCompletions);
           } else {
-            console.log('[AutocompleteService] LSP returned no completions');
+          
           }
         }
       } catch (error) {
-        console.log('[AutocompleteService] LSP completion failed:', error.message);
+      
         if (error.message.includes('ENOENT')) {
-          console.log('[AutocompleteService] Language server not installed. Check LSP settings.');
+        
         }
       }
     }
@@ -566,12 +566,12 @@ Output format: Return only the raw completion text that should be inserted at th
    * Query Claude with timeout
    */
   async queryWithTimeout(prompt, context, timeout, signal) {
-    console.log('[AutocompleteService] Starting query with timeout:', timeout);
+  
     
     let timeoutId;
     const timeoutPromise = new Promise((_, reject) => {
       timeoutId = setTimeout(() => {
-        console.log('[AutocompleteService] Query timeout reached');
+      
         reject(new Error('Timeout'));
       }, timeout);
     });
@@ -581,16 +581,16 @@ Output format: Return only the raw completion text that should be inserted at th
     try {
       const result = await Promise.race([queryPromise, timeoutPromise]);
       clearTimeout(timeoutId); // Clear the timeout since query completed
-      console.log('[AutocompleteService] Query completed successfully');
+    
       return result;
     } catch (error) {
       clearTimeout(timeoutId); // Clear the timeout on error too
       if (error.message === 'Timeout') {
-        console.log('[AutocompleteService] Query timed out, checking partial results');
+      
         // Return partial results if available
         const partial = this.partialResults || '';
         if (partial) {
-          console.log('[AutocompleteService] Returning partial results:', partial.substring(0, 50) + '...');
+        
         }
         return partial;
       }
@@ -605,7 +605,7 @@ Output format: Return only the raw completion text that should be inserted at th
     let result = '';
     this.partialResults = ''; // Store partial results
     
-    console.log('[AutocompleteService] Starting Claude query...');
+  
     
     try {
       const response = query({
@@ -622,23 +622,23 @@ Output format: Return only the raw completion text that should be inserted at th
         }
       });
       
-      console.log('[AutocompleteService] Claude query created, waiting for response...');
+    
       
       for await (const message of response) {
         // Check for cancellation
         if (signal.aborted) {
-          console.log('[AutocompleteService] Query aborted by signal');
+        
           throw new Error('AbortError');
         }
         
-        console.log('[AutocompleteService] Received message:', message.type);
+      
         
         if (message.type === 'assistant' && message.message?.content?.[0]?.text) {
           result += message.message.content[0].text;
-          console.log('[AutocompleteService] Got text:', message.message.content[0].text);
+        
           this.partialResults = result; // Store partial results in case of timeout
         } else if (message.type === 'result') {
-          console.log('[AutocompleteService] Query complete');
+        
           break;
         }
       }
@@ -908,10 +908,10 @@ Position: Line ${line}, Column ${column}
    * Parse Claude's response into completion items
    */
   parseCompletion(text, context) {
-    console.log('[AutocompleteService] Parsing completion text:', text);
+  
     
     if (!text || text.trim() === '') {
-      console.log('[AutocompleteService] Empty completion text');
+    
       return [];
     }
     
@@ -926,7 +926,7 @@ Position: Line ${line}, Column ${column}
     const hasExplanation = forbiddenPhrases.some(phrase => lowerText.includes(phrase));
     
     if (hasExplanation) {
-      console.log('[AutocompleteService] Claude returned explanation, extracting code...');
+    
       
       // Try to extract code blocks first
       const codeBlockMatch = text.match(/```[a-z]*\n?([^`]+)\n?```/s);
@@ -951,7 +951,7 @@ Position: Line ${line}, Column ${column}
             text = lines.slice(codeLineIndex).join('\n').trim();
           } else {
             // Nothing useful found
-            console.log('[AutocompleteService] Could not extract code from explanation');
+          
             return [];
           }
         }
@@ -961,13 +961,13 @@ Position: Line ${line}, Column ${column}
     // Remove any remaining markdown code blocks
     const cleanText = text.replace(/```[a-z]*\n?/g, '').replace(/\n?```/g, '').trim();
     
-    console.log('[AutocompleteService] Clean text:', cleanText);
+  
     
     // Skip if still contains explanation
     if (cleanText.toLowerCase().includes('looking at') || 
         cleanText.toLowerCase().includes('based on') ||
         cleanText.toLowerCase().includes('this would')) {
-      console.log('[AutocompleteService] Still contains explanation, skipping');
+    
       return [];
     }
     
@@ -1081,7 +1081,7 @@ Position: Line ${line}, Column ${column}
   async preloadFileContext(filepath) {
     // TODO: Implement file analysis for better completions
     // This could analyze imports, types, patterns, etc.
-    console.log('Preloading context for:', filepath);
+  
   }
 
   /**
@@ -1089,11 +1089,11 @@ Position: Line ${line}, Column ${column}
    */
   async checkHealth() {
     try {
-      console.log('[AutocompleteService] Checking service health...');
+    
       
       // Check if LSP manager is available
       if (lspManager) {
-        console.log('[AutocompleteService] Service is available (LSP-only mode)');
+      
         return { available: true, status: 'ready' };
       } else {
         return { available: false, status: 'error', error: 'LSP manager not available' };
@@ -1110,7 +1110,7 @@ Position: Line ${line}, Column ${column}
    * Shutdown service and cleanup
    */
   async shutdown() {
-    console.log('[AutocompleteService] Shutting down...');
+  
     
     // Cancel any active requests
     for (const [id, controller] of this.activeRequests) {
@@ -1124,7 +1124,7 @@ Position: Line ${line}, Column ${column}
     // Shutdown LSP servers
     await lspManager.shutdown();
     
-    console.log('[AutocompleteService] Shutdown complete');
+  
   }
 }
 

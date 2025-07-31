@@ -158,7 +158,7 @@ export function useWorkspaceManager() {
       
       // Initialize autocomplete with project context
       if (window.electronAPI?.autocomplete?.initializeProject) {
-        console.log('[WorkspaceManager] Initializing autocomplete for project:', path);
+      
         await window.electronAPI.autocomplete.initializeProject(path);
       }
       
@@ -338,7 +338,7 @@ export function useWorkspaceManager() {
     
     // Re-initialize autocomplete with new worktree context
     if (window.electronAPI?.autocomplete?.initializeProject) {
-      console.log('[WorkspaceManager] Re-initializing autocomplete for worktree:', worktreePath);
+    
       await window.electronAPI.autocomplete.initializeProject(worktreePath);
     }
     

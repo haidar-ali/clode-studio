@@ -36,10 +36,10 @@ export async function getManager(workspacePath) {
         // If we can't determine the main workspace, use the provided path
         console.warn('Could not determine main workspace path:', error);
     }
-    console.log(`[getManager] Input path: ${workspacePath}, Main workspace: ${mainWorkspacePath}`);
+  
     // Use the main workspace path as the key
     if (!managers.has(mainWorkspacePath)) {
-        console.log(`[getManager] Creating new manager for: ${mainWorkspacePath}`);
+      
         const manager = new CheckpointStrategyManager({
             workspacePath: mainWorkspacePath,
             enableLegacySupport: true
@@ -48,7 +48,7 @@ export async function getManager(workspacePath) {
         managers.set(mainWorkspacePath, manager);
     }
     else {
-        console.log(`[getManager] Reusing existing manager for: ${mainWorkspacePath}`);
+      
     }
     return managers.get(mainWorkspacePath);
 }
@@ -60,7 +60,7 @@ export function setupCheckpointV3Handlers(workspacePath) {
     getManager(workspacePath).catch(console.error);
     // Only register handlers once
     if (handlersRegistered) {
-        console.log('[Checkpoint V3] Handlers already registered, skipping...');
+      
         return;
     }
     handlersRegistered = true;
@@ -116,10 +116,10 @@ export function setupCheckpointV3Handlers(workspacePath) {
     });
     // Restore checkpoint
     ipcMain.handle('checkpoint-v3:restore', async (event, workspacePath, checkpointId, options) => {
-        console.log('[Checkpoint V3 Restore Handler] Called with:');
-        console.log('  - Workspace path:', workspacePath);
-        console.log('  - Checkpoint ID:', checkpointId);
-        console.log('  - Options:', options);
+      
+      
+      
+      
         try {
             const manager = await getManager(workspacePath);
             const result = await manager.restoreCheckpoint(checkpointId, options);
@@ -162,7 +162,7 @@ export function setupCheckpointV3Handlers(workspacePath) {
                 // So we need to show what would happen if we restore the checkpoint
                 const currentFiles = await manager.getCurrentFiles();
                 const checkpointFiles = new Map(checkpoint.files.map(f => [f.path, f]));
-                console.log(`[Checkpoint Compare] Current files: ${currentFiles.size}, Checkpoint files: ${checkpointFiles.size}`);
+              
                 const filesAdded = [];
                 const filesRemoved = [];
                 const filesModified = [];
@@ -172,14 +172,14 @@ export function setupCheckpointV3Handlers(workspacePath) {
                     if (!currentFile) {
                         // File exists in checkpoint but not in current = would be added
                         filesAdded.push(path);
-                        console.log(`[Checkpoint Compare] File would be added: ${path}`);
+                      
                     }
                     else if (checkpointFile.hash !== currentFile.hash) {
                         // File exists in both but different = would be modified
                         filesModified.push(path);
-                        console.log(`[Checkpoint Compare] File would be modified: ${path}`);
-                        console.log(`  Current hash: ${currentFile.hash.substring(0, 8)}...`);
-                        console.log(`  Checkpoint hash: ${checkpointFile.hash.substring(0, 8)}...`);
+                      
+                      
+                      
                     }
                     // If hashes are same, file is unchanged - no action needed
                 }

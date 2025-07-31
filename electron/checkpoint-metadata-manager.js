@@ -113,14 +113,14 @@ export class CheckpointMetadataManager {
                 let data = await fs.readJSON(this.metadataPath);
                 // Validate version and migrate if needed
                 if (data.version !== this.METADATA_VERSION) {
-                    console.log(`[CheckpointMetadata] Migrating from version ${data.version} to ${this.METADATA_VERSION}`);
+                  
                     data = await this.migrateMetadata(data);
                 }
                 this.metadata = data;
-                console.log(`[CheckpointMetadata] Loaded ${this.metadata.checkpoints.length} checkpoints`);
+              
             }
             else {
-                console.log('[CheckpointMetadata] No existing metadata found, starting fresh');
+              
             }
         }
         catch (error) {
@@ -146,7 +146,7 @@ export class CheckpointMetadataManager {
             try {
                 this.metadata.lastUpdated = new Date().toISOString();
                 await fs.writeJSON(this.metadataPath, this.metadata, { spaces: 2 });
-                console.log(`[CheckpointMetadata] Saved ${this.metadata.checkpoints.length} checkpoints`);
+              
             }
             catch (error) {
                 console.error('[CheckpointMetadata] Error saving metadata:', error);
@@ -270,7 +270,7 @@ export class CheckpointMetadataManager {
         this.metadata.checkpoints = this.metadata.checkpoints.filter(cp => existingIds.has(cp.id));
         const removedCount = initialLength - this.metadata.checkpoints.length;
         if (removedCount > 0) {
-            console.log(`[CheckpointMetadata] Cleaned up ${removedCount} orphaned entries`);
+          
             await this.saveMetadata();
         }
         return removedCount;

@@ -72,17 +72,17 @@ const debugState = computed(() => autocompleteStore.getDebugState());
 const triggerCompletion = () => {
   // Dispatch event to trigger completion
   window.dispatchEvent(new CustomEvent('autocomplete:trigger'));
-  console.log('[AutocompleteDebug] Triggered completion');
+
 };
 
 const clearCache = () => {
   autocompleteStore.clearCache();
-  console.log('[AutocompleteDebug] Cleared cache');
+
 };
 
 const refresh = () => {
   // Force refresh debug state
-  console.log('[AutocompleteDebug] Debug state:', debugState.value);
+
 };
 
 // Keyboard shortcut to toggle debug panel

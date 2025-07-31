@@ -20,7 +20,7 @@ class GhostTextService {
       // Test the Claude Code SDK
       await this.checkHealth();
       
-      console.log('[GhostTextService] Service initialized successfully');
+    
     } catch (error) {
       console.error('[GhostTextService] Failed to initialize:', error);
       this.isAvailable = false;
@@ -32,7 +32,7 @@ class GhostTextService {
    */
   async checkHealth() {
     try {
-      console.log('[GhostTextService] Checking Claude SDK health...');
+    
       
       // Try a minimal query to test the SDK
       const testQuery = query({
@@ -49,7 +49,7 @@ class GhostTextService {
       // Just check if we can create the query
       if (testQuery) {
         this.isAvailable = true;
-        console.log('[GhostTextService] Claude SDK is available');
+      
         return { available: true, status: 'ready' };
       }
       
@@ -84,7 +84,7 @@ class GhostTextService {
       // Update system prompt with project context
       this.updateSystemPrompt();
       
-      console.log('[GhostTextService] Project initialized:', this.projectInfo.name);
+    
     } catch (error) {
       console.error('[GhostTextService] Failed to initialize project:', error);
     }
@@ -95,7 +95,7 @@ class GhostTextService {
    */
   async getGhostTextSuggestion(prefix, suffix) {
     if (!this.isAvailable) {
-      console.log('[GhostTextService] Service not available');
+    
       return '';
     }
 
@@ -108,7 +108,7 @@ class GhostTextService {
     const request = { cancel: false };
     this.currentRequest = request;
 
-    console.log('[GhostTextService] Ghost text suggestion requested');
+  
     
     // Build context from prefix/suffix
     const context = {
@@ -161,7 +161,7 @@ Output ONLY the code to insert at the cursor, no explanations or markdown.`;
       
     } catch (error) {
       if (error.name === 'AbortError' || request.cancel) {
-        console.log('[GhostTextService] Request aborted');
+      
       } else {
         console.error('[GhostTextService] Query error:', error);
       }
@@ -177,12 +177,12 @@ Output ONLY the code to insert at the cursor, no explanations or markdown.`;
    * Query Claude with timeout
    */
   async queryWithTimeout(prompt, context, timeout, signal) {
-    console.log('[GhostTextService] Starting query with timeout:', timeout);
+  
     
     let timeoutId;
     const timeoutPromise = new Promise((_, reject) => {
       timeoutId = setTimeout(() => {
-        console.log('[GhostTextService] Query timeout reached');
+      
         reject(new Error('Timeout'));
       }, timeout);
     });
@@ -192,16 +192,16 @@ Output ONLY the code to insert at the cursor, no explanations or markdown.`;
     try {
       const result = await Promise.race([queryPromise, timeoutPromise]);
       clearTimeout(timeoutId); // Clear the timeout since query completed
-      console.log('[GhostTextService] Query completed successfully');
+    
       return result;
     } catch (error) {
       clearTimeout(timeoutId); // Clear the timeout on error too
       if (error.message === 'Timeout') {
-        console.log('[GhostTextService] Query timed out, checking partial results');
+      
         // Return partial results if available
         const partial = this.partialResults || '';
         if (partial) {
-          console.log('[GhostTextService] Returning partial results:', partial.substring(0, 50) + '...');
+        
         }
         return partial;
       }
@@ -216,7 +216,7 @@ Output ONLY the code to insert at the cursor, no explanations or markdown.`;
     let result = '';
     this.partialResults = ''; // Store partial results
     
-    console.log('[GhostTextService] Starting Claude query...');
+  
     
     try {
       const response = query({
@@ -232,18 +232,18 @@ Output ONLY the code to insert at the cursor, no explanations or markdown.`;
         }
       });
       
-      console.log('[GhostTextService] Claude query created, waiting for response...');
+    
       
       for await (const message of response) {
         if (message.type === 'system') {
-          console.log('[GhostTextService] Received message:', message.type);
+        
         } else if (message.type === 'assistant' && message.message?.content?.[0]?.text) {
           const text = message.message.content[0].text;
-          console.log('[GhostTextService] Got text:', text);
+        
           result += text;
           this.partialResults = result; // Store partial results in case of timeout
         } else if (message.type === 'result') {
-          console.log('[GhostTextService] Query complete');
+        
         }
       }
       
@@ -347,7 +347,7 @@ When suggesting completions:
 - Follow the project's established conventions`;
 
     this.systemPrompt = basePrompt + projectContext;
-    console.log('[GhostTextService] System prompt updated with project context');
+  
   }
 
   /**
@@ -355,7 +355,7 @@ When suggesting completions:
    */
   async shutdown() {
     this.cancelRequest();
-    console.log('[GhostTextService] Service shut down');
+  
   }
 }
 
