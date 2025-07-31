@@ -95,6 +95,9 @@ interface CompletionCache {
 
 export const useAutocompleteStore = defineStore('autocomplete', {
   state: () => ({
+    // Ghost text loading state
+    ghostTextLoading: false,
+    
     // Settings
     settings: {
       enabled: true,
@@ -106,7 +109,7 @@ export const useAutocompleteStore = defineStore('autocomplete', {
         },
         claude: {
           enabled: false, // Disabled by default - user can enable if needed
-          timeout: 5000, // 5 seconds for quality completions
+          timeout: 2000, // 2 seconds delay before showing suggestions
           streaming: true,
           contextLines: 100, // Industry standard for semantic understanding
           useCache: true,
@@ -608,6 +611,12 @@ export const useAutocompleteStore = defineStore('autocomplete', {
           model: this.settings.claude.model
         }
       };
+    },
+    
+    // Ghost text loading management
+    setGhostTextLoading(loading: boolean) {
+      console.log('[AutocompleteStore] Setting ghost text loading:', loading);
+      this.ghostTextLoading = loading;
     }
   }
 });

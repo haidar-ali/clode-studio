@@ -53,6 +53,9 @@
       ref="codeGenerationModal"
       @accept="handleAcceptGeneratedCode"
     />
+    
+    <!-- Ghost Text Floating Indicator -->
+    <GhostTextFloatingIndicator />
   </div>
 </template>
 
@@ -63,6 +66,7 @@ import FileTree from '~/components/FileExplorer/FileTree.vue';
 import EditorTabs from '~/components/Editor/EditorTabs.vue';
 import CodeMirrorWrapper from '~/components/Editor/CodeMirrorWrapper.vue';
 import CodeGenerationModal from '~/components/Editor/CodeGenerationModal.vue';
+import GhostTextFloatingIndicator from '~/components/Editor/GhostTextFloatingIndicator.vue';
 import Icon from '~/components/Icon.vue';
 
 const editorStore = useEditorStore();

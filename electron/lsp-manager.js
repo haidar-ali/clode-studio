@@ -13,6 +13,9 @@ export class LSPManager {
     this.connections = new Map(); // language -> connection
     this.capabilities = new Map(); // language -> server capabilities
     this.workspaceRoots = new Map(); // cache workspace roots
+    this.documentVersions = new Map(); // uri -> version number
+    this.diagnostics = new Map(); // uri -> diagnostics array
+    this.openDocuments = new Map(); // uri -> { version, language }
     
     // Increase max listeners to prevent warnings when multiple LSP servers start
     process.setMaxListeners(20);
@@ -23,61 +26,141 @@ export class LSPManager {
         command: 'typescript-language-server',
         args: ['--stdio'],
         languages: ['typescript', 'javascript', 'tsx', 'jsx'],
-        install: 'npm install -g typescript-language-server typescript'
+        install: 'npm install -g typescript-language-server typescript',
+        // TypeScript-specific initialization options
+        initOptions: {
+          preferences: {
+            includeCompletionsForModuleExports: false,
+            includeCompletionsForImportStatements: true,
+            includeCompletionsWithSnippetText: true,
+            includeCompletionsWithInsertText: true,
+            includeAutomaticOptionalChainCompletions: true,
+            includeCompletionsWithClassMemberSnippets: true,
+            includeCompletionsWithObjectLiteralMethodSnippets: true,
+            allowIncompleteCompletions: true,
+            importModuleSpecifierPreference: 'shortest',
+            importModuleSpecifierEnding: 'auto',
+            includePackageJsonAutoImports: 'auto',
+            providePrefixAndSuffixTextForRename: true,
+            allowRenameOfImportPath: true,
+            quotePreference: 'auto',
+            includeInlayParameterNameHints: 'none',
+            includeInlayParameterNameHintsWhenArgumentMatchesName: false,
+            includeInlayFunctionParameterTypeHints: false,
+            includeInlayVariableTypeHints: false,
+            includeInlayPropertyDeclarationTypeHints: false,
+            includeInlayFunctionLikeReturnTypeHints: false,
+            includeInlayEnumMemberValueHints: false
+          },
+          maxTsServerMemory: 4096,
+          tsserver: {
+            logDirectory: null,
+            logVerbosity: 'off',
+            trace: 'off'
+          },
+          completions: {
+            completeFunctionCalls: true
+          }
+        }
       },
       python: {
         command: 'pylsp',
         args: [],
         languages: ['python'],
-        install: 'pip install python-lsp-server[all]'
+        install: 'pip install python-lsp-server[all]',
+        initOptions: {}
       },
       rust: {
         command: 'rust-analyzer',
         args: [],
         languages: ['rust'],
-        install: 'rustup component add rust-analyzer'
+        install: 'rustup component add rust-analyzer',
+        initOptions: {}
       },
       go: {
         command: 'gopls',
         args: [],
         languages: ['go'],
-        install: 'go install golang.org/x/tools/gopls@latest'
+        install: 'go install golang.org/x/tools/gopls@latest',
+        initOptions: {}
       },
       java: {
         command: 'jdtls',
         args: [],
         languages: ['java'],
-        install: 'https://download.eclipse.org/jdtls/downloads/'
+        install: 'https://download.eclipse.org/jdtls/downloads/',
+        initOptions: {}
       },
       cpp: {
         command: 'clangd',
         args: [],
         languages: ['cpp', 'c', 'cc', 'cxx', 'h', 'hpp'],
-        install: 'apt-get install clangd / brew install llvm'
+        install: 'apt-get install clangd / brew install llvm',
+        initOptions: {}
       },
       vue: {
         command: 'vue-language-server',
         args: ['--stdio'],
         languages: ['vue'],
-        install: 'npm install -g @vue/language-server'
+        install: 'npm install -g @vue/language-server @vue/typescript-plugin',
+        // Vue Language Server v3 specific configuration
+        initOptions: {
+          typescript: {
+            tsdk: null, // Will be set dynamically
+            // Enable TypeScript plugin for Vue files
+            enablePlugin: true
+          },
+          vue: {
+            // Hybrid mode is now always on in v3 (Vue handles template/style, TS handles script)
+            hybridMode: false, // Vue v2 doesn't use hybrid mode
+            // Enable all features
+            inlayHints: {
+              missingProps: true,
+              inlineHandlerLeading: true,
+              optionsWrapper: true
+            },
+            // Additional Vue-specific settings
+            includeLanguages: ['javascript', 'typescript', 'javascriptreact', 'typescriptreact'],
+            additionalExtensions: ['.vue'],
+            defaultFormatterOptions: {
+              'js-beautify-html': {
+                wrap_attributes: 'force-expand-multiline'
+              }
+            }
+          },
+          // Additional options for better completion support
+          documentFeatures: {
+            documentColor: false,
+            documentFormatting: {
+              defaultPrintWidth: 100
+            },
+            documentSymbol: true,
+            foldingRange: true,
+            linkedEditingRange: true,
+            selectionRange: true
+          }
+        }
       },
       html: {
         command: 'vscode-html-language-server',
         args: ['--stdio'],
         languages: ['html', 'htm'],
-        install: 'npm install -g vscode-langservers-extracted'
+        install: 'npm install -g vscode-langservers-extracted',
+        initOptions: {}
       },
       css: {
         command: 'vscode-css-language-server',
         args: ['--stdio'],
         languages: ['css', 'scss', 'less'],
-        install: 'npm install -g vscode-langservers-extracted'
+        install: 'npm install -g vscode-langservers-extracted',
+        initOptions: {}
       },
       json: {
         command: 'vscode-json-language-server',
         args: ['--stdio'],
         languages: ['json', 'jsonc'],
-        install: 'npm install -g vscode-langservers-extracted'
+        install: 'npm install -g vscode-langservers-extracted',
+        initOptions: {}
       }
     };
   }
@@ -146,6 +229,24 @@ export class LSPManager {
     
     console.log(`[LSP] Starting ${language} language server with workspace: ${workspaceUri || 'none'}`);
     
+    // For Vue, dynamically find TypeScript SDK and ensure TypeScript server is also running
+    if (language === 'vue') {
+      if (!config.initOptions.typescript.tsdk) {
+        try {
+          const { execSync } = await import('child_process');
+          const npmRoot = execSync('npm root -g', { encoding: 'utf8' }).trim();
+          const tsdk = `${npmRoot}/typescript/lib`;
+          config.initOptions.typescript.tsdk = tsdk;
+          console.log(`[LSP] Vue server using TypeScript SDK at: ${tsdk}`);
+        } catch (e) {
+          console.warn('[LSP] Could not find TypeScript SDK, Vue completions might not work');
+        }
+      }
+      
+      // Skip TypeScript server for now - let's test Vue server alone
+      console.log('[LSP] Starting Vue server in standalone mode');
+    }
+    
     try {
       // Spawn the language server process
       const serverProcess = spawn(config.command, config.args, {
@@ -160,7 +261,13 @@ export class LSPManager {
       
       // Handle server errors
       serverProcess.stderr.on('data', (data) => {
-        console.error(`[LSP] ${language} server error:`, data.toString());
+        const errorMsg = data.toString();
+        console.error(`[LSP] ${language} server error:`, errorMsg);
+        
+        // Log Vue-specific errors in detail
+        if (language === 'vue' && errorMsg.includes('Error')) {
+          console.error(`[LSP] Vue server detailed error:`, errorMsg);
+        }
       });
       
       serverProcess.on('error', (err) => {
@@ -174,10 +281,271 @@ export class LSPManager {
         this.servers.delete(language);
       });
       
+      // Handle requests from the server
+      connection.onRequest((method, params) => {
+        console.log(`[LSP] Received request: ${method}`);
+        
+        // Handle Vue-specific requests
+        if (method === '_vue:projectInfo') {
+          console.log(`[LSP] Handling Vue project info request:`, params);
+          // Vue LS needs detailed project info for completions to work
+          return {
+            version: 1,
+            appInfo: {
+              name: 'Clode Studio',
+              version: '1.0.0'
+            }
+          };
+        }
+        
+        switch (method) {
+          case 'client/registerCapability':
+            // Vue Language Server wants to register capabilities dynamically
+            // We'll accept all capability registrations
+            console.log(`[LSP] Registering capabilities:`, params);
+            return {}; // Empty response indicates success
+            
+          case 'window/showMessage':
+            console.log(`[LSP] Message from server:`, params);
+            return null;
+            
+          case 'window/showMessageRequest':
+            console.log(`[LSP] Message request from server:`, params);
+            // Return the first action if available
+            return params.actions ? params.actions[0] : null;
+            
+          case 'window/logMessage':
+            console.log(`[LSP] Log from server:`, params);
+            return null;
+            
+          case 'window/showMessage':
+            console.log(`[LSP] Show message from server:`, params);
+            return null;
+            
+          case 'workspace/configuration':
+            console.log(`[LSP] Configuration request:`, params);
+            // Return configuration based on what's requested
+            if (params.items) {
+              return params.items.map(item => {
+                console.log(`[LSP] Configuration requested for section: ${item.section}`);
+                
+                // Vue Language Server might request specific configurations
+                if (item.section === 'vue' || item.section === 'volar') {
+                  return {
+                    // Basic Vue/Volar configuration
+                    hybridMode: false,
+                    completion: {
+                      autoImportComponent: true,
+                      scaffoldSnippets: {
+                        vueTemplate: true,
+                        vueScript: true,
+                        vueStyle: true
+                      }
+                    }
+                  };
+                } else if (item.section === 'http') {
+                  // Vue server requests http configuration for downloading TypeScript lib files
+                  return {
+                    proxy: '',
+                    proxyStrictSSL: true
+                  };
+                } else if (item.section === 'html.customData') {
+                  // Vue Language Server v2 expects an array
+                  return [];
+                } else if (item.section === 'html.completion') {
+                  // HTML completion settings
+                  return {
+                    attributeDefaultValue: 'doublequotes',
+                    autoClosingTags: true
+                  };
+                } else if (item.section === 'html') {
+                  // General HTML settings
+                  return {
+                    customData: [],
+                    completion: {
+                      attributeDefaultValue: 'doublequotes',
+                      autoClosingTags: true
+                    }
+                  };
+                } else if (item.section === 'vue.complete.casing.props') {
+                  // Vue completion casing for props
+                  return 'kebab';
+                } else if (item.section === 'vue.complete.casing.tags') {
+                  // Vue completion casing for tags
+                  return 'kebab';
+                } else if (item.section === 'vue') {
+                  // General Vue configuration
+                  return {
+                    complete: {
+                      casing: {
+                        props: 'kebab',
+                        tags: 'kebab'
+                      }
+                    },
+                    autoInsert: {
+                      dotValue: true,
+                      bracketSpacing: true
+                    }
+                  };
+                } else if (item.section === 'javascript' || item.section === 'js/ts') {
+                  // JavaScript/TypeScript configuration for Vue script blocks
+                  return {
+                    suggest: {
+                      completeFunctionCalls: true,
+                      includeCompletionsForModuleExports: true,
+                      names: true,
+                      paths: true,
+                      autoImports: true,
+                      includeAutomaticOptionalChainCompletions: true
+                    },
+                    preferences: {
+                      importModuleSpecifier: 'shortest',
+                      includePackageJsonAutoImports: 'auto',
+                      quoteStyle: 'single'
+                    }
+                  };
+                } else if (item.section === 'css.customData') {
+                  // CSS custom data for Vue style blocks - must be an array
+                  return [];
+                } else if (item.section === 'css.completion') {
+                  // CSS completion settings
+                  return {
+                    triggerPropertyValueCompletion: true,
+                    completePropertyWithSemicolon: true
+                  };
+                } else if (item.section === 'css') {
+                  // General CSS settings
+                  return {
+                    customData: [],
+                    completion: {
+                      triggerPropertyValueCompletion: true,
+                      completePropertyWithSemicolon: true
+                    },
+                    validate: true
+                  };
+                } else if (item.section === 'scss.customData') {
+                  // SCSS custom data - must be an array
+                  return [];
+                } else if (item.section === 'scss') {
+                  // SCSS settings
+                  return {
+                    customData: [],
+                    validate: true
+                  };
+                } else if (item.section === 'less.customData') {
+                  // LESS custom data - must be an array
+                  return [];
+                } else if (item.section === 'less') {
+                  // LESS settings
+                  return {
+                    customData: [],
+                    validate: true
+                  };
+                } else if (item.section === 'typescript') {
+                  return {
+                    tsdk: config.initOptions?.typescript?.tsdk || null,
+                    inlayHints: {
+                      includeInlayParameterNameHints: 'none',
+                      includeInlayParameterNameHintsWhenArgumentMatchesName: false,
+                      includeInlayFunctionParameterTypeHints: false,
+                      includeInlayVariableTypeHints: false,
+                      includeInlayPropertyDeclarationTypeHints: false,
+                      includeInlayFunctionLikeReturnTypeHints: false,
+                      includeInlayEnumMemberValueHints: false
+                    },
+                    preferences: {
+                      includeCompletionsForModuleExports: true,
+                      includeCompletionsWithInsertText: true
+                    }
+                  };
+                } else if (item.section === 'javascript') {
+                  return {
+                    preferences: {
+                      includeCompletionsForModuleExports: true,
+                      includeCompletionsWithInsertText: true
+                    }
+                  };
+                }
+                return {};
+              });
+            }
+            return [];
+            
+          case 'workspace/applyEdit':
+            console.log(`[LSP] Apply edit request:`, params);
+            // Accept the edit
+            return { applied: true };
+            
+          default:
+            console.warn(`[LSP] Unhandled request method: ${method}`, params);
+            // For unhandled methods, return appropriate response
+            if (method.startsWith('vue/') || method.startsWith('volar/')) {
+              // Vue-specific methods - return empty object
+              return {};
+            }
+            // Return null for other unhandled methods
+            return null;
+        }
+      });
+      
+      // Handle notifications from the server
+      connection.onNotification((method, params) => {
+        // Only log non-diagnostic notifications to reduce spam
+        if (method !== 'textDocument/publishDiagnostics') {
+          console.log(`[LSP] Received notification: ${method}`);
+        }
+        
+        switch (method) {
+          case 'textDocument/publishDiagnostics':
+            // Store diagnostics
+            const prevDiagnostics = this.diagnostics.get(params.uri);
+            const newDiagnostics = params.diagnostics || [];
+            
+            // Only log if diagnostics changed
+            const changed = !prevDiagnostics || 
+                          prevDiagnostics.length !== newDiagnostics.length ||
+                          JSON.stringify(prevDiagnostics) !== JSON.stringify(newDiagnostics);
+            
+            if (changed) {
+              console.log(`[LSP] Diagnostics for ${params.uri}:`, newDiagnostics.length, 'issues');
+              
+              // Log detailed diagnostic info for Vue files with errors
+              if (params.uri.endsWith('.vue') && newDiagnostics.length > 0) {
+                console.log('[LSP] Vue diagnostics details:', newDiagnostics.map(d => ({
+                  message: d.message,
+                  line: d.range.start.line,
+                  character: d.range.start.character,
+                  source: d.source
+                })));
+              }
+            }
+            
+            this.diagnostics.set(params.uri, newDiagnostics);
+            break;
+            
+          case 'window/logMessage':
+            console.log(`[LSP] Log message:`, params);
+            break;
+            
+          case '$/progress':
+            // Handle progress notifications
+            console.log(`[LSP] Progress:`, params);
+            break;
+            
+          default:
+            // Only log Vue-specific unhandled notifications in detail
+            if (language === 'vue' && !method.startsWith('$/')) {
+              console.log(`[LSP] Vue unhandled notification: ${method}`, params);
+            } else if (!method.startsWith('$/') && !method.startsWith('tsserver/')) {
+              console.log(`[LSP] Unhandled notification: ${method}`);
+            }
+        }
+      });
+      
       // Start listening
       connection.listen();
       
-      // Initialize the server
+      // Initialize the server with server-specific options
       const initResult = await connection.sendRequest(lsp.InitializeRequest.type, {
         processId: process.pid,
         clientInfo: {
@@ -186,47 +554,18 @@ export class LSPManager {
         },
         rootUri: workspaceUri || null,
         rootPath: workspaceUri ? new URL(workspaceUri).pathname : null,
-        initializationOptions: {
-          preferences: {
-            // Completion preferences
-            includeCompletionsForModuleExports: false, // Disable auto-imports to reduce noise
-            includeCompletionsForImportStatements: true,
-            includeCompletionsWithSnippetText: true,
-            includeCompletionsWithInsertText: true,
-            includeAutomaticOptionalChainCompletions: true,
-            includeCompletionsWithClassMemberSnippets: true,
-            includeCompletionsWithObjectLiteralMethodSnippets: true,
-            allowIncompleteCompletions: true,
-            
-            // Import preferences
-            importModuleSpecifierPreference: 'shortest',
-            importModuleSpecifierEnding: 'auto',
-            includePackageJsonAutoImports: 'auto',
-            
-            // Other preferences
-            providePrefixAndSuffixTextForRename: true,
-            allowRenameOfImportPath: true,
-            quotePreference: 'auto',
-            
-            // Disable some suggestions to reduce noise
-            includeInlayParameterNameHints: 'none',
-            includeInlayParameterNameHintsWhenArgumentMatchesName: false,
-            includeInlayFunctionParameterTypeHints: false,
-            includeInlayVariableTypeHints: false,
-            includeInlayPropertyDeclarationTypeHints: false,
-            includeInlayFunctionLikeReturnTypeHints: false,
-            includeInlayEnumMemberValueHints: false
-          },
-          maxTsServerMemory: 4096,
-          tsserver: {
-            logDirectory: null,
-            logVerbosity: 'off',
-            trace: 'off'
-          },
-          completions: {
-            completeFunctionCalls: true
+        // Use server-specific initialization options
+        initializationOptions: language === 'vue' ? {
+          ...config.initOptions,
+          // Vue Language Server v3 specific initialization
+          serverMode: 0, // 0 = Semantic, 1 = Syntactic, 2 = PartialSemantic
+          diagnosticMode: 1, // 0 = None, 1 = Semantic, 2 = Syntactic
+          textDocumentSync: 2,
+          typescript: {
+            tsdk: config.initOptions.typescript.tsdk,
+            serverPath: config.initOptions.typescript.tsdk ? `${config.initOptions.typescript.tsdk}/tsserver.js` : undefined
           }
-        },
+        } : (config.initOptions || {}),
         capabilities: {
           textDocument: {
             completion: {
@@ -271,15 +610,30 @@ export class LSPManager {
             },
             formatting: {
               dynamicRegistration: true
+            },
+            synchronization: {
+              dynamicRegistration: true,
+              willSave: true,
+              willSaveWaitUntil: true,
+              didSave: true
             }
           },
           workspace: {
             workspaceFolders: true,
             didChangeConfiguration: {
               dynamicRegistration: true
+            },
+            configuration: true,
+            didChangeWatchedFiles: {
+              dynamicRegistration: true
             }
           }
-        }
+        },
+        // Add workspace folders if available
+        workspaceFolders: workspaceUri ? [{
+          uri: workspaceUri,
+          name: workspaceUri.split('/').pop() || 'workspace'
+        }] : null
       });
       
       // Store server info
@@ -296,6 +650,59 @@ export class LSPManager {
       await connection.sendNotification(lsp.InitializedNotification.type, {});
       
       console.log(`[LSP] ${language} server initialized successfully`);
+      
+      // For Vue, send a didChangeConfiguration notification to trigger full initialization
+      if (language === 'vue') {
+        await connection.sendNotification('workspace/didChangeConfiguration', {
+          settings: {
+            vue: {
+              inlayHints: {
+                missingProps: true,
+                inlineHandlerLeading: true,
+                optionsWrapper: true
+              }
+            },
+            typescript: {
+              tsdk: config.initOptions.typescript.tsdk,
+              preferences: {
+                includeCompletionsForModuleExports: true,
+                includeCompletionsWithInsertText: true
+              }
+            },
+            volar: {
+              autoCompleteRefs: true,
+              codeLens: {
+                pugTools: true,
+                scriptSetupTools: true
+              }
+            }
+          }
+        });
+        console.log('[LSP] Sent Vue configuration');
+        
+        // Try to trigger Vue server initialization with a command
+        try {
+          await connection.sendRequest('workspace/executeCommand', {
+            command: 'volar.action.restartServer'
+          });
+          console.log('[LSP] Sent restart command to Vue server');
+        } catch (e) {
+          // Command might not exist, that's ok
+        }
+        
+        // Give Vue server more time to initialize with TypeScript
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+      
+      // Debug Vue server capabilities
+      if (language === 'vue') {
+        console.log(`[LSP] Vue server capabilities:`, {
+          hasCompletion: !!initResult.capabilities.completionProvider,
+          completionTriggerChars: initResult.capabilities.completionProvider?.triggerCharacters,
+          hasHover: !!initResult.capabilities.hoverProvider,
+          hasDefinition: !!initResult.capabilities.definitionProvider
+        });
+      }
       
       return connection;
     } catch (error) {
@@ -321,30 +728,55 @@ export class LSPManager {
     const language = this.detectLanguage(filepath);
     if (!language) return [];
     
+    // Debug logging for Vue files
+    if (language === 'vue') {
+      console.log(`[LSP] Vue file completion request:`, {
+        filepath,
+        position,
+        triggerCharacter,
+        contentLength: content.length,
+        contentPreview: content.substring(0, 200)
+      });
+    }
+    
     const connection = await this.getServerForFile(filepath);
     if (!connection) return [];
     
     try {
       // First, notify the server about the file content
       const uri = `file://${filepath}`;
-      const version = Date.now();
       
-      // Check if document is already open
-      if (!this.openDocuments) {
-        this.openDocuments = new Set();
-      }
+      // Get or initialize document version
+      let version = this.documentVersions.get(uri) || 0;
+      version++;
+      this.documentVersions.set(uri, version);
       
-      if (!this.openDocuments.has(uri)) {
+      const docInfo = this.openDocuments.get(uri);
+      
+      if (!docInfo || docInfo.language !== language) {
+        // Close old document if it was open with different language
+        if (docInfo) {
+          await connection.sendNotification(lsp.DidCloseTextDocumentNotification.type, {
+            textDocument: { uri }
+          });
+        }
+        
         // Send document open notification for new document
         await connection.sendNotification(lsp.DidOpenTextDocumentNotification.type, {
           textDocument: {
             uri,
-            languageId: language,
+            languageId: language === 'vue' ? 'vue' : language,
             version,
             text: content
           }
         });
-        this.openDocuments.add(uri);
+        this.openDocuments.set(uri, { version, language });
+        
+        // For Vue files, wait longer for initial processing
+        if (language === 'vue') {
+          console.log('[LSP] Waiting for Vue server to process document...');
+          await new Promise(resolve => setTimeout(resolve, 500)); // Increased to 500ms
+        }
       } else {
         // Send document change notification for existing document
         await connection.sendNotification(lsp.DidChangeTextDocumentNotification.type, {
@@ -356,16 +788,17 @@ export class LSPManager {
             text: content // Full document update
           }]
         });
+        this.openDocuments.set(uri, { version, language });
       }
       
-      // Longer delay to let LSP process the file completely
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Give LSP time to process the changes
+      await new Promise(resolve => setTimeout(resolve, 50));
       
       // Build completion context with proper trigger
       let completionContext;
       
-      // Common trigger characters for TypeScript
-      const triggerChars = ['.', '(', '[', '{', '"', "'", ':', '/', '<', '>', '@', '#'];
+      // Common trigger characters - expand for Vue templates
+      const triggerChars = ['.', '(', '[', '{', '"', "'", ':', '/', '<', '>', '@', '#', ' ', '-', '='];
       
       if (triggerCharacter && triggerChars.includes(triggerCharacter)) {
         completionContext = {
@@ -383,16 +816,90 @@ export class LSPManager {
       const lines = content.split('\n');
       const currentLine = lines[position.line - 1] || '';
       const beforeCursor = currentLine.substring(0, position.character);
-      const currentWord = beforeCursor.match(/(\w+)$/)?.[1] || '';
+      // For Vue directives and HTML attributes, include hyphens in the word match
+      const currentWord = beforeCursor.match(/([\w-]+)$/)?.[1] || '';
       
-      const completions = await connection.sendRequest(lsp.CompletionRequest.type, {
-        textDocument: { uri },
-        position: {
-          line: position.line - 1, // LSP uses 0-based lines
-          character: position.character
-        },
-        context: completionContext
-      });
+      // Log the request details for Vue
+      if (language === 'vue') {
+        console.log(`[LSP] Sending Vue completion request:`, {
+          uri,
+          originalPosition: position,
+          lspPosition: {
+            line: position.line - 1,
+            character: position.character
+          },
+          context: completionContext,
+          currentLine: currentLine.substring(0, 50) + '...',
+          currentWord
+        });
+      }
+      
+      // Add timeout for completion request
+      // For Vue, try using the raw method name instead of the typed request
+      const completionPromise = language === 'vue' 
+        ? connection.sendRequest('textDocument/completion', {
+            textDocument: { uri },
+            position: {
+              line: position.line - 1, // LSP uses 0-based lines
+              character: position.character
+            },
+            context: completionContext
+          })
+        : connection.sendRequest(lsp.CompletionRequest.type, {
+            textDocument: { uri },
+            position: {
+              line: position.line - 1, // LSP uses 0-based lines
+              character: position.character
+            },
+            context: completionContext
+          });
+      
+      // Set a longer timeout for Vue files as they need more processing
+      const timeout = language === 'vue' ? 10000 : 2000; // 10s for Vue, 2s for others
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Completion request timeout')), timeout)
+      );
+      
+      let completions;
+      try {
+        completions = await Promise.race([completionPromise, timeoutPromise]);
+      } catch (timeoutError) {
+        if (language === 'vue') {
+          console.log(`[LSP] Vue completion request timed out or failed:`, timeoutError.message);
+        }
+        // Return empty completions on timeout
+        completions = [];
+      }
+      
+      // Debug Vue completions
+      if (language === 'vue') {
+        console.log(`[LSP] Vue completions received:`, {
+          hasCompletions: !!completions,
+          isArray: Array.isArray(completions),
+          hasItems: !!(completions && completions.items),
+          count: Array.isArray(completions) ? completions.length : (completions?.items?.length || 0),
+          firstFew: completions?.items ? completions.items.slice(0, 3).map(i => i.label) : 
+                    Array.isArray(completions) ? completions.slice(0, 3).map(i => i.label) : [],
+          raw: completions // Log raw response to see what we're getting
+        });
+        
+        // If we got timeout, try a simple hover request to test if server is responsive
+        if (completions.length === 0) {
+          console.log('[LSP] Testing Vue server responsiveness with hover request...');
+          try {
+            const hoverTest = await connection.sendRequest(lsp.HoverRequest.type, {
+              textDocument: { uri },
+              position: {
+                line: position.line - 1,
+                character: position.character
+              }
+            });
+            console.log('[LSP] Vue hover test result:', !!hoverTest);
+          } catch (e) {
+            console.log('[LSP] Vue hover test failed:', e.message);
+          }
+        }
+      }
       
       // Convert LSP completions to our format
       let items = [];
@@ -474,7 +981,17 @@ export class LSPManager {
       // Take only the first MAX_COMPLETIONS items
       const limitedItems = items.slice(0, MAX_COMPLETIONS);
       
-      return limitedItems.map(item => this.convertLSPCompletion(item));
+      const result = limitedItems.map(item => this.convertLSPCompletion(item));
+      
+      // Debug final result for Vue
+      if (language === 'vue') {
+        console.log(`[LSP] Vue completions final result:`, {
+          count: result.length,
+          firstFew: result.slice(0, 3).map(r => ({ label: r.label, kind: r.kind }))
+        });
+      }
+      
+      return result;
     } catch (error) {
       console.error(`[LSP] Failed to get completions from ${language} server:`, error);
       return [];
@@ -657,26 +1174,105 @@ export class LSPManager {
     try {
       const uri = `file://${filepath}`;
       
-      // First, ensure the document is open and synced
-      await connection.sendNotification(lsp.DidOpenTextDocumentNotification.type, {
-        textDocument: {
-          uri,
-          languageId: language,
-          version: 1,
-          text: content
-        }
-      });
+      // Check if document is already open
+      const isOpen = this.openDocuments.has(uri);
       
-      // Request diagnostics - note that many LSP servers send diagnostics
-      // via notifications rather than request/response
-      // For now, we'll return empty array as diagnostics are usually pushed
-      console.log(`[LSP] Diagnostics requested for ${language} file`);
+      if (!isOpen) {
+        // Open the document
+        await connection.sendNotification(lsp.DidOpenTextDocumentNotification.type, {
+          textDocument: {
+            uri,
+            languageId: language,
+            version: 1,
+            text: content
+          }
+        });
+        this.openDocuments.set(uri, { version: 1, language });
+        this.documentVersions.set(uri, 1);
+      } else {
+        // Update the document content
+        const currentVersion = this.documentVersions.get(uri) || 1;
+        const newVersion = currentVersion + 1;
+        
+        await connection.sendNotification(lsp.DidChangeTextDocumentNotification.type, {
+          textDocument: {
+            uri,
+            version: newVersion
+          },
+          contentChanges: [{
+            text: content
+          }]
+        });
+        
+        this.documentVersions.set(uri, newVersion);
+      }
       
-      // TODO: Implement proper diagnostic handling with notification listeners
-      return [];
+      // Give the server a moment to process and send diagnostics
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
+      // Return stored diagnostics for this file
+      // LSP servers send diagnostics via notifications after document changes
+      const diagnostics = this.diagnostics.get(uri) || [];
+      console.log(`[LSP] Returning ${diagnostics.length} diagnostics for ${filepath}`);
+      
+      return diagnostics;
     } catch (error) {
       console.error(`[LSP] Failed to get diagnostics from ${language} server:`, error);
       return [];
+    }
+  }
+
+  /**
+   * Close a document
+   */
+  async closeDocument(filepath) {
+    const language = this.detectLanguage(filepath);
+    if (!language) return;
+    
+    const connection = this.connections.get(language);
+    if (!connection) return;
+    
+    try {
+      const uri = `file://${filepath}`;
+      
+      // Remove from open documents
+      this.openDocuments.delete(uri);
+      
+      // Send close notification to LSP
+      await connection.sendNotification(lsp.DidCloseTextDocumentNotification.type, {
+        textDocument: { uri }
+      });
+      
+      // Clear diagnostics for this file
+      this.diagnostics.delete(uri);
+      
+      console.log(`[LSP] Closed document: ${filepath}`);
+    } catch (error) {
+      console.error(`[LSP] Failed to close document:`, error);
+    }
+  }
+
+  /**
+   * Execute a code action
+   */
+  async executeCodeAction(filepath, action) {
+    const language = this.detectLanguage(filepath);
+    if (!language) return null;
+    
+    const connection = await this.getServerForFile(filepath);
+    if (!connection) return null;
+    
+    try {
+      // Execute the code action
+      const result = await connection.sendRequest('workspace/executeCommand', {
+        command: action.command,
+        arguments: action.arguments
+      });
+      
+      return result;
+    } catch (error) {
+      console.error(`[LSP] Failed to execute code action:`, error);
+      return null;
     }
   }
 
@@ -794,6 +1390,27 @@ export class LSPManager {
    */
   getConnectedServers() {
     return Array.from(this.connections.keys());
+  }
+  
+  /**
+   * Find npm global root directory
+   */
+  async findNpmRoot() {
+    try {
+      const { execSync } = await import('child_process');
+      return execSync('npm root -g', { encoding: 'utf8' }).trim();
+    } catch (e) {
+      // Fallback to common locations
+      const path = await import('path');
+      const os = await import('os');
+      const platform = os.platform();
+      
+      if (platform === 'win32') {
+        return path.join(process.env.APPDATA || '', 'npm', 'node_modules');
+      } else {
+        return '/usr/local/lib/node_modules';
+      }
+    }
   }
 }
 

@@ -278,16 +278,28 @@ const ghostTextKeymap = Prec.highest(
         
         // Create a modified fetch function that includes forceManual flag
         const manualFetchFn = async (prefix: string, suffix: string) => {
-          if (window.electronAPI?.autocomplete?.getGhostText) {
-            const result = await window.electronAPI.autocomplete.getGhostText({ 
-              prefix, 
-              suffix, 
-              forceManual: true 
-            });
-            return result.success ? result.suggestion : '';
+          // Import and use autocomplete store for loading state
+          const { useAutocompleteStore } = await import('~/stores/autocomplete');
+          const autocompleteStore = useAutocompleteStore();
+          
+          try {
+            // Set loading state
+            autocompleteStore.setGhostTextLoading(true);
+            
+            if (window.electronAPI?.autocomplete?.getGhostText) {
+              const result = await window.electronAPI.autocomplete.getGhostText({ 
+                prefix, 
+                suffix, 
+                forceManual: true 
+              });
+              return result.success ? result.suggestion : '';
+            }
+            // Fallback to regular fetch if not using electron API
+            return config.fetchFn(prefix, suffix);
+          } finally {
+            // Clear loading state
+            autocompleteStore.setGhostTextLoading(false);
           }
-          // Fallback to regular fetch if not using electron API
-          return config.fetchFn(prefix, suffix);
         };
         
         // Fetch suggestion immediately (no debounce)

@@ -10,14 +10,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import FileSelector from '~/components/Knowledge/FileSelector.vue';
 import StartupLoader from '~/components/Layout/StartupLoader.vue';
 import { useWorkspaceManager } from '~/composables/useWorkspaceManager';
 import { useClaudeInstancesStore } from '~/stores/claude-instances';
+import { useAutocompleteStore } from '~/stores/autocomplete';
 
 const workspaceReady = ref(false);
 const workspaceManager = useWorkspaceManager();
+const autocompleteStore = useAutocompleteStore();
 
 async function onWorkspaceReady(workspace: string) {
   try {
@@ -91,4 +93,22 @@ async function onWorkspaceReady(workspace: string) {
     workspaceReady.value = false;
   }
 }
+
+// Set up ghost text loading listener
+let removeGhostTextListener: (() => void) | null = null;
+
+onMounted(() => {
+  // Listen for ghost text loading events from main process
+  if (window.electronAPI?.onGhostTextLoading) {
+    removeGhostTextListener = window.electronAPI.onGhostTextLoading((isLoading: boolean) => {
+      autocompleteStore.setGhostTextLoading(isLoading);
+    });
+  }
+});
+
+onUnmounted(() => {
+  if (removeGhostTextListener) {
+    removeGhostTextListener();
+  }
+});
 </script>

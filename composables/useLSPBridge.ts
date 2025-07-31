@@ -15,7 +15,8 @@ export function useLSPBridge() {
         }
 
         // Get the current word being typed
-        const match = context.matchBefore(/\w*/);
+        // For Vue directives, we need to include hyphens (v-if, v-else, etc.)
+        const match = context.matchBefore(/[\w-]*/);
         if (!match || (match.text === "" && !context.explicit)) {
           return null;
         }

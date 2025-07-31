@@ -97,6 +97,16 @@ export const useEditorStore = defineStore('editor', {
 
       // Stop watching this file
       window.electronAPI.fs.unwatchFile(tab.path);
+      
+      // Notify LSP that document is closed
+      if (tab.path) {
+        window.electronAPI.lsp.closeDocument?.({
+          uri: `file://${tab.path}`,
+          filepath: tab.path
+        }).catch((error: any) => {
+          console.error('[LSP] Failed to close document:', error);
+        });
+      }
 
       this.tabs.splice(index, 1);
 

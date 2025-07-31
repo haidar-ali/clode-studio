@@ -140,7 +140,7 @@ Output ONLY the code to insert at the cursor, no explanations or markdown.`;
       const response = await this.queryWithTimeout(
         prompt,
         context,
-        5000, // 5 second timeout for ghost text
+        8000, // 10 second timeout for ghost text
         new AbortController().signal
       );
       

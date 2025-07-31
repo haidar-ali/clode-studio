@@ -45,8 +45,8 @@
               type="number" 
               v-model.number="settings.providers.claude.timeout"
               @change="updateSettings"
-              min="500"
-              max="3000"
+              min="1000"
+              max="5000"
               step="100"
               title="How long to wait after typing stops before requesting suggestions"
             />

@@ -29,15 +29,21 @@ import { closeBrackets, closeBracketsKeymap, completionKeymap } from '@codemirro
 import { lineNumbers, highlightActiveLineGutter } from '@codemirror/view';
 import { drawSelection, dropCursor, highlightActiveLine, rectangularSelection, crosshairCursor } from '@codemirror/view';
 import { useEditorStore } from '~/stores/editor';
+import { useAutocompleteStore } from '~/stores/autocomplete';
 import { useCodeMirrorLanguages } from '~/composables/useCodeMirrorLanguages';
 import { useLSPBridge } from '~/composables/useLSPBridge';
 import { useGhostText } from '~/composables/useGhostText';
+import { useLSPHover } from '~/composables/useLSPHover';
+import { useLSPDiagnostics } from '~/composables/useLSPDiagnostics';
 import KnowledgeMetadataBar from '~/components/Knowledge/KnowledgeMetadataBar.vue';
 
 const editorStore = useEditorStore();
+const autocompleteStore = useAutocompleteStore();
 const { getLanguageSupport, getLanguageName } = useCodeMirrorLanguages();
 const { createLSPCompletionSource } = useLSPBridge();
 const { createGhostTextExtension } = useGhostText();
+const { createLSPHoverTooltip } = useLSPHover();
+const { createLSPDiagnostics } = useLSPDiagnostics();
 
 const activeTab = computed(() => editorStore.activeTab);
 const editorContainer = ref<HTMLElement>();
@@ -188,17 +194,32 @@ const createEditorExtensions = (filename?: string): any[] => {
     // Add ghost text extension (for Claude AI inline suggestions)
     createGhostTextExtension(async (prefix: string, suffix: string) => {
       try {
+        // Set loading state
+        autocompleteStore.setGhostTextLoading(true);
+        
         // Check if ghost text is enabled in settings
         // Since we don't have the autocomplete store here, we'll let the ghost text service handle the check
         const result = await window.electronAPI.autocomplete.getGhostText({ prefix, suffix });
+        
+        // Clear loading state
+        autocompleteStore.setGhostTextLoading(false);
+        
         return result.success ? result.suggestion : '';
       } catch (error) {
+        // Clear loading state on error
+        autocompleteStore.setGhostTextLoading(false);
         return '';
       }
     }, {
-      delay: 1000, // 1 second delay for ghost text
+      delay: autocompleteStore.settings.providers.claude.timeout, // Use configured delay from settings
       acceptOnClick: true
     }),
+    
+    // LSP hover tooltips
+    createLSPHoverTooltip(),
+    
+    // LSP diagnostics (errors, warnings, etc.)
+    createLSPDiagnostics(),
     // Keyboard shortcuts
     keymap.of([
       ...defaultKeymap,
@@ -396,6 +417,72 @@ const createEditorExtensions = (filename?: string): any[] => {
         color: '#969696',
         marginLeft: '8px',
         fontStyle: 'italic'
+      },
+      
+      // LSP Hover tooltip styles
+      '.cm-lsp-hover-tooltip': {
+        backgroundColor: '#2d2d30',
+        border: '1px solid #454545',
+        borderRadius: '4px',
+        padding: '8px 12px',
+        maxWidth: '600px',
+        maxHeight: '400px',
+        overflow: 'auto',
+        fontSize: '13px',
+        lineHeight: '1.5',
+        color: '#cccccc',
+        boxShadow: '0 2px 10px rgba(0, 0, 0, 0.5)'
+      },
+      '.cm-lsp-hover-tooltip pre': {
+        margin: '8px 0',
+        padding: '8px',
+        backgroundColor: '#1e1e1e',
+        borderRadius: '3px',
+        overflow: 'auto'
+      },
+      '.cm-lsp-hover-tooltip code': {
+        fontFamily: 'Consolas, Monaco, "Courier New", monospace',
+        fontSize: '12px'
+      },
+      '.cm-hover-inline-code': {
+        backgroundColor: '#3c3c3c',
+        padding: '1px 4px',
+        borderRadius: '3px'
+      },
+      
+      // LSP Diagnostic styles
+      '.cm-diagnostic-error': {
+        borderBottom: '2px wavy #ff6464'
+      },
+      '.cm-diagnostic-warning': {
+        borderBottom: '2px wavy #ffb86c'
+      },
+      '.cm-diagnostic-info': {
+        borderBottom: '2px wavy #8be9fd'
+      },
+      '.cm-diagnostic-hint': {
+        borderBottom: '1px dashed #6272a4'
+      },
+      
+      // Diagnostic panel styles
+      '.cm-panel.cm-panel-lint': {
+        backgroundColor: '#2d2d30',
+        borderTop: '1px solid #454545',
+        color: '#cccccc',
+        maxHeight: '200px',
+        overflow: 'auto'
+      },
+      '.cm-panel.cm-panel-lint ul': {
+        margin: 0,
+        padding: 0
+      },
+      '.cm-panel.cm-panel-lint li': {
+        padding: '6px 12px',
+        borderBottom: '1px solid #3c3c3c',
+        cursor: 'pointer'
+      },
+      '.cm-panel.cm-panel-lint li:hover': {
+        backgroundColor: '#3c3c3c'
       }
     }),
     EditorView.updateListener.of((update) => {
