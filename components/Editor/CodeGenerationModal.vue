@@ -79,6 +79,27 @@ Examples:
             {{ error }}
           </div>
           
+          <!-- AI Loading Indicator -->
+          <Transition name="fade">
+            <div v-if="isGenerating && !generatedCode" class="ai-loading-container">
+              <div class="ai-loading-content">
+                <div class="ai-brain">
+                  <div class="neural-network">
+                    <span class="neuron" v-for="i in 3" :key="i" :style="`--index: ${i}`"></span>
+                  </div>
+                  <Icon name="mdi:robot" size="20" class="ai-icon" />
+                </div>
+                <div class="loading-info">
+                  <h4>{{ loadingText }}</h4>
+                  <p>Claude is analyzing your request and generating code...</p>
+                  <div class="progress-bar">
+                    <div class="progress-fill"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Transition>
+          
           <div v-if="generatedCode && !error" class="preview-section">
             <div class="preview-header">
               <h4>{{ showDiff ? 'Changes' : 'Generated Code' }}</h4>
@@ -155,7 +176,30 @@ const {
 const promptInput = ref<HTMLTextAreaElement>();
 const showResourceModal = ref(false);
 const selectedResources = ref<ResourceReference[]>([]);
-const showDiff = ref(false);
+const showDiff = ref(true);
+
+// Loading state animation
+const loadingStates = ['Thinking', 'Analyzing', 'Generating', 'Crafting'];
+const currentLoadingIndex = ref(0);
+const loadingText = ref('Thinking');
+
+// Update loading text while generating
+let loadingInterval: NodeJS.Timeout | null = null;
+watch(() => isGenerating.value, (generating) => {
+  if (generating) {
+    currentLoadingIndex.value = 0;
+    loadingText.value = loadingStates[0];
+    loadingInterval = setInterval(() => {
+      currentLoadingIndex.value = (currentLoadingIndex.value + 1) % loadingStates.length;
+      loadingText.value = loadingStates[currentLoadingIndex.value];
+    }, 800);
+  } else {
+    if (loadingInterval) {
+      clearInterval(loadingInterval);
+      loadingInterval = null;
+    }
+  }
+});
 const diffContainer = ref<HTMLDivElement>();
 const mergeView = shallowRef<MergeView | null>(null);
 
@@ -324,6 +368,14 @@ watch(isOpen, async (newVal) => {
   if (newVal) {
     await nextTick();
     promptInput.value?.focus();
+  }
+});
+
+// Watch for when code is generated to show diff view
+watch(() => generatedCode.value, async (newCode) => {
+  if (newCode && originalCode.value && showDiff.value) {
+    await nextTick();
+    createDiffView();
   }
 });
 
@@ -711,5 +763,149 @@ defineExpose({
 .spinning {
   animation: spin 1s linear infinite;
   display: inline-block;
+}
+
+/* AI Loading Indicator Styles */
+.ai-loading-container {
+  padding: 40px 20px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.ai-loading-content {
+  text-align: center;
+  max-width: 400px;
+}
+
+.ai-brain {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 20px;
+}
+
+.neural-network {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.neuron {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  background: #007acc;
+  border-radius: 50%;
+  opacity: 0;
+  box-shadow: 0 0 10px rgba(0, 122, 204, 0.6);
+  animation: pulse 2.4s ease-in-out infinite;
+  animation-delay: calc(var(--index) * 0.2s);
+}
+
+.neuron:nth-child(1) {
+  transform: translateX(-16px);
+}
+
+.neuron:nth-child(2) {
+  transform: translateY(-16px);
+}
+
+.neuron:nth-child(3) {
+  transform: translateX(16px);
+}
+
+@keyframes pulse {
+  0%, 60%, 100% {
+    opacity: 0;
+    transform: scale(0.6) translateX(var(--tx, 0)) translateY(var(--ty, 0));
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1.4) translateX(var(--tx, 0)) translateY(var(--ty, 0));
+  }
+}
+
+.ai-icon {
+  color: #007acc;
+  filter: drop-shadow(0 0 8px rgba(0, 122, 204, 0.5));
+  animation: glow 2s ease-in-out infinite;
+  z-index: 1;
+}
+
+@keyframes glow {
+  0%, 100% {
+    opacity: 0.8;
+    filter: drop-shadow(0 0 8px rgba(0, 122, 204, 0.5));
+  }
+  50% {
+    opacity: 1;
+    filter: drop-shadow(0 0 12px rgba(0, 122, 204, 0.8));
+  }
+}
+
+.loading-info h4 {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+  color: #e0e0e0;
+  font-weight: 500;
+  animation: fadeText 0.8s ease-in-out;
+}
+
+.loading-info p {
+  margin: 0 0 16px 0;
+  font-size: 13px;
+  color: #858585;
+}
+
+@keyframes fadeText {
+  0% {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.progress-bar {
+  height: 3px;
+  background: rgba(0, 122, 204, 0.2);
+  border-radius: 2px;
+  overflow: hidden;
+  margin: 0 auto;
+  width: 200px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #007acc 0%, #4ec9b0 100%);
+  animation: progress 2s ease-in-out infinite;
+}
+
+@keyframes progress {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Fade transition for loading container */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>
