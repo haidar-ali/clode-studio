@@ -25,7 +25,7 @@
             v-model="settings.providers.claude.enabled"
             @change="updateSettings"
           />
-          <span>Claude AI Ghost Text</span>
+          <span>Enable automatic Claude Code Ghost Text</span>
         </label>
         <div class="sub-settings" v-if="settings.providers.claude.enabled">
           <div class="setting-description">

@@ -154,7 +154,10 @@ const electronAPI = {
     lsp: {
         getCompletions: (params) => electron_1.ipcRenderer.invoke('lsp:getCompletions', params),
         getHover: (params) => electron_1.ipcRenderer.invoke('lsp:getHover', params),
-        getDiagnostics: (params) => electron_1.ipcRenderer.invoke('lsp:getDiagnostics', params)
+        getDiagnostics: (params) => electron_1.ipcRenderer.invoke('lsp:getDiagnostics', params),
+        install: (params) => electron_1.ipcRenderer.invoke('lsp:install', params),
+        uninstall: (params) => electron_1.ipcRenderer.invoke('lsp:uninstall', params),
+        checkCommand: (command) => electron_1.ipcRenderer.invoke('lsp:checkCommand', command)
     },
     mcp: {
         list: (workspacePath) => electron_1.ipcRenderer.invoke('mcp:list', workspacePath),

@@ -230,7 +230,13 @@ const electronAPI = {
     getHover: (params: any) => 
       ipcRenderer.invoke('lsp:getHover', params),
     getDiagnostics: (params: any) => 
-      ipcRenderer.invoke('lsp:getDiagnostics', params)
+      ipcRenderer.invoke('lsp:getDiagnostics', params),
+    install: (params: { id: string; command: string; packageManager: string }) => 
+      ipcRenderer.invoke('lsp:install', params),
+    uninstall: (params: { id: string; packageManager: string }) => 
+      ipcRenderer.invoke('lsp:uninstall', params),
+    checkCommand: (command: string) => 
+      ipcRenderer.invoke('lsp:checkCommand', command)
   },
   mcp: {
     list: (workspacePath?: string) => ipcRenderer.invoke('mcp:list', workspacePath),

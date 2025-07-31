@@ -253,6 +253,60 @@ const ghostTextKeymap = Prec.highest(
         return true;
       },
     },
+    {
+      key: "Ctrl-g",
+      mac: "Cmd-g", 
+      run: (view) => {
+        console.log('[Ghost Text] Manual trigger activated (Cmd+G detected)');
+        
+        // Manually trigger ghost text suggestion
+        const config = view.state.facet(ghostTextConfigFacet);
+        if (!config.fetchFn) {
+          console.log('[Ghost Text] No fetch function available');
+          return false;
+        }
+        
+        const pos = view.state.selection.main.head;
+        const doc = view.state.doc;
+        const line = doc.lineAt(pos);
+        
+        // Get text before and after cursor
+        const prefix = doc.sliceString(Math.max(0, pos - 2000), pos);
+        const suffix = doc.sliceString(pos, Math.min(doc.length, pos + 1000));
+        
+        console.log('[Ghost Text] Fetching suggestion manually...');
+        
+        // Create a modified fetch function that includes forceManual flag
+        const manualFetchFn = async (prefix: string, suffix: string) => {
+          if (window.electronAPI?.autocomplete?.getGhostText) {
+            const result = await window.electronAPI.autocomplete.getGhostText({ 
+              prefix, 
+              suffix, 
+              forceManual: true 
+            });
+            return result.success ? result.suggestion : '';
+          }
+          // Fallback to regular fetch if not using electron API
+          return config.fetchFn(prefix, suffix);
+        };
+        
+        // Fetch suggestion immediately (no debounce)
+        manualFetchFn(prefix, suffix).then(result => {
+          if (result) {
+            console.log('[Ghost Text] Manual suggestion received:', result.substring(0, 50) + '...');
+            view.dispatch({
+              effects: GhostTextEffect.of({ text: result, doc: view.state.doc }),
+            });
+          } else {
+            console.log('[Ghost Text] No suggestion returned');
+          }
+        }).catch(error => {
+          console.error('Manual ghost text fetch failed:', error);
+        });
+        
+        return true;
+      },
+    },
   ]),
 );
 

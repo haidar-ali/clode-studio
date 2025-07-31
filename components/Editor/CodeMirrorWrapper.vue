@@ -21,7 +21,7 @@ import { EditorView } from 'codemirror';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { EditorState, StateEffect, StateField } from '@codemirror/state';
 import { keymap, Decoration } from '@codemirror/view';
-import { acceptCompletion, startCompletion, closeCompletion, autocompletion } from '@codemirror/autocomplete';
+import { acceptCompletion, startCompletion, closeCompletion, autocompletion, CompletionContext } from '@codemirror/autocomplete';
 import { history, defaultKeymap, historyKeymap } from '@codemirror/commands';
 import { searchKeymap, highlightSelectionMatches, search } from '@codemirror/search';
 import { bracketMatching, foldGutter, indentOnInput, syntaxHighlighting, defaultHighlightStyle } from '@codemirror/language';
@@ -72,6 +72,83 @@ const highlightLineField = StateField.define({
   provide: f => EditorView.decorations.from(f)
 });
 
+// Create enhanced LSP completion source with smart formatting
+const createEnhancedLSPCompletionSource = () => {
+  const baseLSPSource = createLSPCompletionSource();
+  
+  return async (context: CompletionContext) => {
+    // Get base LSP completions
+    const baseResult = await baseLSPSource(context);
+    if (!baseResult || !baseResult.options) return baseResult;
+    
+    // Enhance completions with smart formatting
+    const enhancedOptions = baseResult.options.map(option => {
+      // Check if this is a function completion
+      const isFunction = option.detail?.includes('function') || 
+                        option.detail?.includes('method') || 
+                        option.detail?.includes('()') ||
+                        option.kind === 'function' ||
+                        option.kind === 'method';
+      
+      if (isFunction && option.label && !option.label.includes('(')) {
+        // Add parentheses for function completions
+        return {
+          ...option,
+          label: option.label + '()',
+          apply: (view: EditorView, completion: any, from: number, to: number) => {
+            // Insert function name with parentheses and position cursor inside
+            const functionName = option.label || completion.label;
+            const insertText = functionName + '()';
+            view.dispatch({
+              changes: { from, to, insert: insertText },
+              selection: { anchor: from + functionName.length + 1 } // Position cursor inside parentheses
+            });
+          }
+        };
+      }
+      
+      // Check if this is an object/array that needs brackets
+      const isObject = option.detail?.includes('object') || option.detail?.includes('{}');
+      const isArray = option.detail?.includes('array') || option.detail?.includes('[]');
+      
+      if (isObject && option.label && !option.label.includes('{')) {
+        return {
+          ...option,
+          apply: (view: EditorView, completion: any, from: number, to: number) => {
+            const varName = option.label || completion.label;
+            const insertText = varName + ' = {}';
+            view.dispatch({
+              changes: { from, to, insert: insertText },
+              selection: { anchor: from + insertText.length - 1 } // Position cursor inside braces
+            });
+          }
+        };
+      }
+      
+      if (isArray && option.label && !option.label.includes('[')) {
+        return {
+          ...option,
+          apply: (view: EditorView, completion: any, from: number, to: number) => {
+            const varName = option.label || completion.label;
+            const insertText = varName + ' = []';
+            view.dispatch({
+              changes: { from, to, insert: insertText },
+              selection: { anchor: from + insertText.length - 1 } // Position cursor inside brackets
+            });
+          }
+        };
+      }
+      
+      return option;
+    });
+    
+    return {
+      ...baseResult,
+      options: enhancedOptions
+    };
+  };
+};
+
 // Create editor extensions based on file type
 const createEditorExtensions = (filename?: string): any[] => {
   const extensions: any[] = [
@@ -85,7 +162,14 @@ const createEditorExtensions = (filename?: string): any[] => {
     EditorState.allowMultipleSelections.of(true),
     indentOnInput(),
     bracketMatching(),
-    closeBrackets(),
+    closeBrackets({
+      brackets: ["(", "[", "{", "'", '"', "`"],
+      before: ")]}\"'`",
+      explode: "()[]{}",
+      closingBracket: ")]}",
+      openingBracket: "([{",
+      stringPrefixes: []
+    }),
     rectangularSelection(),
     crosshairCursor(),
     highlightActiveLine(),
@@ -97,9 +181,9 @@ const createEditorExtensions = (filename?: string): any[] => {
     oneDark,
     highlightLineField,
     
-    // LSP completion integration
+    // LSP completion integration with smart formatting
     autocompletion({
-      override: [createLSPCompletionSource()]
+      override: [createEnhancedLSPCompletionSource()]
     }),
     // Add ghost text extension (for Claude AI inline suggestions)
     createGhostTextExtension(async (prefix: string, suffix: string) => {
@@ -158,6 +242,54 @@ const createEditorExtensions = (filename?: string): any[] => {
             });
           }
           return true; // Prevent default browser save
+        }
+      },
+      // Smart quote completion
+      {
+        key: '"',
+        run: (view) => {
+          const { state } = view;
+          const selection = state.selection.main;
+          const lineText = state.doc.lineAt(selection.head).text;
+          const beforeCursor = lineText.slice(0, selection.head - state.doc.line(state.doc.lineAt(selection.head).number).from);
+          
+          // If we're inside a string, don't auto-close
+          const openQuotes = (beforeCursor.match(/"/g) || []).length;
+          if (openQuotes % 2 === 1) {
+            view.dispatch(view.state.replaceSelection('"'));
+            return true;
+          }
+          
+          // Auto-close quotes
+          view.dispatch({
+            changes: { from: selection.from, to: selection.to, insert: '""' },
+            selection: { anchor: selection.from + 1 }
+          });
+          return true;
+        }
+      },
+      // Smart single quote completion
+      {
+        key: "'",
+        run: (view) => {
+          const { state } = view;
+          const selection = state.selection.main;
+          const lineText = state.doc.lineAt(selection.head).text;
+          const beforeCursor = lineText.slice(0, selection.head - state.doc.line(state.doc.lineAt(selection.head).number).from);
+          
+          // If we're inside a string, don't auto-close
+          const openQuotes = (beforeCursor.match(/'/g) || []).length;
+          if (openQuotes % 2 === 1) {
+            view.dispatch(view.state.replaceSelection("'"));
+            return true;
+          }
+          
+          // Auto-close quotes
+          view.dispatch({
+            changes: { from: selection.from, to: selection.to, insert: "''" },
+            selection: { anchor: selection.from + 1 }
+          });
+          return true;
         }
       }
     ]),

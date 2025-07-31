@@ -26,6 +26,11 @@ declare global {
       dialog: {
         selectFolder: () => Promise<{ success: boolean; path?: string; canceled?: boolean; error?: string }>;
       };
+      lsp: {
+        install: (params: { id: string; command: string; packageManager: string }) => Promise<{ success: boolean; output?: string; error?: string }>;
+        uninstall: (params: { id: string; packageManager: string }) => Promise<{ success: boolean; output?: string; error?: string }>;
+        checkCommand: (command: string) => Promise<{ available: boolean }>;
+      };
     };
   }
 }

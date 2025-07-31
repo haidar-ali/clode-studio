@@ -1242,14 +1242,16 @@ app.on('before-quit', () => {
 });
 
 // Ghost text handler (for inline AI suggestions)
-ipcMain.handle('autocomplete:getGhostText', async (event, { prefix, suffix }) => {
+ipcMain.handle('autocomplete:getGhostText', async (event, { prefix, suffix, forceManual = false }) => {
   try {
-    // Check if ghost text is enabled in settings
-    const settings = (store as any).get('autocompleteSettings');
-    
-    // If no settings exist yet, ghost text should be disabled by default
-    if (!settings || !settings.providers || !settings.providers.claude || !settings.providers.claude.enabled) {
-      return { success: true, suggestion: '' }; // Return empty if disabled or settings don't exist
+    // Check if ghost text is enabled in settings (but skip check if manual trigger)
+    if (!forceManual) {
+      const settings = (store as any).get('autocompleteSettings');
+      
+      // If no settings exist yet, ghost text should be disabled by default
+      if (!settings || !settings.providers || !settings.providers.claude || !settings.providers.claude.enabled) {
+        return { success: true, suggestion: '' }; // Return empty if disabled or settings don't exist
+      }
     }
 
     const suggestion = await ghostTextService.getGhostTextSuggestion(prefix, suffix);
@@ -1397,6 +1399,198 @@ ipcMain.handle('lsp:getDiagnostics', async (event, params) => {
   } catch (error) {
     console.error('LSP diagnostics error:', error);
     return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+// LSP Installation handlers
+ipcMain.handle('lsp:install', async (event, params) => {
+  try {
+    const { id, command, packageManager } = params;
+    
+    console.log(`Installing LSP server: ${id} using ${packageManager}`);
+    
+    return new Promise((resolve) => {
+      // Parse the command into executable and arguments
+      const commandParts = command.split(' ');
+      const executable = commandParts[0];
+      const args = commandParts.slice(1);
+      
+      const installProcess = spawn(executable, args, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        shell: true
+      });
+      
+      let stdout = '';
+      let stderr = '';
+      
+      installProcess.stdout?.on('data', (data) => {
+        stdout += data.toString();
+      });
+      
+      installProcess.stderr?.on('data', (data) => {
+        stderr += data.toString();
+      });
+      
+      installProcess.on('close', (code) => {
+        if (code === 0) {
+          console.log(`Successfully installed LSP server: ${id}`);
+          resolve({ success: true, output: stdout });
+        } else {
+          console.error(`Failed to install LSP server: ${id}`, stderr);
+          resolve({ 
+            success: false, 
+            error: `Installation failed with code ${code}: ${stderr || 'Unknown error'}` 
+          });
+        }
+      });
+      
+      installProcess.on('error', (error) => {
+        console.error(`Error installing LSP server: ${id}`, error);
+        resolve({ 
+          success: false, 
+          error: `Failed to start installation: ${error.message}` 
+        });
+      });
+      
+      // Set timeout for installation (5 minutes)
+      setTimeout(() => {
+        try {
+          installProcess.kill();
+        } catch (e) {
+          // Ignore kill errors
+        }
+        resolve({ 
+          success: false, 
+          error: 'Installation timed out after 5 minutes' 
+        });
+      }, 5 * 60 * 1000);
+    });
+    
+  } catch (error) {
+    console.error('LSP install error:', error);
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('lsp:uninstall', async (event, params) => {
+  try {
+    const { id, packageManager } = params;
+    
+    console.log(`Uninstalling LSP server: ${id} using ${packageManager}`);
+    
+    // Define uninstall commands for different package managers
+    const uninstallCommands: Record<string, string[]> = {
+      npm: ['npm', 'uninstall', '-g'],
+      pip: ['pip', 'uninstall', '-y'],
+      brew: ['brew', 'uninstall'],
+      go: ['rm', '-f'], // Go modules are in GOPATH/bin
+      gem: ['gem', 'uninstall'],
+      rustup: ['rustup', 'component', 'remove'],
+      dotnet: ['dotnet', 'tool', 'uninstall', '-g']
+    };
+    
+    // Map server IDs to package names
+    const packageNames: Record<string, string> = {
+      typescript: 'typescript-language-server',
+      python: 'python-lsp-server',
+      rust: 'rust-analyzer',
+      go: `${homedir()}/go/bin/gopls`,
+      vue: '@vue/language-server',
+      html: 'vscode-langservers-extracted',
+      php: 'intelephense',
+      csharp: 'omnisharp',
+      kotlin: 'kotlin-language-server',
+      ruby: 'ruby-lsp',
+      svelte: 'svelte-language-server',
+      lua: 'lua-language-server',
+      yaml: 'yaml-language-server',
+      java: 'jdtls',
+      cpp: 'llvm'
+    };
+    
+    const command = uninstallCommands[packageManager];
+    const packageName = packageNames[id];
+    
+    if (!command || !packageName) {
+      return { success: false, error: `Unsupported uninstall for ${id} with ${packageManager}` };
+    }
+    
+    return new Promise((resolve) => {
+      const uninstallProcess = spawn(command[0], [...command.slice(1), packageName], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        shell: true
+      });
+      
+      let stdout = '';
+      let stderr = '';
+      
+      uninstallProcess.stdout?.on('data', (data) => {
+        stdout += data.toString();
+      });
+      
+      uninstallProcess.stderr?.on('data', (data) => {
+        stderr += data.toString();
+      });
+      
+      uninstallProcess.on('close', (code) => {
+        if (code === 0) {
+          console.log(`Successfully uninstalled LSP server: ${id}`);
+          resolve({ success: true, output: stdout });
+        } else {
+          console.error(`Failed to uninstall LSP server: ${id}`, stderr);
+          resolve({ 
+            success: false, 
+            error: `Uninstallation failed with code ${code}: ${stderr || 'Unknown error'}` 
+          });
+        }
+      });
+      
+      uninstallProcess.on('error', (error) => {
+        console.error(`Error uninstalling LSP server: ${id}`, error);
+        resolve({ 
+          success: false, 
+          error: `Failed to start uninstallation: ${error.message}` 
+        });
+      });
+    });
+    
+  } catch (error) {
+    console.error('LSP uninstall error:', error);
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+// Check if a command is available
+ipcMain.handle('lsp:checkCommand', async (event, command) => {
+  try {
+    return new Promise((resolve) => {
+      const checkProcess = spawn('which', [command], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        shell: true
+      });
+      
+      checkProcess.on('close', (code) => {
+        resolve({ available: code === 0 });
+      });
+      
+      checkProcess.on('error', () => {
+        resolve({ available: false });
+      });
+      
+      // Timeout after 2 seconds
+      setTimeout(() => {
+        try {
+          checkProcess.kill();
+        } catch (e) {
+          // Ignore kill errors
+        }
+        resolve({ available: false });
+      }, 2000);
+    });
+    
+  } catch (error) {
+    console.error('Command check error:', error);
+    return { available: false };
   }
 });
 
