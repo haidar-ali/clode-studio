@@ -47,15 +47,22 @@
         </div>
       </div>
     </div>
+    
+    <!-- Code Generation Modal -->
+    <CodeGenerationModal 
+      ref="codeGenerationModal"
+      @accept="handleAcceptGeneratedCode"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useEditorStore } from '~/stores/editor';
 import FileTree from '~/components/FileExplorer/FileTree.vue';
 import EditorTabs from '~/components/Editor/EditorTabs.vue';
 import CodeMirrorWrapper from '~/components/Editor/CodeMirrorWrapper.vue';
+import CodeGenerationModal from '~/components/Editor/CodeGenerationModal.vue';
 import Icon from '~/components/Icon.vue';
 
 const editorStore = useEditorStore();
@@ -65,6 +72,9 @@ const activeTab = computed(() => editorStore.activeTab);
 const showExplorer = ref(true);
 const explorerWidth = ref(25); // percentage
 const isResizing = ref(false);
+
+// Code generation modal ref
+const codeGenerationModal = ref();
 
 const toggleExplorer = () => {
   showExplorer.value = !showExplorer.value;
@@ -100,6 +110,31 @@ const startResize = (event: MouseEvent) => {
   document.addEventListener('mousemove', handleMouseMove);
   document.addEventListener('mouseup', handleMouseUp);
 };
+
+// Handle generated code acceptance
+const handleAcceptGeneratedCode = (generatedCode: string) => {
+  if (!activeTab.value) return;
+  
+  // Replace the entire content of the active tab
+  editorStore.updateTabContent(activeTab.value.id, generatedCode);
+};
+
+// Event handler for opening code generation
+const handleOpenCodeGeneration = () => {
+  if (!activeTab.value) return;
+  
+  const content = activeTab.value.content || '';
+  codeGenerationModal.value?.open(content);
+};
+
+// Set up event listeners
+onMounted(() => {
+  window.addEventListener('editor:open-code-generation', handleOpenCodeGeneration);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('editor:open-code-generation', handleOpenCodeGeneration);
+});
 </script>
 
 <style scoped>

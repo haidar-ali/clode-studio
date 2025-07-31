@@ -1594,6 +1594,114 @@ ipcMain.handle('lsp:checkCommand', async (event, command) => {
   }
 });
 
+// Code generation handler
+ipcMain.handle('codeGeneration:generate', async (event, { prompt, fileContent, filePath, language }) => {
+  try {
+    // Import Claude SDK
+    const { query } = await import('@anthropic-ai/claude-code');
+    
+    // Construct the system prompt for code generation
+    const systemPrompt = `You are an expert code generation assistant. When given a file and a request to modify it, you must return ONLY the complete updated file contents. No explanations, no markdown code blocks, no comments about what changed - just the raw code for the entire file.`;
+    
+    // Build the user prompt with context
+    const userPrompt = `Current file: ${filePath}
+Language: ${language}
+
+Current file contents:
+${fileContent}
+
+Request: ${prompt}
+
+Generate the complete updated file contents based on the request above.`;
+
+    console.log('[Code Generation] Sending request to Claude...');
+    
+    // Create an AbortController for timeout
+    const abortController = new AbortController();
+    const timeoutId = setTimeout(() => {
+      console.log('[Code Generation] Request timed out after 30 seconds');
+      abortController.abort();
+    }, 30000); // 30 second timeout
+    
+    try {
+      // Use Claude SDK to generate code
+      const response = query({
+        prompt: userPrompt,
+        abortController,
+        options: {
+          model: 'claude-sonnet-4-20250514', // Fast model for code generation
+          maxTurns: 1,
+          allowedTools: [],
+          customSystemPrompt: systemPrompt
+        }
+      });
+      
+      let generatedCode = '';
+      
+      // Iterate through the response messages
+      for await (const message of response) {
+        if (message.type === 'assistant' && message.message?.content) {
+          // Extract text from content blocks
+          for (const block of message.message.content) {
+            if (block.type === 'text') {
+              generatedCode += block.text;
+            }
+          }
+        } else if (message.type === 'result') {
+          console.log('[Code Generation] Query complete');
+          break;
+        }
+      }
+      
+      clearTimeout(timeoutId);
+      
+      if (generatedCode) {
+        console.log('[Code Generation] Successfully generated code');
+        
+        // Clean the response - remove any markdown code blocks if present
+        generatedCode = generatedCode.trim();
+        
+        // Remove markdown code blocks if they exist
+        const codeBlockRegex = /^```[\w]*\n([\s\S]*?)\n```$/;
+        const match = generatedCode.match(codeBlockRegex);
+        if (match) {
+          generatedCode = match[1];
+        }
+        
+        return { 
+          success: true, 
+          generatedCode,
+          replaceWholeFile: true 
+        };
+      } else {
+        return { 
+          success: false, 
+          error: 'No response from Claude' 
+        };
+      }
+      
+    } catch (queryError: unknown) {
+      clearTimeout(timeoutId);
+      
+      if (queryError instanceof Error && queryError.name === 'AbortError') {
+        return { 
+          success: false, 
+          error: 'Request timed out. Try a simpler request.' 
+        };
+      }
+      
+      throw queryError;
+    }
+    
+  } catch (error) {
+    console.error('[Code Generation] Error:', error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    };
+  }
+});
+
 // Clean up Claude instances on app quit
 app.on('before-quit', async () => {
   // Shutdown LSP servers

@@ -291,6 +291,16 @@ const createEditorExtensions = (filename?: string): any[] => {
           });
           return true;
         }
+      },
+      // Code generation trigger
+      {
+        key: 'Ctrl-p',
+        mac: 'Cmd-p',
+        run: () => {
+          // Emit event to open code generation modal
+          window.dispatchEvent(new CustomEvent('editor:open-code-generation'));
+          return true;
+        }
       }
     ]),
     EditorView.theme({

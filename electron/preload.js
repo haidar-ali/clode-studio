@@ -274,6 +274,10 @@ const electronAPI = {
     },
     removeTimeMachineListener: () => {
         electron_1.ipcRenderer.removeAllListeners('time-machine:first-file-operation');
+    },
+    // Code Generation
+    codeGeneration: {
+        generate: (params) => electron_1.ipcRenderer.invoke('codeGeneration:generate', params)
     }
 };
 electron_1.contextBridge.exposeInMainWorld('electronAPI', electronAPI);

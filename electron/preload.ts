@@ -406,6 +406,16 @@ const electronAPI = {
   },
   removeTimeMachineListener: () => {
     ipcRenderer.removeAllListeners('time-machine:first-file-operation');
+  },
+  
+  // Code Generation
+  codeGeneration: {
+    generate: (params: {
+      prompt: string;
+      fileContent: string;
+      filePath: string;
+      language?: string;
+    }) => ipcRenderer.invoke('codeGeneration:generate', params)
   }
 };
 
