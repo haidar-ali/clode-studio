@@ -23,12 +23,12 @@
       <AutocompleteStatus @show-settings="$emit('show-autocomplete-settings')" />
     </div>
     
-    <div class="status-bar-center">
+    <!--<div class="status-bar-center">
       <span class="status-item" :class="claudeStatusClass">
         <Icon :name="claudeStatusIcon" />
         Claude: {{ claudeStatus }}
       </span>
-    </div>
+    </div> -->
     
     <div class="status-bar-right">
       <SnapshotButton />
