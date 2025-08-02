@@ -1249,7 +1249,6 @@ ipcMain.handle('lsp:getDiagnostics', async (event, params) => {
 ipcMain.handle('lsp:install', async (event, params) => {
     try {
         const { id, command, packageManager } = params;
-      
         return new Promise((resolve) => {
             // Parse the command into executable and arguments
             const commandParts = command.split(' ');
@@ -1269,7 +1268,6 @@ ipcMain.handle('lsp:install', async (event, params) => {
             });
             installProcess.on('close', (code) => {
                 if (code === 0) {
-                  
                     resolve({ success: true, output: stdout });
                 }
                 else {
@@ -1310,7 +1308,6 @@ ipcMain.handle('lsp:install', async (event, params) => {
 ipcMain.handle('lsp:uninstall', async (event, params) => {
     try {
         const { id, packageManager } = params;
-      
         // Define uninstall commands for different package managers
         const uninstallCommands = {
             npm: ['npm', 'uninstall', '-g'],
@@ -1359,7 +1356,6 @@ ipcMain.handle('lsp:uninstall', async (event, params) => {
             });
             uninstallProcess.on('close', (code) => {
                 if (code === 0) {
-                  
                     resolve({ success: true, output: stdout });
                 }
                 else {
@@ -1469,11 +1465,9 @@ ${resourceContext}
 Request: ${prompt}
 
 Remember: Return ONLY the complete code for the file. No explanations. No markdown. Just the raw code.`;
-      
         // Create an AbortController for timeout
         const abortController = new AbortController();
         const timeoutId = setTimeout(() => {
-          
             abortController.abort();
         }, 60000); // 60 second timeout
         try {
@@ -1500,13 +1494,11 @@ Remember: Return ONLY the complete code for the file. No explanations. No markdo
                     }
                 }
                 else if (message.type === 'result') {
-                  
                     break;
                 }
             }
             clearTimeout(timeoutId);
             if (generatedCode) {
-              
                 // Clean the response - remove any markdown code blocks if present
                 generatedCode = generatedCode.trim();
                 // Remove markdown code blocks if they exist
