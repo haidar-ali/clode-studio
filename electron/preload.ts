@@ -299,6 +299,11 @@ const electronAPI = {
       ipcRenderer.invoke('workspace:getCurrentPath')
   },
   
+  // App operations
+  app: {
+    getMode: () => ipcRenderer.invoke('app:getMode')
+  },
+  
   // Local database operations
   database: {
     // Claude session methods

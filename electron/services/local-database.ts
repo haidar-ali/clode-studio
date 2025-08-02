@@ -89,7 +89,7 @@ export class LocalDatabase {
         action_data TEXT NOT NULL, -- JSON
         priority INTEGER DEFAULT 50,
         retry_count INTEGER DEFAULT 0,
-        status TEXT DEFAULT 'pending', -- 'pending', 'processing', 'failed'
+        status TEXT DEFAULT 'pending', -- 'pending', 'processing', 'completed', 'failed'
         created_at INTEGER DEFAULT (strftime('%s', 'now') * 1000),
         processed_at INTEGER
       );

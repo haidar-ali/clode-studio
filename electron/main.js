@@ -24,6 +24,8 @@ import { SnapshotService } from './snapshot-service.js';
 import { setupGitTimelineHandlers } from './git-timeline-handlers.js';
 import { ghostTextService } from './ghost-text-service.js';
 import { getLocalDatabase, closeLocalDatabase } from './services/local-database.js';
+import { getModeManager } from './services/mode-config.js';
+import { RemoteServer } from './services/remote-server.js';
 // Load environment variables from .env file
 import { config } from 'dotenv';
 config();
@@ -34,6 +36,9 @@ const store = new Store();
 const fileWatchers = new Map();
 // Multi-instance Claude support
 const claudeInstances = new Map();
+// Mode manager and remote server
+const modeManager = getModeManager();
+let remoteServer = null;
 // Knowledge cache instances per workspace
 const knowledgeCaches = new Map();
 // Git service instances per workspace
@@ -81,6 +86,8 @@ function createWindow() {
     });
 }
 app.whenReady().then(async () => {
+    // Log the current mode
+    console.log(`Starting Clode Studio in ${modeManager.getMode()} mode`);
     // Initialize all service managers (singletons)
     GitServiceManager.getInstance();
     WorktreeManagerGlobal.getInstance();
@@ -93,6 +100,22 @@ app.whenReady().then(async () => {
     // Setup Git Timeline handlers
     setupGitTimelineHandlers();
     createWindow();
+    // Initialize remote server if in hybrid mode
+    if (modeManager.isHybridMode() && mainWindow) {
+        const config = modeManager.getConfig();
+        remoteServer = new RemoteServer({
+            config,
+            mainWindow
+        });
+        try {
+            await remoteServer.start();
+            console.log('Remote server started successfully');
+        }
+        catch (error) {
+            console.error('Failed to start remote server:', error);
+            dialog.showErrorBox('Remote Server Error', `Failed to start remote server: ${error.message}`);
+        }
+    }
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {
             createWindow();
@@ -2159,6 +2182,15 @@ ipcMain.handle('git:checkIgnore', async (event, workspacePath, paths) => {
         return { success: true, results, gitAvailable: false };
     }
 });
+// Mode and remote server status
+ipcMain.handle('app:getMode', async () => {
+    return {
+        mode: modeManager.getMode(),
+        config: modeManager.getConfig(),
+        remoteServerRunning: remoteServer?.isRunning() || false,
+        remoteConnections: remoteServer?.getActiveConnectionCount() || 0
+    };
+});
 // Local Database handlers
 ipcMain.handle('db:saveClaudeSession', async (event, sessionData) => {
     try {
@@ -2311,7 +2343,12 @@ ipcMain.handle('db:getStats', async (event) => {
     }
 });
 // Clean up on app quit
-app.on('before-quit', () => {
+app.on('before-quit', async () => {
+    // Stop remote server if running
+    if (remoteServer && remoteServer.isRunning()) {
+        console.log('Stopping remote server...');
+        await remoteServer.stop();
+    }
     // Clean up database
     closeLocalDatabase();
     for (const [path, service] of gitServices) {

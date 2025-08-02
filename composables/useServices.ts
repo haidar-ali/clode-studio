@@ -118,3 +118,12 @@ export function useStorageService() {
     error
   };
 }
+
+export function useQueueService() {
+  const { services, isLoading, error } = useServices();
+  return {
+    queueService: computed(() => services.value?.queue),
+    isLoading,
+    error
+  };
+}

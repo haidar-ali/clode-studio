@@ -10,6 +10,7 @@ export interface IServiceProvider {
   knowledge: IKnowledgeService;
   mcp: IMCPService;
   storage: IStorageService;
+  queue: IQueueManager;
   
   // App mode for provider-specific logic
   mode: AppMode;
@@ -38,3 +39,4 @@ export * from './ITerminalService';
 export * from './IKnowledgeService';
 export * from './IMCPService';
 export * from './IStorageService';
+export * from './IQueueManager';

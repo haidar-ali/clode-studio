@@ -10,3 +10,5 @@ export * from './IGitService';
 export * from './ITerminalService';
 export * from './IKnowledgeService';
 export * from './IMCPService';
+export * from './IStorageService';
+export * from './IQueueManager';

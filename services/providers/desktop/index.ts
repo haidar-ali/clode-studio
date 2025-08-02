@@ -10,3 +10,4 @@ export * from './DesktopTerminalService';
 export * from './DesktopKnowledgeService';
 export * from './DesktopMCPService';
 export * from './DesktopStorageService';
+export * from './DesktopQueueManager';

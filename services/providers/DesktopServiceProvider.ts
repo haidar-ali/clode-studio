@@ -11,7 +11,8 @@ import type {
   ITerminalService,
   IKnowledgeService,
   IMCPService,
-  IStorageService
+  IStorageService,
+  IQueueManager
 } from '../interfaces';
 
 import { DesktopFileService } from './desktop/DesktopFileService';
@@ -21,6 +22,7 @@ import { DesktopTerminalService } from './desktop/DesktopTerminalService';
 import { DesktopKnowledgeService } from './desktop/DesktopKnowledgeService';
 import { DesktopMCPService } from './desktop/DesktopMCPService';
 import { DesktopStorageService } from './desktop/DesktopStorageService';
+import { DesktopQueueManager } from './desktop/DesktopQueueManager';
 
 export class DesktopServiceProvider implements IServiceProvider {
   public readonly mode = AppMode.DESKTOP;
@@ -32,6 +34,7 @@ export class DesktopServiceProvider implements IServiceProvider {
   public readonly knowledge: IKnowledgeService;
   public readonly mcp: IMCPService;
   public readonly storage: IStorageService;
+  public readonly queue: IQueueManager;
   
   constructor() {
     // Initialize all services wrapping existing Electron APIs
@@ -42,6 +45,7 @@ export class DesktopServiceProvider implements IServiceProvider {
     this.knowledge = new DesktopKnowledgeService();
     this.mcp = new DesktopMCPService();
     this.storage = new DesktopStorageService();
+    this.queue = new DesktopQueueManager(this.storage);
   }
   
   async initialize(): Promise<void> {
@@ -51,6 +55,7 @@ export class DesktopServiceProvider implements IServiceProvider {
   
   async dispose(): Promise<void> {
     // Clean up any resources if needed
+    this.queue.dispose();
     // Most cleanup happens in Electron main process
   }
 }
