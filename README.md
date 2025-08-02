@@ -2,6 +2,8 @@
 
 A modular, AI-first IDE built specifically for developers using Claude Code CLI. This IDE reimagines the traditional development environment with a flexible 3-dock system that lets you customize your workspace exactly how you need it. Built around the Claude Code CLI tool, it solves context loss issues in long coding sessions through intelligent features like persistent knowledge base, multi-instance support, visual task management, and context optimization.
 
+![clode](https://media.discordapp.net/attachments/1066049576257204224/1400552837225648338/Screenshot_2025-07-31_at_2.55.25_PM.png?ex=688d0df9&is=688bbc79&hm=06b70ed50bafb28ae48c03fd90023bcfe3f17d9874ae4dc3c85fb7822e00f6b0&=&format=webp&quality=lossless&width=1184&height=794)
+
 ## 🎨 What Makes Clode Studio Different?
 
 Unlike traditional IDEs with fixed layouts, Clode Studio introduces a revolutionary **3-dock modular system** that adapts to your workflow:
