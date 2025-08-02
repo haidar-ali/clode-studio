@@ -9,3 +9,4 @@ export * from './DesktopGitService';
 export * from './DesktopTerminalService';
 export * from './DesktopKnowledgeService';
 export * from './DesktopMCPService';
+export * from './DesktopStorageService';

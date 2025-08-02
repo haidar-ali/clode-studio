@@ -197,6 +197,30 @@ const electronAPI = {
         setPath: (workspacePath) => electron_1.ipcRenderer.invoke('workspace:setPath', workspacePath),
         getCurrentPath: () => electron_1.ipcRenderer.invoke('workspace:getCurrentPath')
     },
+    // Local database operations
+    database: {
+        // Claude session methods
+        saveClaudeSession: (sessionData) => electron_1.ipcRenderer.invoke('db:saveClaudeSession', sessionData),
+        getClaudeSession: (sessionId) => electron_1.ipcRenderer.invoke('db:getClaudeSession', sessionId),
+        getClaudeSessionsByUser: (userId) => electron_1.ipcRenderer.invoke('db:getClaudeSessionsByUser', userId),
+        // Workspace state methods
+        saveWorkspaceState: (workspacePath, stateType, stateData) => electron_1.ipcRenderer.invoke('db:saveWorkspaceState', workspacePath, stateType, stateData),
+        getWorkspaceState: (workspacePath, stateType) => electron_1.ipcRenderer.invoke('db:getWorkspaceState', workspacePath, stateType),
+        // Knowledge base methods
+        saveKnowledgeEntry: (entry) => electron_1.ipcRenderer.invoke('db:saveKnowledgeEntry', entry),
+        searchKnowledge: (query, userId) => electron_1.ipcRenderer.invoke('db:searchKnowledge', query, userId),
+        // Sync queue methods
+        addToSyncQueue: (actionType, actionData, priority) => electron_1.ipcRenderer.invoke('db:addToSyncQueue', actionType, actionData, priority),
+        getNextSyncItem: () => electron_1.ipcRenderer.invoke('db:getNextSyncItem'),
+        updateSyncItemStatus: (id, status) => electron_1.ipcRenderer.invoke('db:updateSyncItemStatus', id, status),
+        getPendingSyncCount: () => electron_1.ipcRenderer.invoke('db:getPendingSyncCount'),
+        // Settings methods
+        setSetting: (key, value) => electron_1.ipcRenderer.invoke('db:setSetting', key, value),
+        getSetting: (key) => electron_1.ipcRenderer.invoke('db:getSetting', key),
+        getAllSettings: () => electron_1.ipcRenderer.invoke('db:getAllSettings'),
+        // Utility methods
+        getStats: () => electron_1.ipcRenderer.invoke('db:getStats')
+    },
     snapshots: {
         save: (snapshot) => electron_1.ipcRenderer.invoke('snapshots:save', snapshot),
         list: (options) => electron_1.ipcRenderer.invoke('snapshots:list', options),

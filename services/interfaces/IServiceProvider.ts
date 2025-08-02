@@ -9,6 +9,7 @@ export interface IServiceProvider {
   terminal: ITerminalService;
   knowledge: IKnowledgeService;
   mcp: IMCPService;
+  storage: IStorageService;
   
   // App mode for provider-specific logic
   mode: AppMode;
@@ -36,3 +37,4 @@ export * from './IGitService';
 export * from './ITerminalService';
 export * from './IKnowledgeService';
 export * from './IMCPService';
+export * from './IStorageService';

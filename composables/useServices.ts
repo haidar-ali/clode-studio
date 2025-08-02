@@ -109,3 +109,12 @@ export function useMCPService() {
     error
   };
 }
+
+export function useStorageService() {
+  const { services, isLoading, error } = useServices();
+  return {
+    storageService: computed(() => services.value?.storage),
+    isLoading,
+    error
+  };
+}

@@ -298,6 +298,51 @@ const electronAPI = {
     getCurrentPath: () => 
       ipcRenderer.invoke('workspace:getCurrentPath')
   },
+  
+  // Local database operations
+  database: {
+    // Claude session methods
+    saveClaudeSession: (sessionData: any) =>
+      ipcRenderer.invoke('db:saveClaudeSession', sessionData),
+    getClaudeSession: (sessionId: string) =>
+      ipcRenderer.invoke('db:getClaudeSession', sessionId),
+    getClaudeSessionsByUser: (userId: string) =>
+      ipcRenderer.invoke('db:getClaudeSessionsByUser', userId),
+    
+    // Workspace state methods
+    saveWorkspaceState: (workspacePath: string, stateType: string, stateData: any) =>
+      ipcRenderer.invoke('db:saveWorkspaceState', workspacePath, stateType, stateData),
+    getWorkspaceState: (workspacePath: string, stateType?: string) =>
+      ipcRenderer.invoke('db:getWorkspaceState', workspacePath, stateType),
+    
+    // Knowledge base methods
+    saveKnowledgeEntry: (entry: any) =>
+      ipcRenderer.invoke('db:saveKnowledgeEntry', entry),
+    searchKnowledge: (query: string, userId?: string) =>
+      ipcRenderer.invoke('db:searchKnowledge', query, userId),
+    
+    // Sync queue methods
+    addToSyncQueue: (actionType: string, actionData: any, priority?: number) =>
+      ipcRenderer.invoke('db:addToSyncQueue', actionType, actionData, priority),
+    getNextSyncItem: () =>
+      ipcRenderer.invoke('db:getNextSyncItem'),
+    updateSyncItemStatus: (id: number, status: string) =>
+      ipcRenderer.invoke('db:updateSyncItemStatus', id, status),
+    getPendingSyncCount: () =>
+      ipcRenderer.invoke('db:getPendingSyncCount'),
+    
+    // Settings methods
+    setSetting: (key: string, value: any) =>
+      ipcRenderer.invoke('db:setSetting', key, value),
+    getSetting: (key: string) =>
+      ipcRenderer.invoke('db:getSetting', key),
+    getAllSettings: () =>
+      ipcRenderer.invoke('db:getAllSettings'),
+    
+    // Utility methods
+    getStats: () =>
+      ipcRenderer.invoke('db:getStats')
+  },
   snapshots: {
     save: (snapshot: any) =>
       ipcRenderer.invoke('snapshots:save', snapshot),
