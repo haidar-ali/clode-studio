@@ -4,10 +4,10 @@
  */
 import { ref, computed } from 'vue';
 import { useServiceProvider } from './useServices';
-import type { SyncConflict } from '../services/sync/sync-engine';
-import { WorkspaceSyncAdapter } from '../services/sync/adapters/workspace-sync-adapter';
-import { ClaudeSyncAdapter } from '../services/sync/adapters/claude-sync-adapter';
-import { TaskSyncAdapter } from '../services/sync/adapters/task-sync-adapter';
+import type { SyncConflict } from '../services/sync/sync-engine.js';
+import { WorkspaceSyncAdapter } from '../services/sync/adapters/workspace-sync-adapter.js';
+import { ClaudeSyncAdapter } from '../services/sync/adapters/claude-sync-adapter.js';
+import { TaskSyncAdapter } from '../services/sync/adapters/task-sync-adapter.js';
 
 export function useSync() {
   const services = useServiceProvider();

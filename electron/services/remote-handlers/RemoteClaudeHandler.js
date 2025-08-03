@@ -149,6 +149,11 @@ export class RemoteClaudeHandler {
                     COLORTERM: 'truecolor',
                     CLAUDE_INSTANCE_NAME: request.payload.instanceName || 'Remote Claude',
                     CLAUDE_USER_ID: session.userId,
+                    // MCP server context for remote Claude instances
+                    CLAUDE_INSTANCE_ID: request.payload.instanceId,
+                    USER_ID: session.userId,
+                    WORKSPACE_ID: session.workspaceId || workingDir,
+                    REMOTE_MODE: 'true',
                     // Add custom instructions if provided
                     ...(customInstructions ? { CLAUDE_CUSTOM_INSTRUCTIONS: customInstructions } : {})
                 }

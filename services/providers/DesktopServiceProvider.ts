@@ -4,7 +4,6 @@
  */
 import type {
   IServiceProvider,
-  AppMode,
   IFileService,
   IClaudeService,
   IGitService,
@@ -12,17 +11,19 @@ import type {
   IKnowledgeService,
   IMCPService,
   IStorageService,
-  IQueueManager
-} from '../interfaces';
+  IPerformanceCache
+} from '../interfaces/index.js';
+import { AppMode } from '../interfaces/index.js';
 
-import { DesktopFileService } from './desktop/DesktopFileService';
-import { DesktopClaudeService } from './desktop/DesktopClaudeService';
-import { DesktopGitService } from './desktop/DesktopGitService';
-import { DesktopTerminalService } from './desktop/DesktopTerminalService';
-import { DesktopKnowledgeService } from './desktop/DesktopKnowledgeService';
-import { DesktopMCPService } from './desktop/DesktopMCPService';
-import { DesktopStorageService } from './desktop/DesktopStorageService';
-import { DesktopQueueManager } from './desktop/DesktopQueueManager';
+import { DesktopFileService } from './desktop/DesktopFileService.js';
+import { DesktopClaudeService } from './desktop/DesktopClaudeService.js';
+import { DesktopGitService } from './desktop/DesktopGitService.js';
+import { DesktopTerminalService } from './desktop/DesktopTerminalService.js';
+import { DesktopKnowledgeService } from './desktop/DesktopKnowledgeService.js';
+import { DesktopMCPService } from './desktop/DesktopMCPService.js';
+import { DesktopStorageService } from './desktop/DesktopStorageService.js';
+// Use browser-safe cache in renderer process, full SQLite cache in main process
+import { BrowserSafePerformanceCache } from './desktop/BrowserSafePerformanceCache.js';
 
 export class DesktopServiceProvider implements IServiceProvider {
   public readonly mode = AppMode.DESKTOP;
@@ -34,7 +35,7 @@ export class DesktopServiceProvider implements IServiceProvider {
   public readonly knowledge: IKnowledgeService;
   public readonly mcp: IMCPService;
   public readonly storage: IStorageService;
-  public readonly queue: IQueueManager;
+  public readonly cache: IPerformanceCache;
   
   constructor() {
     // Initialize all services wrapping existing Electron APIs
@@ -45,7 +46,21 @@ export class DesktopServiceProvider implements IServiceProvider {
     this.knowledge = new DesktopKnowledgeService();
     this.mcp = new DesktopMCPService();
     this.storage = new DesktopStorageService();
-    this.queue = new DesktopQueueManager(this.storage);
+    
+    // Initialize performance cache
+    // In renderer process, use browser-safe implementation
+    const dbPath = this.getPerformanceCachePath();
+    this.cache = new BrowserSafePerformanceCache(dbPath);
+  }
+  
+  private getPerformanceCachePath(): string {
+    // In Electron, use app.getPath('userData')
+    // For now, use a default path that will be overridden by Electron
+    if (typeof window !== 'undefined' && window.electronAPI) {
+      // This will be replaced with actual path from Electron
+      return 'clode-performance.db';
+    }
+    return ':memory:'; // In-memory for testing
   }
   
   async initialize(): Promise<void> {
@@ -55,7 +70,9 @@ export class DesktopServiceProvider implements IServiceProvider {
   
   async dispose(): Promise<void> {
     // Clean up any resources if needed
-    this.queue.dispose();
+    if (this.cache && 'destroy' in this.cache) {
+      (this.cache as any).destroy();
+    }
     // Most cleanup happens in Electron main process
   }
 }

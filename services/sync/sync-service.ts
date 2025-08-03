@@ -3,7 +3,8 @@
  * Manages synchronization between local and remote state
  */
 import type { Socket } from 'socket.io-client';
-import { syncEngine, SyncPatch, SyncableState, SyncConflict } from './sync-engine.js';
+import { syncEngine } from './sync-engine.js';
+import type { SyncPatch, SyncableState, SyncConflict } from './sync-engine.js';
 import { connectionManager } from '../connection-manager.js';
 import type { RemoteRequest, RemoteResponse } from '../../electron/services/remote-protocol.js';
 

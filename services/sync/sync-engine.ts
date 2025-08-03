@@ -397,3 +397,6 @@ export class SyncEngine extends EventEmitter {
 
 // Export singleton instance
 export const syncEngine = new SyncEngine();
+
+// Export types as well
+export type { SyncableState, SyncPatch, SyncConflict, SyncPriority, SyncMetrics };

@@ -174,6 +174,12 @@ export class RemoteSessionManager {
         return randomBytes(32).toString('hex');
     }
     /**
+     * Get all sessions for a user
+     */
+    getSessionsForUser(userId) {
+        return Array.from(this.sessions.values()).filter(session => session.userId === userId);
+    }
+    /**
      * Get session stats
      */
     getStats() {

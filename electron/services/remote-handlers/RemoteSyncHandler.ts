@@ -11,7 +11,7 @@ import {
 } from '../remote-protocol.js';
 import type { RemoteSession } from '../remote-session-manager.js';
 import { RemoteSessionManager } from '../remote-session-manager.js';
-import type { SyncPatch } from '../../../services/sync/sync-engine.js';
+import type { SyncPatch } from '../types/sync-types.js';
 import { LocalDatabase } from '../local-database.js';
 
 interface SyncPushRequest {
@@ -278,8 +278,9 @@ export class RemoteSyncHandler {
     this.patchStore.forEach((patches) => {
       stats.totalPatches += patches.length;
       patches.forEach(patch => {
-        stats.patchesByType[patch.entityType] = 
-          (stats.patchesByType[patch.entityType] || 0) + 1;
+        const type = patch.entityType || 'unknown';
+        stats.patchesByType[type] = 
+          (stats.patchesByType[type] || 0) + 1;
       });
     });
     

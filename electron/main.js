@@ -13,7 +13,7 @@ import { lightweightContext } from './lightweight-context.js';
 import { contextOptimizer } from './context-optimizer.js';
 import { workspacePersistence } from './workspace-persistence.js';
 import { searchWithRipgrep } from './search-ripgrep.js';
-import { claudeSettingsManager } from './claude-settings-manager.js';
+import { claudeSettingsManager as importedClaudeSettingsManager } from './claude-settings-manager.js';
 import { ClaudeDetector } from './claude-detector.js';
 import { fileWatcherService } from './file-watcher.js';
 import { createKnowledgeCache } from './knowledge-cache.js';
@@ -39,6 +39,8 @@ const claudeInstances = new Map();
 // Mode manager and remote server
 const modeManager = getModeManager();
 let remoteServer = null;
+// Claude settings manager
+const claudeSettingsManager = importedClaudeSettingsManager;
 // Knowledge cache instances per workspace
 const knowledgeCaches = new Map();
 // Git service instances per workspace
@@ -133,6 +135,8 @@ ipcMain.handle('claude:start', async (event, instanceId, workingDirectory, insta
         return { success: false, error: 'Claude instance already running' };
     }
     try {
+        // Configure MCP server for this Claude instance
+        await claudeSettingsManager.configureClodeIntegration(instanceId, workingDirectory);
         // Detect Claude installation
         const claudeInfo = await ClaudeDetector.detectClaude(workingDirectory);
         // Get the command configuration
@@ -186,9 +190,16 @@ ipcMain.handle('claude:start', async (event, instanceId, workingDirectory, insta
             mainWindow?.webContents.send(`claude:output:${instanceId}`, data);
         });
         // Handle exit
-        claudePty.onExit(({ exitCode, signal }) => {
+        claudePty.onExit(async ({ exitCode, signal }) => {
             mainWindow?.webContents.send(`claude:exit:${instanceId}`, exitCode);
             claudeInstances.delete(instanceId);
+            // Clean up MCP server configuration
+            try {
+                await claudeSettingsManager.cleanupClodeIntegration();
+            }
+            catch (error) {
+                console.error('Failed to clean up MCP server configuration:', error);
+            }
         });
         return {
             success: true,

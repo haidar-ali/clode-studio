@@ -2,6 +2,15 @@
  * Base interface for service providers
  * Aggregates all service interfaces to provide a unified API
  */
+import type { IFileService } from './IFileService.js';
+import type { IClaudeService } from './IClaudeService.js';
+import type { IGitService } from './IGitService.js';
+import type { ITerminalService } from './ITerminalService.js';
+import type { IKnowledgeService } from './IKnowledgeService.js';
+import type { IMCPService } from './IMCPService.js';
+import type { IStorageService } from './IStorageService.js';
+import type { IPerformanceCache } from './IPerformanceCache.js';
+
 export interface IServiceProvider {
   file: IFileService;
   claude: IClaudeService;
@@ -10,7 +19,7 @@ export interface IServiceProvider {
   knowledge: IKnowledgeService;
   mcp: IMCPService;
   storage: IStorageService;
-  queue: IQueueManager;
+  cache: IPerformanceCache;  // Changed from queue to performance cache
   
   // App mode for provider-specific logic
   mode: AppMode;
@@ -32,12 +41,3 @@ export enum AppMode {
   REMOTE = 'remote'     // Remote client only (browser)
 }
 
-// Import service interfaces
-export * from './IFileService';
-export * from './IClaudeService';
-export * from './IGitService';
-export * from './ITerminalService';
-export * from './IKnowledgeService';
-export * from './IMCPService';
-export * from './IStorageService';
-export * from './IQueueManager';

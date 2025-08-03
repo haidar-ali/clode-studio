@@ -153,5 +153,15 @@ echo ""
 echo "✅ Hook test completed"
 `.trim();
     }
+    async configureClodeIntegration(instanceId, workingDirectory) {
+        // Configure Claude to work with Clode Studio
+        console.log('Configuring Claude integration for instance:', instanceId, 'in', workingDirectory);
+        // Implementation would go here if needed
+    }
+    async cleanupClodeIntegration() {
+        // Clean up Claude integration
+        console.log('Cleaning up Claude integration');
+        // Implementation would go here if needed
+    }
 }
 export const claudeSettingsManager = new ClaudeSettingsManager();

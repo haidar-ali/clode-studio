@@ -8,6 +8,7 @@ import { RemoteSessionManager } from './remote-session-manager.js';
 import { RemoteFileHandler } from './remote-handlers/RemoteFileHandler.js';
 import { RemoteTerminalHandler } from './remote-handlers/RemoteTerminalHandler.js';
 import { RemoteClaudeHandler } from './remote-handlers/RemoteClaudeHandler.js';
+import { RemoteSyncHandler } from './remote-handlers/RemoteSyncHandler.js';
 export class RemoteServer {
     io = null;
     httpServer = null;
@@ -17,6 +18,7 @@ export class RemoteServer {
     fileHandler;
     terminalHandler;
     claudeHandler;
+    syncHandler;
     constructor(options) {
         this.config = options.config;
         this.mainWindow = options.mainWindow;
@@ -26,6 +28,7 @@ export class RemoteServer {
         this.fileHandler = new RemoteFileHandler(this.mainWindow, this.sessionManager);
         this.terminalHandler = new RemoteTerminalHandler(this.mainWindow, this.sessionManager);
         this.claudeHandler = new RemoteClaudeHandler(this.mainWindow, this.sessionManager);
+        this.syncHandler = new RemoteSyncHandler(this.mainWindow, this.sessionManager);
     }
     async start() {
         if (!this.config.enableRemoteAccess) {
@@ -88,6 +91,7 @@ export class RemoteServer {
             this.fileHandler.registerHandlers(socket);
             this.terminalHandler.registerHandlers(socket);
             this.claudeHandler.registerHandlers(socket);
+            this.syncHandler.registerHandlers(socket);
             // Send initial connection success
             socket.emit('connection:ready', {
                 sessionId: socket.sessionId,

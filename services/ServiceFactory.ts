@@ -2,9 +2,10 @@
  * Service Factory
  * Detects app mode and provides appropriate service implementation
  */
-import { AppMode, IServiceProvider } from './interfaces';
-import { DesktopServiceProvider } from './providers';
-import { RemoteServiceProvider } from './providers/RemoteServiceProvider';
+import type { IServiceProvider } from './interfaces/index.js';
+import { AppMode } from './interfaces/index.js';
+import { DesktopServiceProvider } from './providers/index.js';
+import { RemoteServiceProvider } from './providers/RemoteServiceProvider.js';
 
 export class ServiceFactory {
   private static instance: IServiceProvider | null = null;

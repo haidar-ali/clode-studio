@@ -13,7 +13,7 @@ import { lightweightContext } from './lightweight-context.js';
 import { contextOptimizer } from './context-optimizer.js';
 import { workspacePersistence } from './workspace-persistence.js';
 import { searchWithRipgrep } from './search-ripgrep.js';
-import { claudeSettingsManager } from './claude-settings-manager.js';
+import { claudeSettingsManager as importedClaudeSettingsManager } from './claude-settings-manager.js';
 import { ClaudeDetector } from './claude-detector.js';
 import { fileWatcherService } from './file-watcher.js';
 import { createKnowledgeCache } from './knowledge-cache.js';
@@ -50,7 +50,7 @@ const modeManager = getModeManager();
 let remoteServer: RemoteServer | null = null;
 
 // Claude settings manager
-const claudeSettingsManager = new ClaudeSettingsManager();
+const claudeSettingsManager = importedClaudeSettingsManager;
 
 // Knowledge cache instances per workspace
 const knowledgeCaches: Map<string, any> = new Map();

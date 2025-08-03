@@ -250,40 +250,8 @@
   - Resources: File: package.json, File: electron-builder.yml (new), File: .github/workflows/build.yml (new)
 
 
-## To Do (13)
+## To Do (9)
 
-
-- [ ] **Add user isolation for Claude instances**
-  - ID: REMOTE-012
-  - Assignee: Claude
-  - Type: feature
-  - Priority: high
-  - Description: Implement user-scoped Claude instances so each user gets their own terminals
-  - Resources: File: services/claude/user-isolation.ts (new), Task: REMOTE-011, File: stores/claude-instances.ts
-
-- [ ] **Create connection state management**
-  - ID: REMOTE-013
-  - Assignee: Claude
-  - Type: feature
-  - Priority: medium
-  - Description: Implement state machine for managing connection states (offline, connecting, connected, syncing)
-  - Resources: File: services/connection-manager.ts (new), Task: REMOTE-008, Knowledge: FINAL_REMOTE.md
-
-- [ ] **Build sync engine for state synchronization**
-  - ID: REMOTE-014
-  - Assignee: Claude
-  - Type: feature
-  - Priority: medium
-  - Description: Create intelligent sync system with priority-based synchronization using JSON patches
-  - Resources: File: services/sync/sync-engine.ts (new), Task: REMOTE-006, Task: REMOTE-013
-
-- [ ] **Implement MCP server for remote features**
-  - ID: REMOTE-015
-  - Assignee: Claude
-  - Type: feature
-  - Priority: medium
-  - Description: Create custom MCP server to expose remote collaboration features to Claude
-  - Resources: File: mcp-servers/clode-remote-mcp.ts (new), Knowledge: MCP documentation, Task: REMOTE-011
 
 - [ ] **Add authentication system**
   - ID: REMOTE-016
@@ -360,7 +328,7 @@
 ## In Progress (0)
 
 
-## Completed (83)
+## Completed (88)
 
 - [x] ~~Create service abstraction interfaces~~
   - ~~ID: REMOTE-001~~
@@ -449,6 +417,38 @@
   - ~~Priority: high~~
   - ~~Description: Create Claude instance spawning and management for remote clients~~
   - ~~Resources: File: electron/services/remote-handlers/RemoteClaudeHandler.ts (created), File: test-remote-client.html (updated)~~
+
+- [x] ~~Add user isolation for Claude instances~~
+  - ~~ID: REMOTE-012~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Implement user-scoped Claude instances so each user gets their own terminals~~
+  - ~~Resources: File: electron/services/user-isolation.ts (created), File: electron/services/remote-handlers/RemoteClaudeHandler.ts (updated)~~
+
+- [x] **Create connection state management**
+  - ID: REMOTE-013
+  - Assignee: Claude
+  - Type: feature
+  - Priority: medium
+  - Description: Implement state machine for managing connection states (offline, connecting, connected, syncing)
+  - Resources: File: services/connection-manager.ts (new), Task: REMOTE-008, Knowledge: FINAL_REMOTE.md
+
+- [x] **Build sync engine for state synchronization**
+  - ID: REMOTE-014
+  - Assignee: Claude
+  - Type: feature
+  - Priority: medium
+  - Description: Create intelligent sync system with priority-based synchronization using JSON patches
+  - Resources: File: services/sync/sync-engine.ts (new), Task: REMOTE-006, Task: REMOTE-013
+
+- [x] **Implement MCP server for remote features**
+  - ID: REMOTE-015
+  - Assignee: Claude
+  - Type: feature
+  - Priority: medium
+  - Description: Create custom MCP server to expose remote collaboration features to Claude
+  - Resources: File: mcp-servers/clode-remote-mcp.ts (new), Knowledge: MCP documentation, Task: REMOTE-011
 
 - [x] ~~Create activity bar component with icon navigation~~
   - ~~ID: LAYOUT-001~~
