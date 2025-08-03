@@ -258,31 +258,15 @@
   - Assignee: Both
   - Type: feature
   - Priority: medium
-  - Description: Implement progressive authentication (none for desktop, device token for personal, JWT for teams)
-  - Resources: File: services/auth/auth-service.ts (new), File: package.json, Knowledge: Security best practices
+  - Description: Implement progressive authentication (device tokens for personal use, simple team auth later)
+  - Resources: File: services/auth/auth-service.ts (new), File: services/device-auth.ts (created), Knowledge: Security best practices
 
-- [ ] **Create connection status UI component**
-  - ID: REMOTE-017
-  - Assignee: Claude
-  - Type: feature
-  - Priority: medium
-  - Description: Build visual indicator for connection state with sync controls
-  - Resources: File: components/Layout/ConnectionStatus.vue (new), Task: REMOTE-013, File: stores/connection.ts (new)
-
-- [ ] **Implement device switching functionality**
-  - ID: REMOTE-018
-  - Assignee: Claude
-  - Type: feature
-  - Priority: medium
-  - Description: Create system to checkpoint state on one device and restore on another
-  - Resources: File: services/device-switching.ts (new), Task: REMOTE-011, Task: REMOTE-014
-
-- [ ] **Add terminal state preservation**
+- [ ] **Add terminal state preservation UI**
   - ID: REMOTE-019
   - Assignee: Claude
   - Type: feature
-  - Priority: medium
-  - Description: Save and restore terminal buffer, cursor position, and environment when switching devices
+  - Priority: low
+  - Description: Add UI indicator for restored terminal sessions (backend already preserves state)
   - Resources: File: services/terminal/terminal-state.ts (new), Task: REMOTE-010, Task: REMOTE-018
 
 - [ ] **Create workspace collaboration features**
@@ -290,7 +274,7 @@
   - Assignee: Claude
   - Type: feature
   - Priority: low
-  - Description: Implement shared resources (tasks, knowledge) while keeping Claude instances user-specific
+  - Description: Implement presence and shared resources (not real-time collaboration)
   - Resources: File: services/collaboration/workspace-sharing.ts (new), Task: REMOTE-012, Knowledge: Collaboration model
 
 - [ ] **Add presence indicators**
@@ -305,8 +289,8 @@
   - ID: REMOTE-022
   - Assignee: Claude
   - Type: feature
-  - Priority: low
-  - Description: Add caching, connection pooling, and binary compression for optimal performance
+  - Priority: medium
+  - Description: Optimize for speed with smart caching, predictive loading, and delta sync
   - Resources: File: services/optimization/cache-manager.ts (new), Task: REMOTE-014, Knowledge: Performance best practices
 
 - [ ] **Create deployment configurations**
@@ -321,14 +305,30 @@
   - ID: REMOTE-024
   - Assignee: Both
   - Type: feature
-  - Priority: low
-  - Description: Create unit and integration tests for remote access functionality
+  - Priority: medium
+  - Description: Focus on critical paths: device switching, performance cache, connection recovery
   - Resources: File: tests/remote-access.spec.ts (new), Task: REMOTE-001 through REMOTE-023
+
+- [ ] **Create Performance Dashboard**
+  - ID: REMOTE-026
+  - Assignee: Claude
+  - Type: feature
+  - Priority: low
+  - Description: Visualize cache effectiveness and connection health metrics
+  - Resources: File: components/Layout/PerformanceDashboard.vue (new), Task: REMOTE-022
+
+- [ ] **Create Remote Web Client**
+  - ID: REMOTE-027
+  - Assignee: Claude
+  - Type: feature
+  - Priority: high
+  - Description: Build responsive web client for mobile/browser access with seamless cross-platform experience
+  - Resources: File: app-remote.vue (new), File: layouts/remote.vue (new), File: composables/useRemoteMode.ts (new)
 
 ## In Progress (0)
 
 
-## Completed (88)
+## Completed (91)
 
 - [x] ~~Create service abstraction interfaces~~
   - ~~ID: REMOTE-001~~
@@ -427,28 +427,52 @@
   - ~~Resources: File: electron/services/user-isolation.ts (created), File: electron/services/remote-handlers/RemoteClaudeHandler.ts (updated)~~
 
 - [x] **Create connection state management**
-  - ID: REMOTE-013
-  - Assignee: Claude
-  - Type: feature
-  - Priority: medium
-  - Description: Implement state machine for managing connection states (offline, connecting, connected, syncing)
-  - Resources: File: services/connection-manager.ts (new), Task: REMOTE-008, Knowledge: FINAL_REMOTE.md
+  - ~~ID: REMOTE-013~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: medium~~
+  - ~~Description: Implement state machine for managing connection states (offline, connecting, connected, syncing)~~
+  - ~~Resources: File: services/connection-manager.ts (new), Task: REMOTE-008, Knowledge: FINAL_REMOTE.md~~
 
 - [x] **Build sync engine for state synchronization**
-  - ID: REMOTE-014
-  - Assignee: Claude
-  - Type: feature
-  - Priority: medium
-  - Description: Create intelligent sync system with priority-based synchronization using JSON patches
-  - Resources: File: services/sync/sync-engine.ts (new), Task: REMOTE-006, Task: REMOTE-013
+  - ~~ID: REMOTE-014~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: medium~~
+  - ~~Description: Create intelligent sync system with priority-based synchronization using JSON patches~~
+  - ~~Resources: File: services/sync/sync-engine.ts (new), Task: REMOTE-006, Task: REMOTE-013~~
 
 - [x] **Implement MCP server for remote features**
-  - ID: REMOTE-015
-  - Assignee: Claude
-  - Type: feature
-  - Priority: medium
-  - Description: Create custom MCP server to expose remote collaboration features to Claude
-  - Resources: File: mcp-servers/clode-remote-mcp.ts (new), Knowledge: MCP documentation, Task: REMOTE-011
+  - ~~ID: REMOTE-015~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: medium~~
+  - ~~Description: Create custom MCP server to expose remote collaboration features to Claude~~
+  - ~~Resources: File: mcp-servers/clode-remote-mcp.ts (new), Knowledge: MCP documentation, Task: REMOTE-011~~
+
+- [x] ~~Create connection status UI component~~
+  - ~~ID: REMOTE-017~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Built visual indicator for connection state with performance metrics and modal interface~~
+  - ~~Resources: File: components/Layout/ConnectionStatus.vue (created), File: components/Layout/ConnectionStatusModal.vue (created), Task: REMOTE-013~~
+
+- [x] ~~Implement device switching functionality~~
+  - ~~ID: REMOTE-018~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Created system to checkpoint state on one device and restore on another with UI~~
+  - ~~Resources: File: services/device-switching.ts (created), File: composables/useConnectionManager.ts (updated), Task: REMOTE-011, Task: REMOTE-014~~
+
+- [x] ~~Add Quick Connect UI~~
+  - ~~ID: REMOTE-025~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: QR code and pairing code for easy mobile device connection~~
+  - ~~Resources: File: components/Layout/QuickConnectSection.vue (created), File: services/device-auth.ts (created), Task: REMOTE-016~~
 
 - [x] ~~Create activity bar component with icon navigation~~
   - ~~ID: LAYOUT-001~~

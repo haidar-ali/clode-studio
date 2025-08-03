@@ -2202,6 +2202,15 @@ ipcMain.handle('app:getMode', async () => {
         remoteConnections: remoteServer?.getActiveConnectionCount() || 0
     };
 });
+// App status (same as getMode but following the naming convention)
+ipcMain.handle('app:status', async () => {
+    return {
+        mode: modeManager.getMode(),
+        config: modeManager.getConfig(),
+        remoteServerRunning: remoteServer?.isRunning() || false,
+        remoteConnections: remoteServer?.getActiveConnectionCount() || 0
+    };
+});
 // Local Database handlers
 ipcMain.handle('db:saveClaudeSession', async (event, sessionData) => {
     try {

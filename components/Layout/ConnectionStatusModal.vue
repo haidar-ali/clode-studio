@@ -27,6 +27,59 @@
               </div>
             </div>
             
+            <!-- Remote Server Status (for hybrid mode) -->
+            <div v-if="appStatus.isHybridMode.value" class="server-status-section">
+              <h4>Remote Server</h4>
+              <div class="server-info">
+                <div class="info-item">
+                  <Icon 
+                    :name="appStatus.isRemoteServerRunning.value ? 'mdi:server-network' : 'mdi:server-network-off'" 
+                    :class="['server-icon', { running: appStatus.isRemoteServerRunning.value }]"
+                  />
+                  <div class="info-content">
+                    <div class="info-label">Status</div>
+                    <div class="info-value">
+                      {{ appStatus.isRemoteServerRunning.value ? 'Running' : 'Stopped' }}
+                    </div>
+                  </div>
+                </div>
+                
+                <div v-if="appStatus.isRemoteServerRunning.value" class="info-item">
+                  <Icon name="mdi:connection" />
+                  <div class="info-content">
+                    <div class="info-label">Active Connections</div>
+                    <div class="info-value">{{ appStatus.remoteConnectionCount.value }}</div>
+                  </div>
+                </div>
+                
+                <div v-if="appStatus.serverUrl.value" class="info-item">
+                  <Icon name="mdi:web" />
+                  <div class="info-content">
+                    <div class="info-label">Server URL</div>
+                    <div class="info-value mono">{{ appStatus.serverUrl.value }}</div>
+                  </div>
+                </div>
+                
+                <div v-if="appStatus.isRemoteServerRunning.value" class="info-item">
+                  <Icon name="mdi:shield-check" />
+                  <div class="info-content">
+                    <div class="info-label">Authentication</div>
+                    <div class="info-value">
+                      {{ appStatus.appStatus.value?.config.authRequired ? 'Required' : 'Disabled' }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="server-help">
+                <Icon name="mdi:information" />
+                <span>Other devices can connect to this server to access your Clode Studio environment</span>
+              </div>
+            </div>
+            
+            <!-- Quick Connect Section (for hybrid mode with running server) -->
+            <QuickConnectSection v-if="appStatus.isHybridMode.value && appStatus.isRemoteServerRunning.value" />
+            
             <!-- Performance Metrics -->
             <div v-if="isConnected" class="metrics-section">
               <h4>Performance Metrics</h4>
@@ -81,6 +134,15 @@
                     <div class="device-active">{{ formatLastActive(device.lastActive) }}</div>
                   </div>
                   <div v-if="device.isCurrent" class="current-badge">Current</div>
+                  <button 
+                    v-else 
+                    class="switch-btn"
+                    @click="switchToDevice(device.id)"
+                    :disabled="isSwitching"
+                  >
+                    <Icon name="mdi:swap-horizontal" />
+                    Switch
+                  </button>
                 </div>
               </div>
             </div>
@@ -123,10 +185,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useConnectionManager } from '~/composables/useConnectionManager';
 import { usePerformanceCache } from '~/composables/usePerformanceCache';
+import { useAppStatus } from '~/composables/useAppStatus';
 import { formatBytes } from '~/utils/format';
+import QuickConnectSection from './QuickConnectSection.vue';
 
 const props = defineProps<{
   show: boolean;
@@ -139,6 +203,7 @@ const emit = defineEmits<{
 // Composables
 const connectionManager = useConnectionManager();
 const performanceCache = usePerformanceCache();
+const appStatus = useAppStatus();
 
 // Connection state
 const state = computed(() => connectionManager.state.value);
@@ -150,6 +215,9 @@ const connectedDevices = computed(() => connectionManager.connectedDevices.value
 // Performance metrics
 const cacheHitRate = computed(() => Math.round(performanceCache.hitRate.value * 100));
 const bandwidthSaved = computed(() => performanceCache.bandwidthSaved.value);
+
+// Device switching state
+const isSwitching = ref(false);
 
 // Computed states
 const isConnected = computed(() => 
@@ -234,6 +302,18 @@ function formatRelativeTime(date: Date): string {
   if (hours < 24) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
   if (days < 7) return `${days} day${days > 1 ? 's' : ''} ago`;
   return date.toLocaleDateString();
+}
+
+// Device switching
+async function switchToDevice(deviceId: string) {
+  if (isSwitching.value) return;
+  
+  isSwitching.value = true;
+  try {
+    await connectionManager.switchToDevice(deviceId);
+  } finally {
+    isSwitching.value = false;
+  }
 }
 </script>
 
@@ -361,6 +441,84 @@ function formatRelativeTime(date: Date): string {
   font-size: 14px;
 }
 
+/* Server Status Section */
+.server-status-section {
+  margin-bottom: 24px;
+  padding: 16px;
+  background-color: var(--color-bg-secondary);
+  border-radius: 8px;
+}
+
+.server-status-section h4 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin: 0 0 16px 0;
+}
+
+.server-info {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.info-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.info-item .icon {
+  font-size: 20px;
+  color: var(--color-text-secondary);
+}
+
+.server-icon.running {
+  color: var(--color-success);
+}
+
+.info-content {
+  flex: 1;
+}
+
+.info-label {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.info-value {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+  margin-top: 2px;
+}
+
+.info-value.mono {
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.server-help {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 12px;
+  background-color: var(--color-info-bg);
+  color: var(--color-info);
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.server-help .icon {
+  font-size: 16px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
 /* Metrics Section */
 .metrics-section {
   margin-bottom: 24px;
@@ -479,6 +637,39 @@ function formatRelativeTime(date: Date): string {
   color: white;
   border-radius: 12px;
   font-weight: 600;
+}
+
+.switch-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  background-color: var(--color-primary-bg);
+  color: var(--color-primary);
+  border: 1px solid var(--color-primary);
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s;
+}
+
+.switch-btn:hover:not(:disabled) {
+  background-color: var(--color-primary);
+  color: white;
+  transform: translateY(-1px);
+}
+
+.switch-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.switch-btn .icon {
+  font-size: 14px;
 }
 
 /* Actions Section */

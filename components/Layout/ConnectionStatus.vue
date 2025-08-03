@@ -2,7 +2,7 @@
   <div>
     <button 
       class="connection-status-btn"
-      :class="statusClass"
+      :class="[statusClass, { 'hybrid-active': appStatus.isHybridMode.value && appStatus.isRemoteServerRunning.value }]"
       @click="showModal = true"
       title="Click to view connection details"
     >
@@ -24,9 +24,11 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue';
 import { useConnectionManager } from '~/composables/useConnectionManager';
+import { useAppStatus } from '~/composables/useAppStatus';
 import ConnectionStatusModal from './ConnectionStatusModal.vue';
 
 const connectionManager = useConnectionManager();
+const appStatus = useAppStatus();
 
 const showModal = ref(false);
 
@@ -65,6 +67,15 @@ const statusIcon = computed(() => {
 });
 
 const statusText = computed(() => {
+  // Show hybrid mode status if server is running
+  if (appStatus.isHybridMode.value && appStatus.isRemoteServerRunning.value) {
+    const connections = appStatus.remoteConnectionCount.value;
+    if (connections > 0) {
+      return `Hybrid (${connections} remote)`;
+    }
+    return 'Hybrid Mode';
+  }
+  
   switch (connectionState.value) {
     case 'offline': return 'Offline';
     case 'connecting': return 'Connecting...';
@@ -117,6 +128,13 @@ const statusText = computed(() => {
 
 .status-error {
   --status-color: var(--color-red);
+}
+
+/* Hybrid mode with server running */
+.connection-status-btn.hybrid-active {
+  --status-color: var(--color-purple);
+  background: var(--color-purple-bg);
+  border-color: var(--color-purple);
 }
 
 /* Main status */

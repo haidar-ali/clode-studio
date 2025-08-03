@@ -199,7 +199,10 @@ const electronAPI = {
     },
     // App operations
     app: {
-        getMode: () => electron_1.ipcRenderer.invoke('app:getMode')
+        getMode: () => electron_1.ipcRenderer.invoke('app:getMode'),
+        getStatus: () => electron_1.ipcRenderer.invoke('app:status'),
+        getPlatform: () => process.platform,
+        getVersion: () => process.versions.electron
     },
     // Local database operations
     database: {

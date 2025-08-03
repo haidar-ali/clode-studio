@@ -214,18 +214,82 @@ class ConnectionManager {
     await this.sync();
   }
   
-  switchToDevice(deviceId: string) {
-    const device = this.connectedDevices.value.find(d => d.id === deviceId);
-    if (!device) return;
-    
-    this.toast.info(`Switching to ${device.name}...`);
-    
-    // Emit device switch event
-    if (this.socket) {
-      this.socket.emit('device:switch', { 
-        from: this.currentDeviceId.value,
-        to: deviceId 
+  async refreshDevices() {
+    // Request updated device list from server
+    if (this.socket && this.socket.connected) {
+      this.socket.emit('devices:list', {}, (response: any) => {
+        if (response.success && response.devices) {
+          this.connectedDevices.value = response.devices.map((d: any) => ({
+            id: d.id,
+            name: d.name,
+            type: d.type || 'desktop',
+            lastActive: new Date(d.lastActive),
+            isCurrent: d.id === this.currentDeviceId.value
+          }));
+        }
       });
+    }
+  }
+  
+  async switchToDevice(deviceId: string) {
+    const device = this.connectedDevices.value.find(d => d.id === deviceId);
+    if (!device) {
+      this.toast.error('Device not found');
+      return;
+    }
+    
+    // Don't switch to current device
+    if (device.id === this.currentDeviceId.value) {
+      this.toast.info('Already on this device');
+      return;
+    }
+    
+    try {
+      this.toast.info(`Switching to ${device.name}...`);
+      
+      // Import device switching service
+      const { DeviceSwitchingService } = await import('../services/device-switching');
+      const provider = this.servicesComposable.services.value;
+      if (!provider) {
+        throw new Error('Service provider not available');
+      }
+      
+      const deviceSwitcher = new DeviceSwitchingService(provider);
+      
+      // Create checkpoint of current state
+      this.toast.info('Creating checkpoint...');
+      const checkpoint = await deviceSwitcher.createCheckpoint();
+      
+      // Emit device switch event with checkpoint
+      if (this.socket) {
+        this.socket.emit('device:switch', { 
+          from: this.currentDeviceId.value,
+          to: deviceId,
+          checkpoint
+        });
+        
+        // Listen for switch confirmation
+        this.socket.once('device:switch:complete', async (data) => {
+          if (data.success && data.checkpoint) {
+            // Restore the other device's checkpoint
+            this.toast.info('Restoring device state...');
+            await deviceSwitcher.restoreCheckpoint(data.checkpoint);
+            
+            // Update current device
+            this.currentDeviceId.value = deviceId;
+            this.toast.success(`Switched to ${device.name}`);
+          } else {
+            this.toast.error('Device switch failed: ' + (data.error || 'Unknown error'));
+          }
+        });
+      } else {
+        // Local switch (no socket connection)
+        this.currentDeviceId.value = deviceId;
+        this.toast.success(`Switched to ${device.name} (local only)`);
+      }
+    } catch (error) {
+      console.error('Device switch error:', error);
+      this.toast.error('Failed to switch device: ' + (error as Error).message);
     }
   }
   
@@ -261,6 +325,33 @@ class ConnectionManager {
     this.socket.on('connect', () => {
       this.sessionId.value = this.socket.id;
       this.state.value = 'connected';
+      
+      // Initialize with current device and mock devices for testing
+      const currentId = this.getDeviceId();
+      this.currentDeviceId.value = currentId;
+      this.connectedDevices.value = [
+        {
+          id: currentId,
+          name: 'This Device',
+          type: 'desktop',
+          lastActive: new Date(),
+          isCurrent: true
+        },
+        {
+          id: 'device-mock-1',
+          name: 'MacBook Pro',
+          type: 'laptop',
+          lastActive: new Date(Date.now() - 300000), // 5 minutes ago
+          isCurrent: false
+        },
+        {
+          id: 'device-mock-2',
+          name: 'iPad Pro',
+          type: 'tablet',
+          lastActive: new Date(Date.now() - 3600000), // 1 hour ago
+          isCurrent: false
+        }
+      ];
     });
     
     this.socket.on('disconnect', () => {
