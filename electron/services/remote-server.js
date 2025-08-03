@@ -4,15 +4,22 @@
  */
 import { Server as SocketIOServer } from 'socket.io';
 import { createServer } from 'http';
+import { RemoteSessionManager } from './remote-session-manager.js';
+import { RemoteFileHandler } from './remote-handlers/RemoteFileHandler.js';
 export class RemoteServer {
     io = null;
     httpServer = null;
     config;
     mainWindow;
-    activeConnections = new Map();
+    sessionManager;
+    fileHandler;
     constructor(options) {
         this.config = options.config;
         this.mainWindow = options.mainWindow;
+        // Initialize session manager
+        this.sessionManager = new RemoteSessionManager(this.config.authRequired || false);
+        // Initialize handlers
+        this.fileHandler = new RemoteFileHandler(this.mainWindow, this.sessionManager);
     }
     async start() {
         if (!this.config.enableRemoteAccess) {
@@ -50,81 +57,56 @@ export class RemoteServer {
             return;
         // Authentication middleware
         this.io.use(async (socket, next) => {
-            if (this.config.authRequired) {
-                const token = socket.handshake.auth.token;
-                // TODO: Implement proper authentication
-                if (!token) {
-                    return next(new Error('Authentication required'));
+            try {
+                // Create session
+                const authData = socket.handshake.auth;
+                const session = await this.sessionManager.createSession(socket, authData);
+                // Store session ID in socket data
+                socket.sessionId = session.id;
+                // Check connection limit
+                const stats = this.sessionManager.getStats();
+                if (stats.totalSessions >= (this.config.maxRemoteConnections || 10)) {
+                    return next(new Error('Connection limit reached'));
                 }
+                next();
             }
-            // Check connection limit
-            if (this.activeConnections.size >= (this.config.maxRemoteConnections || 10)) {
-                return next(new Error('Connection limit reached'));
+            catch (error) {
+                next(error);
             }
-            next();
         });
         // Connection handler
         this.io.on('connection', (socket) => {
-            console.log(`Remote client connected: ${socket.id}`);
-            this.activeConnections.set(socket.id, socket);
-            // Handle file operations
-            socket.on('file:read', async (data, callback) => {
-                try {
-                    // Forward to main window IPC
-                    const result = await this.mainWindow.webContents.executeJavaScript(`
-            window.electronAPI.file.readFile('${data.path}')
-          `);
-                    callback({ success: true, data: result });
-                }
-                catch (error) {
-                    callback({ success: false, error: error.message });
-                }
-            });
-            socket.on('file:write', async (data, callback) => {
-                try {
-                    const result = await this.mainWindow.webContents.executeJavaScript(`
-            window.electronAPI.file.writeFile('${data.path}', '${data.content}')
-          `);
-                    callback({ success: true });
-                }
-                catch (error) {
-                    callback({ success: false, error: error.message });
-                }
-            });
-            // Handle terminal operations
-            socket.on('terminal:create', async (data, callback) => {
-                try {
-                    // TODO: Implement terminal creation for remote clients
-                    callback({ success: true, terminalId: `remote-${socket.id}-${Date.now()}` });
-                }
-                catch (error) {
-                    callback({ success: false, error: error.message });
-                }
-            });
-            // Handle Claude operations
-            socket.on('claude:spawn', async (data, callback) => {
-                try {
-                    // TODO: Implement Claude spawn for remote clients
-                    callback({ success: true, instanceId: `remote-${socket.id}-${Date.now()}` });
-                }
-                catch (error) {
-                    callback({ success: false, error: error.message });
-                }
+            const session = this.sessionManager.getSessionBySocket(socket.id);
+            console.log(`Remote client connected: ${socket.id}, session: ${session?.id}`);
+            // Register handlers
+            this.fileHandler.registerHandlers(socket);
+            // TODO: Register other handlers
+            // this.terminalHandler.registerHandlers(socket);
+            // this.claudeHandler.registerHandlers(socket);
+            // Send initial connection success
+            socket.emit('connection:ready', {
+                sessionId: socket.sessionId,
+                permissions: session?.permissions || []
             });
             // Handle disconnection
             socket.on('disconnect', () => {
                 console.log(`Remote client disconnected: ${socket.id}`);
-                this.activeConnections.delete(socket.id);
+                this.sessionManager.removeSession(socket.id);
                 // TODO: Clean up any resources for this client
+            });
+            // Handle ping for keep-alive
+            socket.on('ping', (callback) => {
+                if (typeof callback === 'function') {
+                    callback({ pong: Date.now() });
+                }
             });
         });
     }
     async stop() {
         // Disconnect all clients
-        this.activeConnections.forEach((socket) => {
-            socket.disconnect(true);
-        });
-        this.activeConnections.clear();
+        if (this.io) {
+            this.io.disconnectSockets(true);
+        }
         // Stop Socket.IO
         if (this.io) {
             await new Promise((resolve) => {
@@ -142,9 +124,16 @@ export class RemoteServer {
         console.log('Remote server stopped');
     }
     getActiveConnectionCount() {
-        return this.activeConnections.size;
+        return this.sessionManager.getStats().totalSessions;
     }
     isRunning() {
         return this.io !== null && this.httpServer !== null;
+    }
+    getStats() {
+        return {
+            running: this.isRunning(),
+            ...this.sessionManager.getStats(),
+            config: this.config
+        };
     }
 }
