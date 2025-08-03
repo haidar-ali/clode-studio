@@ -108,6 +108,25 @@ export class LocalDatabase {
       CREATE INDEX IF NOT EXISTS idx_workspace_state_path ON workspace_state(workspace_path);
       CREATE INDEX IF NOT EXISTS idx_knowledge_entries_user ON knowledge_entries(user_id);
       CREATE INDEX IF NOT EXISTS idx_sync_queue_status ON sync_queue(status, priority);
+      
+      -- Sync patches table
+      CREATE TABLE IF NOT EXISTS sync_patches (
+        id TEXT PRIMARY KEY,
+        store_key TEXT NOT NULL,
+        entity_id TEXT NOT NULL,
+        entity_type TEXT NOT NULL,
+        from_version INTEGER,
+        to_version INTEGER,
+        operations TEXT NOT NULL,
+        timestamp INTEGER NOT NULL,
+        source TEXT,
+        user_id TEXT,
+        session_id TEXT,
+        received_at INTEGER
+      );
+      
+      CREATE INDEX IF NOT EXISTS idx_patches_store ON sync_patches(store_key, timestamp);
+      CREATE INDEX IF NOT EXISTS idx_patches_entity ON sync_patches(entity_id, entity_type);
     `);
   }
   
@@ -346,12 +365,84 @@ export class LocalDatabase {
     this.db.exec('VACUUM');
   }
   
+  // Sync patches methods
+  async addSyncPatches(storeKey: string, patches: any[]) {
+    const stmt = this.db.prepare(`
+      INSERT INTO sync_patches 
+      (id, store_key, entity_id, entity_type, from_version, to_version, operations, timestamp, source, user_id, session_id, received_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    
+    const insertMany = this.db.transaction((patches: any[]) => {
+      for (const patch of patches) {
+        stmt.run(
+          patch.id,
+          storeKey,
+          patch.entityId,
+          patch.entityType,
+          patch.fromVersion,
+          patch.toVersion,
+          JSON.stringify(patch.operations),
+          new Date(patch.timestamp).getTime(),
+          patch.source || 'remote',
+          patch.userId || null,
+          patch.sessionId || null,
+          patch.receivedAt ? new Date(patch.receivedAt).getTime() : Date.now()
+        );
+      }
+    });
+    
+    insertMany(patches);
+  }
+  
+  async getSyncPatches(storeKey: string, since?: Date | null, types?: string[]) {
+    let sql = 'SELECT * FROM sync_patches WHERE store_key = ?';
+    const params: any[] = [storeKey];
+    
+    if (since) {
+      sql += ' AND timestamp > ?';
+      params.push(new Date(since).getTime());
+    }
+    
+    if (types && types.length > 0) {
+      sql += ` AND entity_type IN (${types.map(() => '?').join(',')})`;
+      params.push(...types);
+    }
+    
+    sql += ' ORDER BY timestamp ASC';
+    
+    const stmt = this.db.prepare(sql);
+    const rows = stmt.all(...params);
+    
+    return rows.map((row: any) => ({
+      ...row,
+      operations: JSON.parse(row.operations),
+      timestamp: new Date(row.timestamp),
+      receivedAt: row.received_at ? new Date(row.received_at) : null
+    }));
+  }
+  
+  async getSyncStats(storeKey: string) {
+    const stmt = this.db.prepare(`
+      SELECT 
+        COUNT(*) as total_patches,
+        COUNT(DISTINCT entity_id) as unique_entities,
+        COUNT(DISTINCT entity_type) as entity_types,
+        MAX(timestamp) as last_sync_timestamp
+      FROM sync_patches 
+      WHERE store_key = ?
+    `);
+    
+    return stmt.get(storeKey);
+  }
+  
   async getStats() {
     const stats = {
       claudeSessions: (this.db.prepare('SELECT COUNT(*) as count FROM claude_sessions').get() as any).count,
       cachedFiles: (this.db.prepare('SELECT COUNT(*) as count FROM file_cache').get() as any).count,
       knowledgeEntries: (this.db.prepare('SELECT COUNT(*) as count FROM knowledge_entries').get() as any).count,
       pendingSyncs: (this.db.prepare('SELECT COUNT(*) as count FROM sync_queue WHERE status = "pending"').get() as any).count,
+      syncPatches: (this.db.prepare('SELECT COUNT(*) as count FROM sync_patches').get() as any).count,
       dbSizeMB: (fs.statSync(this.dbPath).size / 1024 / 1024).toFixed(2)
     };
     

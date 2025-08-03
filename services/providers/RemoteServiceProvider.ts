@@ -24,6 +24,7 @@ import { RemoteMCPService } from './remote/RemoteMCPService.js';
 import { RemoteStorageService } from './remote/RemoteStorageService.js';
 import { RemoteQueueManager } from './remote/RemoteQueueManager.js';
 import { connectionManager, ConnectionState } from '../connection-manager.js';
+import { SyncService } from '../sync/sync-service.js';
 
 export interface RemoteServiceConfig {
   serverUrl: string;
@@ -33,6 +34,11 @@ export interface RemoteServiceConfig {
     enabled: boolean;
     maxAttempts?: number;
     delay?: number;
+  };
+  syncOptions?: {
+    autoSync?: boolean;
+    syncInterval?: number;
+    conflictResolution?: 'local' | 'remote' | 'manual';
   };
 }
 
@@ -52,6 +58,7 @@ export class RemoteServiceProvider implements IServiceProvider {
   private socket: Socket | null = null;
   private config: RemoteServiceConfig;
   private sessionId: string | null = null;
+  private syncService: SyncService;
   
   constructor(config: RemoteServiceConfig) {
     this.config = config;
@@ -66,6 +73,9 @@ export class RemoteServiceProvider implements IServiceProvider {
     this.storage = new RemoteStorageService(() => this.socket);
     this.queue = new RemoteQueueManager(() => this.socket, connectionManager);
     
+    // Initialize sync service
+    this.syncService = new SyncService(() => this.socket, config.syncOptions);
+    
     // Set up connection state listeners
     this.setupConnectionListeners();
   }
@@ -78,6 +88,7 @@ export class RemoteServiceProvider implements IServiceProvider {
   
   async dispose(): Promise<void> {
     await this.disconnect();
+    this.syncService.dispose();
     connectionManager.dispose();
   }
   
@@ -150,16 +161,24 @@ export class RemoteServiceProvider implements IServiceProvider {
     connectionManager.startSync();
     
     try {
-      // Sync with queue manager
-      await this.queue.flush();
+      // Perform sync via sync service
+      await this.syncService.sync();
       
-      // TODO: Sync other state (workspace, settings, etc.)
+      // Flush queue
+      await this.queue.flush();
       
       connectionManager.completeSync(true);
     } catch (error) {
       connectionManager.completeSync(false);
       throw error;
     }
+  }
+  
+  /**
+   * Get sync service for direct access
+   */
+  getSyncService(): SyncService {
+    return this.syncService;
   }
   
   /**

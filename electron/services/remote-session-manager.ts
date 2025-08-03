@@ -213,6 +213,13 @@ export class RemoteSessionManager {
   }
   
   /**
+   * Get all sessions for a user
+   */
+  getSessionsForUser(userId: string): RemoteSession[] {
+    return Array.from(this.sessions.values()).filter(session => session.userId === userId);
+  }
+  
+  /**
    * Get session stats
    */
   getStats() {

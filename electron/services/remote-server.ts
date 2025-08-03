@@ -10,6 +10,7 @@ import { RemoteSessionManager } from './remote-session-manager.js';
 import { RemoteFileHandler } from './remote-handlers/RemoteFileHandler.js';
 import { RemoteTerminalHandler } from './remote-handlers/RemoteTerminalHandler.js';
 import { RemoteClaudeHandler } from './remote-handlers/RemoteClaudeHandler.js';
+import { RemoteSyncHandler } from './remote-handlers/RemoteSyncHandler.js';
 import { RemoteEvent } from './remote-protocol.js';
 
 export interface RemoteServerOptions {
@@ -26,6 +27,7 @@ export class RemoteServer {
   private fileHandler: RemoteFileHandler;
   private terminalHandler: RemoteTerminalHandler;
   private claudeHandler: RemoteClaudeHandler;
+  private syncHandler: RemoteSyncHandler;
   
   constructor(options: RemoteServerOptions) {
     this.config = options.config;
@@ -48,6 +50,11 @@ export class RemoteServer {
     );
     
     this.claudeHandler = new RemoteClaudeHandler(
+      this.mainWindow,
+      this.sessionManager
+    );
+    
+    this.syncHandler = new RemoteSyncHandler(
       this.mainWindow,
       this.sessionManager
     );
@@ -125,6 +132,7 @@ export class RemoteServer {
       this.fileHandler.registerHandlers(socket);
       this.terminalHandler.registerHandlers(socket);
       this.claudeHandler.registerHandlers(socket);
+      this.syncHandler.registerHandlers(socket);
       
       // Send initial connection success
       socket.emit('connection:ready', {
