@@ -6,6 +6,8 @@ import { Server as SocketIOServer } from 'socket.io';
 import { createServer } from 'http';
 import { RemoteSessionManager } from './remote-session-manager.js';
 import { RemoteFileHandler } from './remote-handlers/RemoteFileHandler.js';
+import { RemoteTerminalHandler } from './remote-handlers/RemoteTerminalHandler.js';
+import { RemoteClaudeHandler } from './remote-handlers/RemoteClaudeHandler.js';
 export class RemoteServer {
     io = null;
     httpServer = null;
@@ -13,6 +15,8 @@ export class RemoteServer {
     mainWindow;
     sessionManager;
     fileHandler;
+    terminalHandler;
+    claudeHandler;
     constructor(options) {
         this.config = options.config;
         this.mainWindow = options.mainWindow;
@@ -20,6 +24,8 @@ export class RemoteServer {
         this.sessionManager = new RemoteSessionManager(this.config.authRequired || false);
         // Initialize handlers
         this.fileHandler = new RemoteFileHandler(this.mainWindow, this.sessionManager);
+        this.terminalHandler = new RemoteTerminalHandler(this.mainWindow, this.sessionManager);
+        this.claudeHandler = new RemoteClaudeHandler(this.mainWindow, this.sessionManager);
     }
     async start() {
         if (!this.config.enableRemoteAccess) {
@@ -80,9 +86,8 @@ export class RemoteServer {
             console.log(`Remote client connected: ${socket.id}, session: ${session?.id}`);
             // Register handlers
             this.fileHandler.registerHandlers(socket);
-            // TODO: Register other handlers
-            // this.terminalHandler.registerHandlers(socket);
-            // this.claudeHandler.registerHandlers(socket);
+            this.terminalHandler.registerHandlers(socket);
+            this.claudeHandler.registerHandlers(socket);
             // Send initial connection success
             socket.emit('connection:ready', {
                 sessionId: socket.sessionId,
@@ -91,8 +96,11 @@ export class RemoteServer {
             // Handle disconnection
             socket.on('disconnect', () => {
                 console.log(`Remote client disconnected: ${socket.id}`);
+                // Clean up terminals and Claude instances for this socket
+                this.terminalHandler.cleanupSocketTerminals(socket.id);
+                this.claudeHandler.cleanupSocketInstances(socket.id);
+                // Remove session
                 this.sessionManager.removeSession(socket.id);
-                // TODO: Clean up any resources for this client
             });
             // Handle ping for keep-alive
             socket.on('ping', (callback) => {

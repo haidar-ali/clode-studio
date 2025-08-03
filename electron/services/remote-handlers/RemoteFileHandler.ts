@@ -272,7 +272,7 @@ export class RemoteFileHandler {
       // Delete file directly
       const stats = await fs.stat(safePath);
       if (stats.isDirectory()) {
-        await fs.rmdir(safePath, { recursive: true });
+        await fs.rm(safePath, { recursive: true, force: true });
       } else {
         await fs.unlink(safePath);
       }

@@ -8,6 +8,8 @@ import type { ModeConfig } from './mode-config';
 import type { BrowserWindow } from 'electron';
 import { RemoteSessionManager } from './remote-session-manager.js';
 import { RemoteFileHandler } from './remote-handlers/RemoteFileHandler.js';
+import { RemoteTerminalHandler } from './remote-handlers/RemoteTerminalHandler.js';
+import { RemoteClaudeHandler } from './remote-handlers/RemoteClaudeHandler.js';
 import { RemoteEvent } from './remote-protocol.js';
 
 export interface RemoteServerOptions {
@@ -22,6 +24,8 @@ export class RemoteServer {
   private mainWindow: BrowserWindow;
   private sessionManager: RemoteSessionManager;
   private fileHandler: RemoteFileHandler;
+  private terminalHandler: RemoteTerminalHandler;
+  private claudeHandler: RemoteClaudeHandler;
   
   constructor(options: RemoteServerOptions) {
     this.config = options.config;
@@ -34,6 +38,16 @@ export class RemoteServer {
     
     // Initialize handlers
     this.fileHandler = new RemoteFileHandler(
+      this.mainWindow,
+      this.sessionManager
+    );
+    
+    this.terminalHandler = new RemoteTerminalHandler(
+      this.mainWindow,
+      this.sessionManager
+    );
+    
+    this.claudeHandler = new RemoteClaudeHandler(
       this.mainWindow,
       this.sessionManager
     );
@@ -109,10 +123,8 @@ export class RemoteServer {
       
       // Register handlers
       this.fileHandler.registerHandlers(socket);
-      
-      // TODO: Register other handlers
-      // this.terminalHandler.registerHandlers(socket);
-      // this.claudeHandler.registerHandlers(socket);
+      this.terminalHandler.registerHandlers(socket);
+      this.claudeHandler.registerHandlers(socket);
       
       // Send initial connection success
       socket.emit('connection:ready', {
@@ -123,8 +135,13 @@ export class RemoteServer {
       // Handle disconnection
       socket.on('disconnect', () => {
         console.log(`Remote client disconnected: ${socket.id}`);
+        
+        // Clean up terminals and Claude instances for this socket
+        this.terminalHandler.cleanupSocketTerminals(socket.id);
+        this.claudeHandler.cleanupSocketInstances(socket.id);
+        
+        // Remove session
         this.sessionManager.removeSession(socket.id);
-        // TODO: Clean up any resources for this client
       });
       
       // Handle ping for keep-alive

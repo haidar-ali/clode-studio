@@ -250,64 +250,8 @@
   - Resources: File: package.json, File: electron-builder.yml (new), File: .github/workflows/build.yml (new)
 
 
-## To Do (20)
+## To Do (13)
 
-
-- [ ] **Add SQLite local database support**
-  - ID: REMOTE-005
-  - Assignee: Claude
-  - Type: feature
-  - Priority: high
-  - Description: Integrate better-sqlite3 for local state caching and offline support
-  - Resources: File: electron/services/local-database.ts (new), File: package.json, Knowledge: FINAL_REMOTE.md
-
-- [ ] **Implement offline queue system**
-  - ID: REMOTE-006
-  - Assignee: Claude
-  - Type: feature
-  - Priority: high
-  - Description: Create queue system to store operations when offline and sync when connected
-  - Resources: File: services/sync/offline-queue.ts (new), Task: REMOTE-005, Knowledge: Offline-first architecture
-
-- [ ] **Create dual-mode Electron main process**
-  - ID: REMOTE-007
-  - Assignee: Claude
-  - Type: feature
-  - Priority: high
-  - Description: Modify electron main.ts to support desktop-only, server-only, and hybrid modes based on launch flags
-  - Resources: File: electron/main.ts, File: electron/server/web-server.ts (new), Task: REMOTE-006
-
-- [ ] **Implement Socket.IO server for remote access**
-  - ID: REMOTE-008
-  - Assignee: Claude
-  - Type: feature
-  - Priority: high
-  - Description: Create Socket.IO server with binary streaming support for PTY data
-  - Resources: File: electron/server/socket-server.ts (new), File: package.json, Task: REMOTE-007
-
-- [ ] **Build remote service provider**
-  - ID: REMOTE-009
-  - Assignee: Claude
-  - Type: feature
-  - Priority: high
-  - Description: Implement service provider that communicates via Socket.IO instead of IPC
-  - Resources: File: services/providers/remote-provider.ts (new), Task: REMOTE-008, Task: REMOTE-001
-
-- [ ] **Create binary PTY streaming system**
-  - ID: REMOTE-010
-  - Assignee: Claude
-  - Type: feature
-  - Priority: high
-  - Description: Implement binary protocol for streaming terminal data with perfect control sequence preservation
-  - Resources: File: services/terminal/remote-terminal-service.ts (new), Task: REMOTE-008, Knowledge: PTY streaming
-
-- [ ] **Implement Claude session management with SDK**
-  - ID: REMOTE-011
-  - Assignee: Claude
-  - Type: feature
-  - Priority: high
-  - Description: Create enhanced Claude manager using --continue flag for session resumption across devices
-  - Resources: File: services/claude/enhanced-claude-manager.ts (new), Knowledge: Claude Code SDK features, Task: REMOTE-010
 
 - [ ] **Add user isolation for Claude instances**
   - ID: REMOTE-012
@@ -416,7 +360,7 @@
 ## In Progress (0)
 
 
-## Completed (76)
+## Completed (83)
 
 - [x] ~~Create service abstraction interfaces~~
   - ~~ID: REMOTE-001~~
@@ -449,6 +393,62 @@
   - ~~Priority: high~~
   - ~~Description: Refactor all composables to use service interfaces instead of direct electronAPI calls~~
   - ~~Resources: File: composables/useServices.ts (created), File: composables/useWorkspaceManager.new.ts (example created), Task: REMOTE-003~~
+
+- [x] ~~Add SQLite local database support~~
+  - ~~ID: REMOTE-005~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Integrate better-sqlite3 for local state caching and offline support~~
+  - ~~Resources: File: electron/services/local-database.ts (created), File: electron/main.ts (updated), File: electron/preload.ts (updated)~~
+
+- [x] ~~Implement offline queue system~~
+  - ~~ID: REMOTE-006~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Create queue system to store operations when offline and sync when connected~~
+  - ~~Resources: File: services/interfaces/IQueueManager.ts (created), File: services/providers/desktop/DesktopQueueManager.ts (created)~~
+
+- [x] ~~Create dual-mode Electron main process~~
+  - ~~ID: REMOTE-007~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Modify electron main.ts to support desktop-only, server-only, and hybrid modes based on launch flags~~
+  - ~~Resources: File: electron/services/mode-config.ts (created), File: electron/main.ts (updated), File: electron/services/remote-server.ts (created)~~
+
+- [x] ~~Implement Socket.IO server for remote access~~
+  - ~~ID: REMOTE-008~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Create Socket.IO server with binary streaming support for PTY data~~
+  - ~~Resources: File: electron/services/remote-server.ts (created), File: electron/services/remote-protocol.ts (created), File: electron/services/remote-session-manager.ts (created)~~
+
+- [x] ~~Implement remote file operations~~
+  - ~~ID: REMOTE-009~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Implement file operations (read, write, list, delete) through Socket.IO~~
+  - ~~Resources: File: electron/services/remote-handlers/RemoteFileHandler.ts (created), File: services/remote-client/RemoteClient.ts (created), File: test-remote-client.html (created)~~
+
+- [x] ~~Implement remote terminal with PTY streaming~~
+  - ~~ID: REMOTE-010~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Implement binary protocol for streaming terminal data with perfect control sequence preservation~~
+  - ~~Resources: File: electron/services/remote-handlers/RemoteTerminalHandler.ts (created), File: test-remote-client.html (updated)~~
+
+- [x] ~~Implement remote Claude instance management~~
+  - ~~ID: REMOTE-011~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Create Claude instance spawning and management for remote clients~~
+  - ~~Resources: File: electron/services/remote-handlers/RemoteClaudeHandler.ts (created), File: test-remote-client.html (updated)~~
 
 - [x] ~~Create activity bar component with icon navigation~~
   - ~~ID: LAYOUT-001~~

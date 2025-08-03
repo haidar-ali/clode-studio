@@ -7,6 +7,7 @@ import {
   RemoteRequest, 
   RemoteResponse, 
   FileProtocol,
+  TerminalProtocol,
   RemoteEvent 
 } from '../../electron/services/remote-protocol';
 
@@ -165,6 +166,57 @@ export class RemoteClient {
     return this.request<FileProtocol.StatRequest, any>('file:stat', {
       path
     });
+  }
+  
+  /**
+   * Terminal operations
+   */
+  async createTerminal(cols: number = 80, rows: number = 24, cwd?: string): Promise<string> {
+    const response = await this.request<TerminalProtocol.CreateRequest, TerminalProtocol.CreateResponse>('terminal:create', {
+      cols,
+      rows,
+      cwd
+    });
+    
+    return response.terminalId;
+  }
+  
+  async writeTerminal(terminalId: string, data: string): Promise<void> {
+    return this.request<TerminalProtocol.WriteRequest, void>('terminal:write', {
+      terminalId,
+      data
+    });
+  }
+  
+  async resizeTerminal(terminalId: string, cols: number, rows: number): Promise<void> {
+    return this.request<TerminalProtocol.ResizeRequest, void>('terminal:resize', {
+      terminalId,
+      cols,
+      rows
+    });
+  }
+  
+  async destroyTerminal(terminalId: string): Promise<void> {
+    return this.request<TerminalProtocol.DestroyRequest, void>('terminal:destroy', {
+      terminalId
+    });
+  }
+  
+  /**
+   * Terminal event handlers
+   */
+  onTerminalData(callback: (event: { terminalId: string; data: Buffer }) => void): () => void {
+    this.socket?.on(RemoteEvent.TERMINAL_DATA, callback);
+    return () => {
+      this.socket?.off(RemoteEvent.TERMINAL_DATA, callback);
+    };
+  }
+  
+  onTerminalExit(callback: (event: { terminalId: string; code: number | null }) => void): () => void {
+    this.socket?.on(RemoteEvent.TERMINAL_EXIT, callback);
+    return () => {
+      this.socket?.off(RemoteEvent.TERMINAL_EXIT, callback);
+    };
   }
   
   /**
