@@ -1,6 +1,7 @@
 import * as pty from 'node-pty';
 import { RemoteEvent, Permission } from '../remote-protocol.js';
 import { ClaudeDetector } from '../../claude-detector.js';
+import { userIsolation } from '../user-isolation.js';
 export class RemoteClaudeHandler {
     mainWindow;
     sessionManager;
@@ -48,6 +49,12 @@ export class RemoteClaudeHandler {
                 this.stopInstance(instanceId);
             });
             this.instancesBySocket.delete(socketId);
+        }
+        // Also cleanup any orphaned instances by session
+        // Get session from socket through session manager
+        const session = this.sessionManager.getSessionBySocket(socketId);
+        if (session) {
+            userIsolation.cleanupSessionInstances(session.id);
         }
     }
     async detectClaude() {
@@ -106,6 +113,30 @@ export class RemoteClaudeHandler {
             if (request.payload.config?.args) {
                 args.push(...request.payload.config.args);
             }
+            // Add personality instructions if provided
+            let customInstructions;
+            if (request.payload.config?.personality?.instructions) {
+                customInstructions = request.payload.config.personality.instructions;
+            }
+            // Register with user isolation service
+            try {
+                userIsolation.registerInstance(session.userId, request.payload.instanceId, session, {
+                    personalityId: request.payload.config?.personalityId,
+                    workingDirectory: workingDir,
+                    instanceName: request.payload.instanceName,
+                    workspaceId: session.workspaceId
+                });
+            }
+            catch (error) {
+                return callback({
+                    id: request.id,
+                    success: false,
+                    error: {
+                        code: 'QUOTA_EXCEEDED',
+                        message: error.message
+                    }
+                });
+            }
             // Spawn Claude PTY
             const claudePty = pty.spawn(this.claudePath, args, {
                 name: 'xterm-256color',
@@ -116,7 +147,10 @@ export class RemoteClaudeHandler {
                     ...process.env,
                     TERM: 'xterm-256color',
                     COLORTERM: 'truecolor',
-                    CLAUDE_INSTANCE_NAME: request.payload.instanceName || 'Remote Claude'
+                    CLAUDE_INSTANCE_NAME: request.payload.instanceName || 'Remote Claude',
+                    CLAUDE_USER_ID: session.userId,
+                    // Add custom instructions if provided
+                    ...(customInstructions ? { CLAUDE_CUSTOM_INSTRUCTIONS: customInstructions } : {})
                 }
             });
             // Store instance info
@@ -209,14 +243,16 @@ export class RemoteClaudeHandler {
                     error: { code: 'INSTANCE_NOT_FOUND', message: 'Instance not found' }
                 });
             }
-            // Verify ownership
-            if (instance.sessionId !== session.id) {
+            // Verify ownership using user isolation service
+            if (!userIsolation.userOwnsInstance(session.userId, request.payload.instanceId)) {
                 return callback({
                     id: request.id,
                     success: false,
-                    error: { code: 'ACCESS_DENIED', message: 'Instance belongs to another session' }
+                    error: { code: 'ACCESS_DENIED', message: 'Instance belongs to another user' }
                 });
             }
+            // Update activity
+            userIsolation.updateInstanceActivity(request.payload.instanceId);
             // Send to Claude
             instance.pty.write(request.payload.data);
             callback({
@@ -253,14 +289,16 @@ export class RemoteClaudeHandler {
                     error: { code: 'INSTANCE_NOT_FOUND', message: 'Instance not found' }
                 });
             }
-            // Verify ownership
-            if (instance.sessionId !== session.id) {
+            // Verify ownership using user isolation service
+            if (!userIsolation.userOwnsInstance(session.userId, request.payload.instanceId)) {
                 return callback({
                     id: request.id,
                     success: false,
-                    error: { code: 'ACCESS_DENIED', message: 'Instance belongs to another session' }
+                    error: { code: 'ACCESS_DENIED', message: 'Instance belongs to another user' }
                 });
             }
+            // Update activity
+            userIsolation.updateInstanceActivity(request.payload.instanceId);
             // Stop instance
             this.stopInstance(request.payload.instanceId);
             callback({
@@ -297,14 +335,16 @@ export class RemoteClaudeHandler {
                     error: { code: 'INSTANCE_NOT_FOUND', message: 'Instance not found' }
                 });
             }
-            // Verify ownership
-            if (instance.sessionId !== session.id) {
+            // Verify ownership using user isolation service
+            if (!userIsolation.userOwnsInstance(session.userId, request.payload.instanceId)) {
                 return callback({
                     id: request.id,
                     success: false,
-                    error: { code: 'ACCESS_DENIED', message: 'Instance belongs to another session' }
+                    error: { code: 'ACCESS_DENIED', message: 'Instance belongs to another user' }
                 });
             }
+            // Update activity
+            userIsolation.updateInstanceActivity(request.payload.instanceId);
             // Resize PTY
             instance.pty.resize(request.payload.cols, request.payload.rows);
             callback({
@@ -333,16 +373,21 @@ export class RemoteClaudeHandler {
                     error: { code: 'NO_SESSION', message: 'No active session' }
                 });
             }
-            // Get instances for this session
-            const sessionInstances = Array.from(this.instances.values())
-                .filter(inst => inst.sessionId === session.id)
-                .map(inst => ({
-                instanceId: inst.instanceId,
-                workingDirectory: inst.workingDirectory,
-                instanceName: inst.instanceName,
-                createdAt: inst.createdAt,
-                claudeInfo: inst.claudeInfo
-            }));
+            // Get instances for this user using isolation service
+            const userInstances = userIsolation.getUserInstances(session.userId);
+            const sessionInstances = userInstances.map(userInst => {
+                const inst = this.instances.get(userInst.instanceId);
+                if (!inst)
+                    return null;
+                return {
+                    instanceId: inst.instanceId,
+                    workingDirectory: inst.workingDirectory,
+                    instanceName: inst.instanceName,
+                    createdAt: inst.createdAt,
+                    claudeInfo: inst.claudeInfo,
+                    personalityId: userInst.personalityId
+                };
+            }).filter(inst => inst !== null);
             callback({
                 id: request.id,
                 success: true,
@@ -381,6 +426,8 @@ export class RemoteClaudeHandler {
                 this.instancesBySocket.delete(instance.socketId);
             }
         }
+        // Unregister from user isolation service
+        userIsolation.unregisterInstance(instanceId);
         console.log(`Stopped Claude instance ${instanceId}`);
     }
     /**
@@ -392,11 +439,14 @@ export class RemoteClaudeHandler {
             const count = instancesBySession.get(inst.sessionId) || 0;
             instancesBySession.set(inst.sessionId, count + 1);
         });
+        // Get user isolation stats
+        const isolationStats = userIsolation.getStats();
         return {
             totalInstances: this.instances.size,
             instancesBySession: Object.fromEntries(instancesBySession),
             instancesBySocket: Object.fromEntries(Array.from(this.instancesBySocket.entries()).map(([k, v]) => [k, v.size])),
-            claudeAvailable: this.claudePath !== null
+            claudeAvailable: this.claudePath !== null,
+            userIsolation: isolationStats
         };
     }
 }

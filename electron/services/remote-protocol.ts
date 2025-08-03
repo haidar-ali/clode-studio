@@ -100,6 +100,11 @@ export namespace ClaudeProtocol {
     config?: {
       command?: string;
       args?: string[];
+      personalityId?: string;
+      personality?: {
+        name: string;
+        instructions: string;
+      };
     };
   }
   

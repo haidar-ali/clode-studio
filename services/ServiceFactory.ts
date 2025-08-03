@@ -4,6 +4,7 @@
  */
 import { AppMode, IServiceProvider } from './interfaces';
 import { DesktopServiceProvider } from './providers';
+import { RemoteServiceProvider } from './providers/RemoteServiceProvider';
 
 export class ServiceFactory {
   private static instance: IServiceProvider | null = null;
@@ -27,8 +28,8 @@ export class ServiceFactory {
       return AppMode.DESKTOP;
     }
     
-    // If not in Electron, must be web (server mode)
-    return AppMode.SERVER;
+    // If not in Electron, must be web (remote mode)
+    return AppMode.REMOTE;
   }
   
   /**
@@ -58,9 +59,18 @@ export class ServiceFactory {
         break;
         
       case AppMode.SERVER:
-        // Will be implemented in later phases
-        // provider = new RemoteServiceProvider();
-        throw new Error('Server mode not yet implemented');
+        // Headless server mode - not applicable for frontend
+        throw new Error('Server mode not applicable for frontend');
+        
+      case AppMode.REMOTE:
+        // For remote-only mode (browser access)
+        const remoteConfig = {
+          serverUrl: import.meta.env.VITE_REMOTE_SERVER_URL || 'http://localhost:3789',
+          authToken: import.meta.env.VITE_REMOTE_AUTH_TOKEN,
+          autoConnect: true
+        };
+        provider = new RemoteServiceProvider(remoteConfig);
+        break;
         
       case AppMode.HYBRID:
         // Will be implemented in later phases

@@ -28,7 +28,8 @@ export interface IServiceProvider {
 export enum AppMode {
   DESKTOP = 'desktop',  // Pure local - current behavior
   SERVER = 'server',    // Headless server only
-  HYBRID = 'hybrid'     // Desktop + remote capabilities
+  HYBRID = 'hybrid',    // Desktop + remote capabilities
+  REMOTE = 'remote'     // Remote client only (browser)
 }
 
 // Import service interfaces
