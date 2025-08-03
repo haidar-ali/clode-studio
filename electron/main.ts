@@ -29,6 +29,7 @@ import { ghostTextService } from './ghost-text-service.js';
 import { getLocalDatabase, closeLocalDatabase } from './services/local-database.js';
 import { getModeManager } from './services/mode-config.js';
 import { RemoteServer } from './services/remote-server.js';
+import { ClaudeSettingsManager } from './services/claude-settings-manager.js';
 
 // Load environment variables from .env file
 import { config } from 'dotenv';
@@ -47,6 +48,9 @@ const claudeInstances: Map<string, pty.IPty> = new Map();
 // Mode manager and remote server
 const modeManager = getModeManager();
 let remoteServer: RemoteServer | null = null;
+
+// Claude settings manager
+const claudeSettingsManager = new ClaudeSettingsManager();
 
 // Knowledge cache instances per workspace
 const knowledgeCaches: Map<string, any> = new Map();
@@ -164,6 +168,9 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
   }
 
   try {
+    // Configure MCP server for this Claude instance
+    await claudeSettingsManager.configureClodeIntegration(instanceId, workingDirectory);
+    
     // Detect Claude installation
     const claudeInfo = await ClaudeDetector.detectClaude(workingDirectory);
 
@@ -228,9 +235,16 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
     });
 
     // Handle exit
-    claudePty.onExit(({ exitCode, signal }) => {
+    claudePty.onExit(async ({ exitCode, signal }) => {
       mainWindow?.webContents.send(`claude:exit:${instanceId}`, exitCode);
       claudeInstances.delete(instanceId);
+      
+      // Clean up MCP server configuration
+      try {
+        await claudeSettingsManager.cleanupClodeIntegration();
+      } catch (error) {
+        console.error('Failed to clean up MCP server configuration:', error);
+      }
     });
 
     return {
