@@ -75,6 +75,7 @@ export class RemoteClaudeHandler {
                         this.mainWindow.webContents.ipc.removeListener('forward-claude-output', handler);
                         this.claudeForwardHandlers?.delete(handlerKey);
                     }
+                    // Forwarding cleanup handled by removing from map
                 });
             }
             this.desktopClaudeForwarding.delete(socketId);
@@ -278,7 +279,9 @@ export class RemoteClaudeHandler {
                         success: true,
                         data: {
                             success: true,
-                            pid: startResult.pid
+                            pid: startResult.pid,
+                            alreadyRunning: startResult.alreadyRunning,
+                            claudeInfo: startResult.claudeInfo
                         }
                     });
                 }

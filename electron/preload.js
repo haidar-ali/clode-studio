@@ -50,6 +50,7 @@ const electronAPI = {
         onInstancesUpdated: (callback) => {
             electron_1.ipcRenderer.on('claude:instances:updated', () => callback());
         },
+        checkForwarding: (instanceId) => electron_1.ipcRenderer.invoke('check-claude-forwarding', instanceId),
         // Hook management
         getHooks: () => electron_1.ipcRenderer.invoke('claude:getHooks'),
         addHook: (hook) => electron_1.ipcRenderer.invoke('claude:addHook', hook),

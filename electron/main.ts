@@ -190,7 +190,20 @@ app.on('window-all-closed', () => {
 // Claude Process Management using PTY with multi-instance support
 ipcMain.handle('claude:start', async (event, instanceId: string, workingDirectory: string, instanceName?: string, runConfig?: { command?: string; args?: string[] }) => {
   if (claudeInstances.has(instanceId)) {
-    return { success: false, error: 'Claude instance already running' };
+    // Instance already running - return success with existing PID
+    const existingPty = claudeInstances.get(instanceId);
+    const pid = existingPty?.pid || -1;
+    console.log(`Claude instance ${instanceId} already running with PID ${pid}`);
+    
+    // Get Claude info for response
+    const claudeInfo = await ClaudeDetector.detectClaude(workingDirectory);
+    
+    return { 
+      success: true, 
+      pid,
+      claudeInfo,
+      alreadyRunning: true 
+    };
   }
 
   try {
@@ -332,6 +345,28 @@ ipcMain.handle('claude:stop', async (event, instanceId: string) => {
     return { success: true };
   }
   return { success: false, error: `No Claude PTY running for instance ${instanceId}` };
+});
+
+// Check if a Claude instance is being forwarded from remote
+ipcMain.handle('check-claude-forwarding', async (event, instanceId: string) => {
+  if (!mainWindow) return false;
+  
+  try {
+    // Check if the instance is in the forwarding map on the renderer side
+    const isForwarded = await mainWindow.webContents.executeJavaScript(`
+      (() => {
+        if (window.__remoteClaudeForwarding) {
+          return window.__remoteClaudeForwarding.has('${instanceId}');
+        }
+        return false;
+      })()
+    `);
+    
+    return isForwarded;
+  } catch (error) {
+    console.error('Failed to check Claude forwarding:', error);
+    return false;
+  }
 });
 
 ipcMain.handle('claude:resize', async (event, instanceId: string, cols: number, rows: number) => {

@@ -530,8 +530,25 @@ async function startClaude(instanceId: string) {
     instance.status = 'connected';
     instance.pid = result.pid || -1;
     
-    // For desktop instances, it might take a moment to start
-    if (result.pid === -1) {
+    // Check if instance was already running on desktop
+    if ((result as any).alreadyRunning) {
+      terminal.write(`\x1b[32mConnected to existing Claude instance on desktop\x1b[0m\r\n`);
+      terminal.write(`\x1b[90mInstance: ${instance.name} (${instance.id})\x1b[0m\r\n`);
+      
+      // Load current buffer from desktop
+      try {
+        const buffer = await services.value.claude.getClaudeBuffer(instance.id);
+        if (buffer) {
+          setTimeout(() => {
+            terminal.clear();
+            terminal.write(buffer);
+            console.log('[MobileClaude] Loaded existing Claude buffer from desktop');
+          }, 100);
+        }
+      } catch (e) {
+        console.error('[MobileClaude] Failed to load buffer:', e);
+      }
+    } else if (result.pid === -1) {
       terminal.write(`\x1b[33mStarting Claude on desktop...\x1b[0m\r\n`);
       terminal.write(`\x1b[90mPlease wait a moment for Claude to initialize\x1b[0m\r\n`);
     } else {

@@ -113,6 +113,8 @@ export namespace ClaudeProtocol {
     success: boolean;
     pid?: number;
     error?: string;
+    alreadyRunning?: boolean;
+    claudeInfo?: any;
   }
   
   export interface SendRequest {
