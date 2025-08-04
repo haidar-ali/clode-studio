@@ -78,6 +78,13 @@ onMounted(async () => {
   // Open terminal in the DOM
   terminal.open(terminalElement.value);
   
+  // Expose terminal and serialize addon for state capture
+  if (props.instanceId && terminalElement.value) {
+    terminalElement.value.setAttribute('data-terminal-id', props.instanceId);
+    (terminalElement.value as any).__terminal = terminal;
+    (terminalElement.value as any).__serializeAddon = serializeAddon;
+  }
+  
   // Fit terminal to container
   fitAddon.fit();
   

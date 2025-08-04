@@ -438,7 +438,22 @@ export class RemoteTerminalHandler {
         const result = await this.mainWindow.webContents.executeJavaScript(`
           (() => {
             if (typeof window.__getTerminalInstances === 'function') {
-              return window.__getTerminalInstances();
+              const terminals = window.__getTerminalInstances();
+              // Try to get current buffer for each terminal
+              return terminals.map(t => {
+                let currentBuffer = null;
+                if (typeof window.__getTerminalBuffer === 'function') {
+                  try {
+                    currentBuffer = window.__getTerminalBuffer(t.id);
+                  } catch (e) {
+                    console.error('Failed to get terminal buffer:', e);
+                  }
+                }
+                return {
+                  ...t,
+                  currentBuffer: currentBuffer || t.savedBuffer || null
+                };
+              });
             }
             return [];
           })()

@@ -77,7 +77,7 @@ import ConnectionStatus from '~/components/Layout/ConnectionStatus.vue';
 // Import mobile wrapper components
 import MobileExplorer from './MobileExplorer.vue';
 import MobileEditor from './MobileEditor.vue';
-import MobileTerminal from './MobileTerminal.vue';
+import MobileTerminal from './MobileTerminalXterm.vue';
 import MobileClaude from './MobileClaude.vue';
 import RemoteConnectionModal from './RemoteConnectionModal.vue';
 import DebugPanel from './DebugPanel.vue';
