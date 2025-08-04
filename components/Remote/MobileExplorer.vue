@@ -7,13 +7,32 @@
       </button>
     </div>
     
+    <!-- Navigation Bar -->
+    <div class="nav-bar" v-if="navigationHistory.length > 0">
+      <button 
+        class="nav-btn back-btn" 
+        @click="goBack"
+        :disabled="navigationHistory.length <= 1"
+      >
+        <Icon name="mdi:chevron-left" />
+      </button>
+      <div class="current-path">
+        <Icon name="mdi:folder" class="path-icon" />
+        <span>{{ currentPathDisplay }}</span>
+      </div>
+      <button 
+        class="nav-btn home-btn" 
+        @click="goToRoot"
+        :disabled="navigationHistory.length <= 1"
+      >
+        <Icon name="mdi:home" />
+      </button>
+    </div>
+    
     <!-- Debug info -->
     <div class="debug-info">
-      <p>Workspace Local: {{ workspaceStore.currentPath || 'None' }}</p>
       <p>Workspace Remote: {{ workspacePath || 'None' }}</p>
       <p>Files loaded: {{ fileTree.length }}</p>
-      <p>Service status: {{ serviceStatus }}</p>
-      <p v-if="connectionError" style="color: red;">Connection: {{ connectionError }}</p>
     </div>
     
     <!-- Use RemoteFileTree for mobile -->
@@ -36,7 +55,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import RemoteFileTree from './RemoteFileTree.vue';
 import { useServices } from '~/composables/useServices';
 import { useWorkspaceStore } from '~/stores/workspace';
@@ -50,8 +69,16 @@ const workspacePath = ref<string | null>(null);
 const isLoading = ref(false);
 const error = ref<string | null>(null);
 const currentPath = ref<string>('');
+const navigationHistory = ref<string[]>([]);
 
 const { error: connectionError } = useRemoteConnection();
+
+// Computed property for display path
+const currentPathDisplay = computed(() => {
+  if (!currentPath.value) return 'Files';
+  const parts = currentPath.value.split('/');
+  return parts[parts.length - 1] || 'Files';
+});
 
 const emit = defineEmits<{
   'file-opened': [fileData: { path: string; content: string; name: string }];
@@ -107,6 +134,11 @@ async function loadFileTree(path?: string) {
     currentPath.value = rootPath;
     console.log('Loading files from:', rootPath);
     
+    // Add to navigation history if it's a new path
+    if (!navigationHistory.value.includes(rootPath)) {
+      navigationHistory.value.push(rootPath);
+    }
+    
     const files = await services.value.file.listDirectory(rootPath);
     console.log('Files loaded:', files);
     
@@ -114,7 +146,7 @@ async function loadFileTree(path?: string) {
     fileTree.value = files.map(file => ({
       name: file.name,
       path: file.path,
-      type: file.type
+      type: file.isDirectory ? 'directory' : 'file'
     }));
     
     serviceStatus.value = `Loaded ${files.length} files`;
@@ -145,6 +177,19 @@ function handleFileOpen(fileData: { path: string; content: string; name: string 
   console.log('File opened:', fileData.path);
   // Emit event to parent to switch to editor tab with file content
   emit('file-opened', fileData);
+}
+
+async function goBack() {
+  if (navigationHistory.value.length > 1) {
+    navigationHistory.value.pop(); // Remove current
+    const previousPath = navigationHistory.value[navigationHistory.value.length - 1];
+    await loadFileTree(previousPath);
+  }
+}
+
+async function goToRoot() {
+  navigationHistory.value = [];
+  await loadFileTree(workspacePath.value || workspaceStore.currentPath);
 }
 
 // Handle workspace sync events
@@ -199,35 +244,105 @@ onUnmounted(() => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--color-bg-primary);
+  background: #0a0b0d;
 }
 
 .mobile-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: var(--panel-padding, 12px);
-  background: var(--color-bg-secondary);
-  border-bottom: 1px solid var(--color-border);
+  padding: 12px 16px;
+  background: linear-gradient(180deg, #1a1b1f 0%, #141518 100%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(10px);
 }
 
 .mobile-header h3 {
   margin: 0;
   font-size: 16px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .refresh-btn {
-  background: none;
-  border: none;
-  color: var(--color-text-secondary);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.6);
   cursor: pointer;
-  padding: 8px;
-  border-radius: 4px;
-  transition: background-color 0.2s;
+  padding: 6px;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .refresh-btn:hover {
-  background: var(--color-bg-hover);
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.9);
+  transform: translateY(-1px);
+}
+
+/* Navigation Bar */
+.nav-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.nav-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.6);
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nav-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.nav-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.current-path {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.path-icon {
+  color: #5CA0F2;
+  font-size: 16px;
+}
+
+.current-path span {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .file-tree-container {
@@ -264,16 +379,23 @@ onUnmounted(() => {
 
 /* Debug info styling */
 .debug-info {
-  background: rgba(0, 100, 200, 0.1);
-  border: 1px solid rgba(0, 100, 200, 0.3);
-  padding: 8px;
-  margin: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 8px 12px;
+  margin: 8px 12px;
   font-size: 12px;
-  font-family: monospace;
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+  border-radius: 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
 }
 
 .debug-info p {
-  margin: 2px 0;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 11px;
 }
 
 .empty-state .debug {

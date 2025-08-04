@@ -91,18 +91,21 @@ const statusText = computed(() => {
 
 <style scoped>
 .connection-status-btn {
-  @apply flex items-center gap-2 px-4 py-2 rounded-lg cursor-pointer
+  @apply flex items-center gap-2 px-4 py-2 cursor-pointer
          transition-all duration-200 select-none relative
-         font-medium text-sm;
-  background: var(--color-surface-2);
-  border: 1px solid var(--color-border);
+         text-sm;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  backdrop-filter: blur(10px);
   min-width: 160px;
 }
 
 .connection-status-btn:hover {
-  background: var(--color-surface-3);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.12);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
 }
 
 .connection-status-btn:active {
@@ -111,23 +114,23 @@ const statusText = computed(() => {
 
 /* Status classes */
 .status-offline {
-  --status-color: var(--color-text-3);
+  --status-color: rgba(255, 255, 255, 0.4);
 }
 
 .status-connecting {
-  --status-color: var(--color-blue);
+  --status-color: #5CA0F2;
 }
 
 .status-connected {
-  --status-color: var(--color-green);
+  --status-color: #4ADE80;
 }
 
 .status-synchronized {
-  --status-color: var(--color-green);
+  --status-color: #4ADE80;
 }
 
 .status-error {
-  --status-color: var(--color-red);
+  --status-color: #F87171;
 }
 
 /* Hybrid mode with server running */
@@ -145,10 +148,13 @@ const statusText = computed(() => {
 
 .status-text {
   @apply flex-1 text-left;
+  font-weight: 500;
+  letter-spacing: 0.01em;
 }
 
 .expand-icon {
-  @apply text-xs opacity-60 transition-opacity;
+  @apply text-xs transition-opacity;
+  opacity: 0.4;
 }
 
 .connection-status-btn:hover .expand-icon {

@@ -126,13 +126,14 @@ function getFileIcon(filename: string): string {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--color-bg-primary);
+  background: #0a0b0d;
 }
 
 .editor-tabs {
-  background: var(--color-bg-secondary);
-  border-bottom: 1px solid var(--color-border);
+  background: linear-gradient(180deg, #1a1b1f 0%, #141518 100%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   overflow: hidden;
+  backdrop-filter: blur(10px);
 }
 
 .tabs-scroll {
@@ -146,27 +147,46 @@ function getFileIcon(filename: string): string {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 12px;
+  padding: 10px 14px;
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
-  color: var(--color-text-secondary);
+  color: rgba(255, 255, 255, 0.5);
   cursor: pointer;
   white-space: nowrap;
   min-width: 0;
   transition: all 0.2s;
+  position: relative;
+}
+
+.editor-tab:hover:not(.active) {
+  color: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .editor-tab.active {
-  color: var(--color-text-primary);
-  background: var(--color-bg-primary);
-  border-bottom-color: var(--color-primary);
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.08);
+  border-bottom-color: #5CA0F2;
+}
+
+.editor-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #5CA0F2;
+  box-shadow: 0 0 8px rgba(92, 160, 242, 0.4);
 }
 
 .editor-tab span {
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 14px;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
 }
 
 .editor-tab svg {
@@ -183,21 +203,21 @@ function getFileIcon(filename: string): string {
   margin-left: 4px;
   background: none;
   border: none;
-  color: var(--color-text-secondary);
+  color: rgba(255, 255, 255, 0.4);
   cursor: pointer;
   border-radius: 4px;
-  opacity: 0.7;
   transition: all 0.2s;
 }
 
 .close-btn:hover {
-  opacity: 1;
-  background: var(--color-bg-hover);
+  color: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .editor-container {
   flex: 1;
   overflow: hidden;
+  background: #0a0b0d;
 }
 
 .empty-state {
@@ -206,8 +226,8 @@ function getFileIcon(filename: string): string {
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: var(--color-text-secondary);
-  gap: 8px;
+  color: rgba(255, 255, 255, 0.4);
+  gap: 12px;
   padding: 20px;
   text-align: center;
 }
@@ -215,17 +235,27 @@ function getFileIcon(filename: string): string {
 .empty-state svg {
   width: 48px;
   height: 48px;
-  opacity: 0.5;
+  opacity: 0.3;
+  color: #5CA0F2;
+}
+
+.empty-state p {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.6);
 }
 
 .empty-state .hint {
   font-size: 14px;
-  opacity: 0.7;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.4);
 }
 
 /* Mobile optimizations */
 :deep(.mobile-optimized .cm-editor) {
   font-size: 14px;
+  background: #0a0b0d;
 }
 
 :deep(.mobile-optimized .cm-content) {
@@ -239,5 +269,23 @@ function getFileIcon(filename: string): string {
 /* Ensure proper touch scrolling */
 :deep(.mobile-optimized .cm-scroller) {
   -webkit-overflow-scrolling: touch;
+}
+
+/* Scrollbar styling */
+.tabs-scroll::-webkit-scrollbar {
+  height: 4px;
+}
+
+.tabs-scroll::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.tabs-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+}
+
+.tabs-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
 }
 </style>

@@ -169,8 +169,9 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
-  background: var(--color-bg-secondary);
-  border-bottom: 1px solid var(--color-border);
+  background: linear-gradient(180deg, #1a1b1f 0%, #141518 100%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(10px);
 }
 
 .remote-header h1 {
@@ -178,23 +179,30 @@ onMounted(async () => {
   margin: 0;
   flex: 1;
   text-align: center;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  letter-spacing: 0.02em;
 }
 
 .menu-btn {
-  background: none;
-  border: none;
-  color: var(--color-text-primary);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.6);
   cursor: pointer;
-  padding: 8px;
+  padding: 6px;
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
-  transition: background-color 0.2s;
+  border-radius: 6px;
+  transition: all 0.2s;
 }
 
 .menu-btn:hover {
-  background: var(--color-bg-hover);
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.9);
+  transform: translateY(-1px);
 }
 
 /* Mobile Layout */
@@ -213,9 +221,10 @@ onMounted(async () => {
 /* Mobile Navigation */
 .mobile-nav {
   display: flex;
-  background: var(--color-bg-secondary);
-  border-top: 1px solid var(--color-border);
+  background: linear-gradient(180deg, #141518 0%, #0a0b0d 100%);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
   padding: 8px 0;
+  backdrop-filter: blur(10px);
 }
 
 .mobile-nav button {
@@ -227,17 +236,23 @@ onMounted(async () => {
   padding: 8px;
   background: none;
   border: none;
-  color: var(--color-text-secondary);
+  color: rgba(255, 255, 255, 0.5);
   cursor: pointer;
-  transition: color 0.2s;
+  transition: all 0.2s;
 }
 
 .mobile-nav button.active {
-  color: var(--color-primary);
+  color: #5CA0F2;
+}
+
+.mobile-nav button:hover:not(.active) {
+  color: rgba(255, 255, 255, 0.8);
 }
 
 .mobile-nav button span {
   font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
 }
 
 /* Header Actions */
@@ -248,20 +263,23 @@ onMounted(async () => {
 }
 
 .debug-btn {
-  background: none;
-  border: none;
-  color: var(--color-text-secondary);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.6);
   width: 32px;
   height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
-  transition: background-color 0.2s;
+  border-radius: 6px;
+  transition: all 0.2s;
+  cursor: pointer;
 }
 
 .debug-btn:hover {
-  background: var(--color-bg-hover);
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.9);
+  transform: translateY(-1px);
 }
 
 /* Debug Drawer */

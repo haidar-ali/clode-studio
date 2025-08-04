@@ -98,11 +98,18 @@ function getFileIcon(file: FileItem) {
 }
 
 async function handleFileClick(file: FileItem) {
+  console.log('[RemoteFileTree] Clicked:', file.name, 'type:', file.type);
+  
   if (file.type === 'directory') {
+    console.log('[RemoteFileTree] Emitting directoryClick for:', file.path);
     emit('directoryClick', file.path);
-  } else {
-    // Read file content using services
+    return; // Exit early for directories
+  }
+  
+  // Only read if it's actually a file
+  if (file.type === 'file') {
     try {
+      console.log('[RemoteFileTree] Reading file:', file.path);
       const { services, initialize } = useServices();
       await initialize();
       
@@ -117,6 +124,10 @@ async function handleFileClick(file: FileItem) {
       }
     } catch (error) {
       console.error('Failed to open file:', error);
+      // Show user-friendly error
+      if (error.message.includes('EISDIR')) {
+        console.error('Attempted to read a directory as a file');
+      }
     }
   }
 }
