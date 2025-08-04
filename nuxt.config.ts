@@ -5,6 +5,10 @@ export default defineNuxtConfig({
   compatibilityDate: '2025-05-15',
   devtools: { enabled: true },
   ssr: false, // SPA mode for Electron
+  devServer: {
+    host: '0.0.0.0', // Listen on all network interfaces
+    port: 3000
+  },
   app: {
     head: {
       title: 'Clode Studio',
@@ -29,6 +33,7 @@ export default defineNuxtConfig({
     '~/assets/css/main.css',
     '~/assets/css/modal-theme.css',
     '~/assets/css/ghost-text.css',
+    '~/assets/css/mobile.css',
     'splitpanes/dist/splitpanes.css'
   ],
   build: {

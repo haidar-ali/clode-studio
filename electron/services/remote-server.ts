@@ -11,6 +11,7 @@ import { RemoteFileHandler } from './remote-handlers/RemoteFileHandler.js';
 import { RemoteTerminalHandler } from './remote-handlers/RemoteTerminalHandler.js';
 import { RemoteClaudeHandler } from './remote-handlers/RemoteClaudeHandler.js';
 import { RemoteSyncHandler } from './remote-handlers/RemoteSyncHandler.js';
+import { RemoteWorkspaceHandler } from './remote-handlers/RemoteWorkspaceHandler.js';
 import { RemoteEvent } from './remote-protocol.js';
 
 export interface RemoteServerOptions {
@@ -28,6 +29,7 @@ export class RemoteServer {
   private terminalHandler: RemoteTerminalHandler;
   private claudeHandler: RemoteClaudeHandler;
   private syncHandler: RemoteSyncHandler;
+  private workspaceHandler: RemoteWorkspaceHandler;
   
   constructor(options: RemoteServerOptions) {
     this.config = options.config;
@@ -58,6 +60,11 @@ export class RemoteServer {
       this.mainWindow,
       this.sessionManager
     );
+    
+    this.workspaceHandler = new RemoteWorkspaceHandler(
+      this.mainWindow,
+      this.sessionManager
+    );
   }
   
   async start(): Promise<void> {
@@ -78,7 +85,9 @@ export class RemoteServer {
         methods: ["GET", "POST"],
         credentials: true
       },
-      transports: ['websocket', 'polling']
+      transports: ['polling', 'websocket'], // Start with polling for mobile
+      pingTimeout: 60000,
+      pingInterval: 25000
     });
     
     // Set up connection handlers
@@ -133,6 +142,7 @@ export class RemoteServer {
       this.terminalHandler.registerHandlers(socket);
       this.claudeHandler.registerHandlers(socket);
       this.syncHandler.registerHandlers(socket);
+      this.workspaceHandler.registerHandlers(socket);
       
       // Send initial connection success
       socket.emit('connection:ready', {

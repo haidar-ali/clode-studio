@@ -9,6 +9,7 @@ import { RemoteFileHandler } from './remote-handlers/RemoteFileHandler.js';
 import { RemoteTerminalHandler } from './remote-handlers/RemoteTerminalHandler.js';
 import { RemoteClaudeHandler } from './remote-handlers/RemoteClaudeHandler.js';
 import { RemoteSyncHandler } from './remote-handlers/RemoteSyncHandler.js';
+import { RemoteWorkspaceHandler } from './remote-handlers/RemoteWorkspaceHandler.js';
 export class RemoteServer {
     io = null;
     httpServer = null;
@@ -19,6 +20,7 @@ export class RemoteServer {
     terminalHandler;
     claudeHandler;
     syncHandler;
+    workspaceHandler;
     constructor(options) {
         this.config = options.config;
         this.mainWindow = options.mainWindow;
@@ -29,6 +31,7 @@ export class RemoteServer {
         this.terminalHandler = new RemoteTerminalHandler(this.mainWindow, this.sessionManager);
         this.claudeHandler = new RemoteClaudeHandler(this.mainWindow, this.sessionManager);
         this.syncHandler = new RemoteSyncHandler(this.mainWindow, this.sessionManager);
+        this.workspaceHandler = new RemoteWorkspaceHandler(this.mainWindow, this.sessionManager);
     }
     async start() {
         if (!this.config.enableRemoteAccess) {
@@ -45,7 +48,9 @@ export class RemoteServer {
                 methods: ["GET", "POST"],
                 credentials: true
             },
-            transports: ['websocket', 'polling']
+            transports: ['polling', 'websocket'], // Start with polling for mobile
+            pingTimeout: 60000,
+            pingInterval: 25000
         });
         // Set up connection handlers
         this.setupHandlers();
@@ -92,6 +97,7 @@ export class RemoteServer {
             this.terminalHandler.registerHandlers(socket);
             this.claudeHandler.registerHandlers(socket);
             this.syncHandler.registerHandlers(socket);
+            this.workspaceHandler.registerHandlers(socket);
             // Send initial connection success
             socket.emit('connection:ready', {
                 sessionId: socket.sessionId,

@@ -17,12 +17,16 @@ export const useFileWatcher = () => {
   };
   
   onMounted(() => {
-    // Listen for file changes
-    window.electronAPI.fs.onFileChanged(handleFileChange);
+    // Listen for file changes only if Electron API is available
+    if (window.electronAPI?.fs?.onFileChanged) {
+      window.electronAPI.fs.onFileChanged(handleFileChange);
+    }
   });
   
   onUnmounted(() => {
-    // Clean up listener
-    window.electronAPI.fs.removeFileChangeListener();
+    // Clean up listener only if Electron API is available
+    if (window.electronAPI?.fs?.removeFileChangeListener) {
+      window.electronAPI.fs.removeFileChangeListener();
+    }
   });
 };

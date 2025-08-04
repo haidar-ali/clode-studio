@@ -70,6 +70,13 @@ export class ServiceFactory {
           authToken: import.meta.env.VITE_REMOTE_AUTH_TOKEN,
           autoConnect: true
         };
+        
+        // For mobile, let the mobile connection establish first, then connect services
+        if (typeof window !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+          console.log('[ServiceFactory] Mobile device - will connect after mobile socket is ready');
+          remoteConfig.autoConnect = true; // Keep auto-connect enabled
+        }
+        
         provider = new RemoteServiceProvider(remoteConfig);
         break;
         

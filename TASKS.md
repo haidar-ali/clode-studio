@@ -1,9 +1,9 @@
 # Project Tasks
 
 *This file is synced with Clode Studio and Claude's native TodoWrite system.*  
-*Last updated: 2025-08-02*
+*Last updated: 2025-08-03*
 
-## Backlog (32)
+## Backlog (31)
 
 - [ ] **Replace remaining alert/confirm dialogs throughout the app**
   - Type: refactor
@@ -317,18 +317,11 @@
   - Description: Visualize cache effectiveness and connection health metrics
   - Resources: File: components/Layout/PerformanceDashboard.vue (new), Task: REMOTE-022
 
-- [ ] **Create Remote Web Client**
-  - ID: REMOTE-027
-  - Assignee: Claude
-  - Type: feature
-  - Priority: high
-  - Description: Build responsive web client for mobile/browser access with seamless cross-platform experience
-  - Resources: File: app-remote.vue (new), File: layouts/remote.vue (new), File: composables/useRemoteMode.ts (new)
 
 ## In Progress (0)
 
 
-## Completed (91)
+## Completed (92)
 
 - [x] ~~Create service abstraction interfaces~~
   - ~~ID: REMOTE-001~~
@@ -473,6 +466,13 @@
   - ~~Priority: high~~
   - ~~Description: QR code and pairing code for easy mobile device connection~~
   - ~~Resources: File: components/Layout/QuickConnectSection.vue (created), File: services/device-auth.ts (created), Task: REMOTE-016~~
+- [x] ~~Create Remote Web Client~~
+  - ~~ID: REMOTE-027~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Build responsive web client for mobile/browser access with seamless cross-platform experience~~
+  - ~~Resources: File: components/Remote/RemoteApp.vue (created), File: components/Remote/*.vue (created), File: composables/useRemoteConnection.ts (created), File: composables/useResponsive.ts (created)~~
 
 - [x] ~~Create activity bar component with icon navigation~~
   - ~~ID: LAYOUT-001~~

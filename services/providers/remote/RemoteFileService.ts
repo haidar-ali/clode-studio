@@ -11,6 +11,11 @@ export class RemoteFileService implements IFileService {
   
   private async request<T, R>(event: string, payload: T): Promise<R> {
     const socket = this.getSocket();
+    console.log('[RemoteFileService] Socket check:', {
+      hasSocket: !!socket,
+      connected: socket?.connected,
+      id: socket?.id
+    });
     if (!socket?.connected) {
       throw new Error('Not connected to remote server');
     }

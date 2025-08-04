@@ -109,15 +109,18 @@ async function generateConnectionInfo() {
   
   isGenerating.value = true;
   try {
-    // Get server URL from app status
-    const serverUrl = appStatus.serverUrl.value || `http://localhost:3001`;
+    // Get server URL from app status (Socket.IO server)
+    const socketUrl = appStatus.serverUrl.value || `http://localhost:3789`;
+    
+    // Convert to web UI URL (change port from 3789 to 3000)
+    const webUrl = socketUrl.replace(':3789', ':3000');
     
     // Generate device auth token
     const deviceAuth = await DeviceAuthService.generateDeviceToken();
     
-    // Generate connection info
+    // Generate connection info with web UI URL
     const connectionInfo = await DeviceAuthService.generateConnectionInfo(
-      serverUrl,
+      webUrl,
       deviceAuth
     );
     
