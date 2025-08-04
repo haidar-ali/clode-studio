@@ -192,6 +192,7 @@ export enum RemoteEvent {
   CLAUDE_OUTPUT = 'claude:output',
   CLAUDE_ERROR = 'claude:error',
   CLAUDE_EXIT = 'claude:exit',
+  CLAUDE_INSTANCES_UPDATED = 'claude:instances:updated',
   
   // File events
   FILE_CHANGED = 'file:changed',

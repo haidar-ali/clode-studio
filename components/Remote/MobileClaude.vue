@@ -58,7 +58,7 @@ const claudeStore = useClaudeInstancesStore();
 const workspaceStore = useWorkspaceStore();
 
 const activeInstanceId = ref<string>('');
-const instances = computed(() => claudeStore.instances);
+const instances = computed(() => claudeStore.instancesList);
 const activeInstance = computed(() => 
   instances.value.find(i => i.id === activeInstanceId.value)
 );
@@ -84,7 +84,10 @@ async function updatePersonality(personality: string) {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
+  // Initialize the store first
+  await claudeStore.init();
+  
   // Set first instance as active if exists
   if (instances.value.length > 0) {
     activeInstanceId.value = instances.value[0].id;

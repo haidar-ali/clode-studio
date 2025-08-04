@@ -229,6 +229,27 @@ export class RemoteServer {
     }
   }
   
+  forwardClaudeOutput(socketId: string, instanceId: string, data: string): void {
+    if (!this.io) return;
+    
+    // Get the specific socket
+    const socket = this.io.sockets.sockets.get(socketId);
+    if (socket && socket.connected) {
+      // Forward the Claude output to this specific socket
+      socket.emit(RemoteEvent.CLAUDE_OUTPUT, {
+        instanceId,
+        data
+      });
+    }
+  }
+  
+  broadcastClaudeInstancesUpdate(): void {
+    if (!this.io) return;
+    
+    // Broadcast to all connected clients that Claude instances have been updated
+    this.io.emit(RemoteEvent.CLAUDE_INSTANCES_UPDATED);
+  }
+  
   forwardDesktopTerminalData(ptyId: string, data: string): void {
     if (!this.io) return;
     

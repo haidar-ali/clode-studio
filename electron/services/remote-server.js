@@ -170,6 +170,19 @@ export class RemoteServer {
             });
         }
     }
+    forwardClaudeOutput(socketId, instanceId, data) {
+        if (!this.io)
+            return;
+        // Get the specific socket
+        const socket = this.io.sockets.sockets.get(socketId);
+        if (socket && socket.connected) {
+            // Forward the Claude output to this specific socket
+            socket.emit(RemoteEvent.CLAUDE_OUTPUT, {
+                instanceId,
+                data
+            });
+        }
+    }
     forwardDesktopTerminalData(ptyId, data) {
         if (!this.io)
             return;

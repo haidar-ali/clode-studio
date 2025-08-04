@@ -120,6 +120,12 @@ app.whenReady().then(async () => {
                     remoteServer.forwardTerminalData(data.socketId, data.terminalId, data.data);
                 }
             });
+            // Set up IPC handler for Claude output forwarding
+            ipcMain.on('forward-claude-output', (event, data) => {
+                if (remoteServer && data.socketId && data.instanceId) {
+                    remoteServer.forwardClaudeOutput(data.socketId, data.instanceId, data.data);
+                }
+            });
         }
         catch (error) {
             console.error('Failed to start remote server:', error);

@@ -156,9 +156,8 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
         }
       }
 
-      // Create default instance if none exist
-      if (this.instances.size === 0) {
-      
+      // Create default instance if none exist (only on desktop)
+      if (this.instances.size === 0 && typeof window !== 'undefined' && window.electronAPI?.claude) {
         await this.createInstance('Claude 1');
       }
     },
@@ -358,6 +357,11 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
           color: inst.color
         }));
         await window.electronAPI.store.set('claudeInstances', serializableInstances);
+        
+        // Notify remote clients about instance updates
+        if (window.electronAPI?.send) {
+          window.electronAPI.send('claude-instances-updated', {});
+        }
       } catch (error) {
         console.error('Failed to save instances:', error);
       }
@@ -556,3 +560,27 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
     }
   }
 });
+
+// Export global functions for accessing Claude instances from Electron
+if (typeof window !== 'undefined') {
+  (window as any).__getClaudeInstances = () => {
+    const store = useClaudeInstancesStore();
+    // Return only serializable properties
+    return Array.from(store.instances.values()).map(instance => ({
+      id: instance.id,
+      name: instance.name,
+      status: instance.status,
+      personalityId: instance.personalityId,
+      workingDirectory: instance.workingDirectory,
+      createdAt: instance.createdAt,
+      lastActiveAt: instance.lastActiveAt,
+      color: instance.color,
+      pid: instance.pid,
+      sessionId: instance.sessionId
+    }));
+  };
+  
+  (window as any).__getClaudeStore = () => {
+    return useClaudeInstancesStore();
+  };
+}

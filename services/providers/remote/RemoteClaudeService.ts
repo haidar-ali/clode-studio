@@ -25,6 +25,7 @@ export class RemoteClaudeService implements IClaudeService {
         if (response.success) {
           resolve(response.data!);
         } else {
+          console.error(`[RemoteClaudeService] Request failed for ${event}:`, response.error);
           reject(new Error(response.error?.message || 'Request failed'));
         }
       });
@@ -35,9 +36,13 @@ export class RemoteClaudeService implements IClaudeService {
     const result = await this.request<any, any>('claude:spawn', {
       instanceId,
       workingDirectory,
-      instanceName: name
+      instanceName: name,
+      config: {
+        // Add any config needed for spawn
+      }
     });
-    return { pid: result.pid };
+    // The result has a 'success' field and 'pid' is nested
+    return { pid: result.success ? (result.pid || -1) : -1 };
   }
   
   async stop(instanceId: string): Promise<void> {
@@ -83,5 +88,41 @@ export class RemoteClaudeService implements IClaudeService {
     
     socket.on('claude:exit', handler);
     return () => socket.off('claude:exit', handler);
+  }
+  
+  onOutput(instanceId: string, callback: (data: string) => void): () => void {
+    return this.onData(instanceId, callback);
+  }
+  
+  onError(instanceId: string, callback: (error: string) => void): () => void {
+    const socket = this.getSocket();
+    if (!socket) return () => {};
+    
+    const handler = (event: any) => {
+      if (event.instanceId === instanceId) {
+        callback(event.error);
+      }
+    };
+    
+    socket.on('claude:error', handler);
+    return () => socket.off('claude:error', handler);
+  }
+  
+  async listDesktopInstances(): Promise<any[]> {
+    return this.request<void, any[]>('claude:listDesktop', undefined);
+  }
+  
+  async getActiveInstances(): Promise<any[]> {
+    return this.request<void, any[]>('claude:getInstances', undefined);
+  }
+  
+  async isInstanceActive(instanceId: string): Promise<boolean> {
+    try {
+      const instances = await this.getActiveInstances();
+      return instances.some(inst => inst.instanceId === instanceId);
+    } catch (error) {
+      console.error('[RemoteClaudeService] Failed to check instance status:', error);
+      return false;
+    }
   }
 }
