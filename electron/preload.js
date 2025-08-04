@@ -4,7 +4,7 @@ const electron_1 = require("electron");
 const electronAPI = {
     // General IPC send for specific allowed channels
     send: (channel, data) => {
-        const allowedChannels = ['forward-terminal-data', 'forward-claude-output'];
+        const allowedChannels = ['forward-terminal-data', 'forward-claude-output', 'claude-instances-updated'];
         if (allowedChannels.includes(channel)) {
             electron_1.ipcRenderer.send(channel, data);
         }
@@ -46,6 +46,9 @@ const electronAPI = {
         },
         onTodosUpdated: (callback) => {
             electron_1.ipcRenderer.on('claude:todos:updated', (_, todos) => callback(todos));
+        },
+        onInstancesUpdated: (callback) => {
+            electron_1.ipcRenderer.on('claude:instances:updated', () => callback());
         },
         // Hook management
         getHooks: () => electron_1.ipcRenderer.invoke('claude:getHooks'),

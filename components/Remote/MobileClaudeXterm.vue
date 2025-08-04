@@ -159,7 +159,13 @@ onMounted(async () => {
   if (socket) {
     socket.on('claude:instances:updated', async () => {
       console.log('[MobileClaude] Received instances update notification');
-      await loadClaudeInstances();
+      // Small delay to ensure desktop has saved the changes
+      setTimeout(async () => {
+        // Reload instances from storage to get desktop updates
+        await claudeStore.reloadInstances();
+        // Then load any desktop-specific information
+        await loadClaudeInstances();
+      }, 100);
     });
   }
 });
@@ -178,7 +184,7 @@ async function loadClaudeInstances() {
       if (!info.isDesktop) continue; // Skip remote instances
       
       // Find or create instance in store
-      let instance = instances.value.find(i => i.id === info.instanceId);
+      let instance = claudeStore.instances.get(info.instanceId);
       if (!instance) {
         // Create instance in store if not exists
         instance = {
@@ -193,10 +199,60 @@ async function loadClaudeInstances() {
           pid: info.pid
         };
         claudeStore.instances.set(instance.id, instance);
+      } else {
+        // Update existing instance status
+        instance.status = info.status || 'disconnected';
+        instance.pid = info.pid;
+        // Force reactivity update by replacing the instance in the store
+        claudeStore.instances.set(instance.id, { ...instance });
       }
       
-      // Initialize session for instance
-      await initializeClaudeSession(instance);
+      // Initialize session for instance only if it doesn't exist
+      if (!claudeSessions.value.has(instance.id)) {
+        await initializeClaudeSession(instance);
+      } else if (instance.status === 'connected') {
+        // Session exists but instance just became connected - set up forwarding
+        const session = claudeSessions.value.get(instance.id);
+        if (session && services.value) {
+          console.log('[MobileClaude] Setting up forwarding for newly connected instance:', instance.id);
+          try {
+            // Re-establish output handlers since they might have been lost
+            if (session.outputHandler) {
+              session.outputHandler(); // Remove old handler
+            }
+            session.outputHandler = services.value.claude.onOutput(instance.id, (data: string) => {
+              console.log(`[MobileClaude] Output for ${instance.id}, length: ${data.length}`);
+              session.terminal.write(data);
+            });
+            
+            const result = await services.value.claude.spawn(
+              instance.id,
+              instance.workingDirectory,
+              instance.name
+            );
+            console.log('[MobileClaude] Forwarding setup result:', result);
+            
+            // Optionally load buffer if needed
+            const buffer = await services.value.claude.getClaudeBuffer(instance.id);
+            if (buffer) {
+              // Add delay to ensure terminal is ready
+              setTimeout(() => {
+                try {
+                  session.terminal.clear();
+                  // Write the buffer directly - SerializeAddon only has serialize, not deserialize
+                  session.terminal.write(buffer);
+                  console.log('[MobileClaude] Successfully restored Claude terminal buffer');
+                } catch (e) {
+                  console.error('[MobileClaude] Failed to restore Claude buffer:', e);
+                  session.terminal.write(buffer);
+                }
+              }, 100);
+            }
+          } catch (error) {
+            console.error('[MobileClaude] Failed to setup forwarding for existing session:', error);
+          }
+        }
+      }
     }
     
     // Set first instance as active
@@ -210,9 +266,12 @@ async function loadClaudeInstances() {
 
 // Initialize Claude session with xterm
 async function initializeClaudeSession(instance: any) {
-  if (claudeSessions.value.has(instance.id)) return;
+  if (claudeSessions.value.has(instance.id)) {
+    console.log('[MobileClaude] Session already exists for:', instance.id);
+    return;
+  }
   
-  console.log('[MobileClaude] Initializing session for:', instance.id);
+  console.log('[MobileClaude] Initializing NEW session for:', instance.id, 'name:', instance.name);
   
   // Create xterm instance with Claude theme
   const terminal = new Terminal({
@@ -315,12 +374,26 @@ async function initializeClaudeSession(instance: any) {
       // to set up forwarding on the server side
       try {
         console.log('[MobileClaude] Setting up forwarding for connected instance:', instance.id);
+        
+        // Re-establish output handlers for already connected instances
+        // This is needed after page refresh to receive output from desktop
+        if (session.outputHandler) {
+          session.outputHandler(); // Remove old handler
+        }
+        session.outputHandler = services.value!.claude.onOutput(instance.id, (data: string) => {
+          console.log(`[MobileClaude] Output for ${instance.id}, length: ${data.length}`);
+          terminal.write(data);
+        });
+        
         const result = await services.value!.claude.spawn(
           instance.id,
           instance.workingDirectory,
           instance.name
         );
         console.log('[MobileClaude] Forwarding setup result:', result);
+        
+        // Store buffer info to load after terminal is attached
+        (session as any).pendingBuffer = services.value!.claude.getClaudeBuffer(instance.id);
       } catch (error) {
         console.error('[MobileClaude] Failed to setup forwarding:', error);
       }
@@ -352,9 +425,38 @@ function attachTerminal(instanceId: string) {
   session.terminal.open(container);
   
   // Fit terminal
-  nextTick(() => {
+  nextTick(async () => {
     try {
       session.fitAddon.fit();
+      
+      // Load any pending buffer after terminal is attached
+      if ((session as any).pendingBuffer) {
+        try {
+          const buffer = await (session as any).pendingBuffer;
+          if (buffer) {
+            // Add a small delay to ensure terminal is fully initialized
+            setTimeout(() => {
+              try {
+                // Clear and restore the terminal
+                session.terminal.clear();
+                
+                // The SerializeAddon doesn't have deserialize, we need to write the buffer directly
+                // The buffer from the desktop is already serialized terminal content
+                session.terminal.write(buffer);
+                console.log('[MobileClaude] Successfully restored Claude terminal buffer after attach');
+              } catch (e) {
+                console.error('[MobileClaude] Failed to restore buffer:', e);
+                // Fallback to writing as text
+                session.terminal.write(buffer);
+              }
+            }, 100);
+          }
+          delete (session as any).pendingBuffer;
+        } catch (e) {
+          console.error('[MobileClaude] Failed to load pending buffer:', e);
+          delete (session as any).pendingBuffer;
+        }
+      }
     } catch (e) {
       console.error('[MobileClaude] Failed to fit terminal:', e);
     }

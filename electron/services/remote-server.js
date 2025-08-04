@@ -183,6 +183,12 @@ export class RemoteServer {
             });
         }
     }
+    broadcastClaudeInstancesUpdate() {
+        if (!this.io)
+            return;
+        // Broadcast to all connected clients that Claude instances have been updated
+        this.io.emit(RemoteEvent.CLAUDE_INSTANCES_UPDATED);
+    }
     forwardDesktopTerminalData(ptyId, data) {
         if (!this.io)
             return;

@@ -12,6 +12,7 @@ export var RemoteEvent;
     RemoteEvent["CLAUDE_OUTPUT"] = "claude:output";
     RemoteEvent["CLAUDE_ERROR"] = "claude:error";
     RemoteEvent["CLAUDE_EXIT"] = "claude:exit";
+    RemoteEvent["CLAUDE_INSTANCES_UPDATED"] = "claude:instances:updated";
     // File events
     RemoteEvent["FILE_CHANGED"] = "file:changed";
     RemoteEvent["FILE_DELETED"] = "file:deleted";

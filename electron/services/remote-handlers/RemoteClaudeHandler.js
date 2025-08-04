@@ -42,6 +42,10 @@ export class RemoteClaudeHandler {
         socket.on('claude:listDesktop', async (request, callback) => {
             await this.handleListDesktopInstances(socket, request, callback);
         });
+        // Get Claude instance buffer
+        socket.on('claude:getBuffer', async (request, callback) => {
+            await this.handleGetClaudeBuffer(socket, request, callback);
+        });
     }
     /**
      * Clean up instances for a disconnected socket
@@ -175,7 +179,7 @@ export class RemoteClaudeHandler {
                     if (!isConnected) {
                         console.log(`[RemoteClaudeHandler] Desktop Claude instance ${request.payload.instanceId} is not connected, starting it`);
                         // Start the desktop Claude instance
-                        await this.mainWindow.webContents.executeJavaScript(`
+                        const startResult = await this.mainWindow.webContents.executeJavaScript(`
               (async () => {
                 if (window.electronAPI?.claude?.start) {
                   const instanceId = '${request.payload.instanceId}';
@@ -188,11 +192,26 @@ export class RemoteClaudeHandler {
                     instanceName
                   );
                   
+                  // Update the Claude instance status in the store
+                  if (result.success && window.__getClaudeStore) {
+                    const store = window.__getClaudeStore();
+                    const instance = store.instances.get(instanceId);
+                    if (instance) {
+                      instance.status = 'connected';
+                      instance.pid = result.pid;
+                      // Trigger save which will broadcast update
+                      store.saveInstances();
+                    }
+                  }
+                  
                   return result;
                 }
                 return { success: false, error: 'Claude API not available' };
               })()
             `);
+                        if (!startResult.success) {
+                            console.error('[RemoteClaudeHandler] Failed to start desktop Claude:', startResult.error);
+                        }
                     }
                 }
                 catch (error) {
@@ -206,6 +225,70 @@ export class RemoteClaudeHandler {
                         pid: -1 // Desktop PID not directly accessible
                     }
                 });
+            }
+            // Check if this is a desktop instance that needs to be started
+            const instanceExists = await this.mainWindow.webContents.executeJavaScript(`
+        (() => {
+          if (window.__getClaudeStore) {
+            const store = window.__getClaudeStore();
+            const instance = store.instances.get('${request.payload.instanceId}');
+            return instance ? { exists: true, status: instance.status } : { exists: false };
+          }
+          return { exists: false };
+        })()
+      `);
+            if (instanceExists.exists && instanceExists.status === 'disconnected') {
+                // This is a desktop instance that needs to be started
+                console.log(`[RemoteClaudeHandler] Starting disconnected desktop instance ${request.payload.instanceId}`);
+                const startResult = await this.mainWindow.webContents.executeJavaScript(`
+          (async () => {
+            if (window.electronAPI?.claude?.start) {
+              const instanceId = '${request.payload.instanceId}';
+              const workingDir = '${request.payload.workingDirectory}';
+              const instanceName = '${request.payload.instanceName || ''}';
+              
+              const result = await window.electronAPI.claude.start(
+                instanceId,
+                workingDir,
+                instanceName
+              );
+              
+              // Update the Claude instance status in the store
+              if (result.success && window.__getClaudeStore) {
+                const store = window.__getClaudeStore();
+                const instance = store.instances.get(instanceId);
+                if (instance) {
+                  instance.status = 'connected';
+                  instance.pid = result.pid;
+                  // Trigger save which will broadcast update
+                  store.saveInstances();
+                }
+              }
+              
+              return result;
+            }
+            return { success: false, error: 'Claude API not available' };
+          })()
+        `);
+                if (startResult.success) {
+                    // Set up forwarding
+                    this.setupDesktopClaudeForwarding(socket, request.payload.instanceId);
+                    return callback({
+                        id: request.id,
+                        success: true,
+                        data: {
+                            success: true,
+                            pid: startResult.pid
+                        }
+                    });
+                }
+                else {
+                    return callback({
+                        id: request.id,
+                        success: false,
+                        error: { code: 'START_ERROR', message: startResult.error || 'Failed to start Claude' }
+                    });
+                }
             }
             // Check if instance already exists (skip for desktop instances)
             const isDesktop = this.desktopClaudeForwarding?.get(socket.id)?.has(request.payload.instanceId) || false;
@@ -719,6 +802,42 @@ export class RemoteClaudeHandler {
             });
         }
     }
+    async handleGetClaudeBuffer(socket, request, callback) {
+        try {
+            const session = this.sessionManager.getSessionBySocket(socket.id);
+            if (!session) {
+                return callback({
+                    id: request.id,
+                    success: false,
+                    error: { code: 'NO_SESSION', message: 'No active session' }
+                });
+            }
+            // Get buffer from desktop Claude instance
+            const buffer = await this.mainWindow.webContents.executeJavaScript(`
+        (() => {
+          if (typeof window.__getClaudeTerminalBuffer === 'function') {
+            return window.__getClaudeTerminalBuffer('${request.payload.instanceId}');
+          }
+          return null;
+        })()
+      `);
+            callback({
+                id: request.id,
+                success: true,
+                data: { buffer }
+            });
+        }
+        catch (error) {
+            callback({
+                id: request.id,
+                success: false,
+                error: {
+                    code: 'GET_BUFFER_ERROR',
+                    message: error.message
+                }
+            });
+        }
+    }
     /**
      * Get instance statistics
      */
@@ -767,8 +886,16 @@ export class RemoteClaudeHandler {
           
           // Check if already forwarding
           if (window.__remoteClaudeForwarding.has(instanceId)) {
-            console.log('[RemoteClaudeForwarding] Already forwarding:', instanceId);
-            return true;
+            const existingSocketId = window.__remoteClaudeForwarding.get(instanceId);
+            if (existingSocketId === socketId) {
+              console.log('[RemoteClaudeForwarding] Already forwarding to same socket:', instanceId);
+              return true;
+            } else {
+              console.log('[RemoteClaudeForwarding] Updating forwarding to new socket:', instanceId, 'from', existingSocketId, 'to', socketId);
+              // Update to new socket ID
+              window.__remoteClaudeForwarding.set(instanceId, socketId);
+              return true;
+            }
           }
           
           // Mark instance as being forwarded
@@ -777,12 +904,16 @@ export class RemoteClaudeHandler {
           // Set up Claude output listener with instance ID
           if (window.electronAPI?.claude?.onOutput) {
             const outputHandler = (data) => {
-              // Send to main process for forwarding
-              window.electronAPI.send('forward-claude-output', {
-                instanceId,
-                socketId,
-                data
-              });
+              // Get current socket ID from the map to handle socket changes after refresh
+              const currentSocketId = window.__remoteClaudeForwarding.get(instanceId);
+              if (currentSocketId) {
+                // Send to main process for forwarding
+                window.electronAPI.send('forward-claude-output', {
+                  instanceId,
+                  socketId: currentSocketId,
+                  data
+                });
+              }
             };
             
             // Store handler reference for cleanup

@@ -66,6 +66,9 @@ const electronAPI = {
     onTodosUpdated: (callback: (todos: any[]) => void) => {
       ipcRenderer.on('claude:todos:updated', (_, todos) => callback(todos));
     },
+    onInstancesUpdated: (callback: () => void) => {
+      ipcRenderer.on('claude:instances:updated', () => callback());
+    },
     // Hook management
     getHooks: () => ipcRenderer.invoke('claude:getHooks'),
     addHook: (hook: {

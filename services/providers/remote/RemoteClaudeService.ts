@@ -125,4 +125,14 @@ export class RemoteClaudeService implements IClaudeService {
       return false;
     }
   }
+  
+  async getClaudeBuffer(instanceId: string): Promise<string | null> {
+    try {
+      const result = await this.request<{ instanceId: string }, { buffer?: string }>('claude:getBuffer', { instanceId });
+      return result.buffer || null;
+    } catch (error) {
+      console.error('[RemoteClaudeService] Failed to get Claude buffer:', error);
+      return null;
+    }
+  }
 }

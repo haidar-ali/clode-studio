@@ -60,6 +60,7 @@
 import { ref, onMounted, onUnmounted, computed, watch, provide, nextTick, watchEffect } from 'vue';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
+import { SerializeAddon } from '@xterm/addon-serialize';
 import type { ClaudeInstance } from '~/stores/claude-instances';
 import { useClaudeInstancesStore } from '~/stores/claude-instances';
 import { useContextManager } from '~/composables/useContextManager';
@@ -91,12 +92,9 @@ const selectedRunConfig = ref<ClaudeRunConfig | null>(null);
 provide('workingDirectory', props.instance.workingDirectory);
 
 // Terminal state
-
-
-
-
 let terminal: Terminal | null = null;
 let fitAddon: FitAddon | null = null;
+let serializeAddon: SerializeAddon | null = null;
 let isAtBottom = true;
 let lastDataTime = 0;
 let pendingPromptScroll = false;
@@ -185,9 +183,19 @@ const initTerminal = () => {
 
   fitAddon = new FitAddon();
   terminal.loadAddon(fitAddon);
+  
+  serializeAddon = new SerializeAddon();
+  terminal.loadAddon(serializeAddon);
 
   terminal.open(terminalElement.value);
   fitAddon.fit();
+  
+  // Expose terminal and serialize addon for remote access
+  if (terminalElement.value) {
+    (terminalElement.value as any).__terminal = terminal;
+    (terminalElement.value as any).__serializeAddon = serializeAddon;
+    (terminalElement.value as any).__instanceId = props.instance.id;
+  }
 
   terminal.attachCustomKeyEventHandler((event: KeyboardEvent) => {
 

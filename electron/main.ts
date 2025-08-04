@@ -164,6 +164,8 @@ app.whenReady().then(async () => {
         if (remoteServer) {
           remoteServer.broadcastClaudeInstancesUpdate();
         }
+        // Also notify the desktop UI
+        mainWindow?.webContents.send('claude:instances:updated');
       });
     } catch (error) {
       console.error('Failed to start remote server:', error);
@@ -269,7 +271,19 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
       } catch (error) {
         console.error('Failed to clean up MCP server configuration:', error);
       }
+      
+      // Notify all clients about instance update
+      mainWindow?.webContents.send('claude:instances:updated');
+      if (remoteServer) {
+        remoteServer.broadcastClaudeInstancesUpdate();
+      }
     });
+
+    // Notify all clients about instance update
+    mainWindow?.webContents.send('claude:instances:updated');
+    if (remoteServer) {
+      remoteServer.broadcastClaudeInstancesUpdate();
+    }
 
     return {
       success: true,
@@ -308,6 +322,13 @@ ipcMain.handle('claude:stop', async (event, instanceId: string) => {
   if (claudePty) {
     claudePty.kill();
     claudeInstances.delete(instanceId);
+    
+    // Notify all clients about instance update
+    mainWindow?.webContents.send('claude:instances:updated');
+    if (remoteServer) {
+      remoteServer.broadcastClaudeInstancesUpdate();
+    }
+    
     return { success: true };
   }
   return { success: false, error: `No Claude PTY running for instance ${instanceId}` };
