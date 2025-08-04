@@ -125,7 +125,7 @@ const { services, initialize } = useServices();
 // Terminal state
 const terminals = ref<any[]>([]);
 const activeTerminalId = ref<string | null>(null);
-const terminalSessions = reactive(new Map<string, TerminalSession>());
+const terminalSessions = ref(new Map<string, TerminalSession>());
 const terminalInputs = reactive<Record<string, string>>({});
 
 // Refs for DOM elements
@@ -158,6 +158,27 @@ watch(isTerminalAvailable, async (available) => {
   }
 });
 
+// Watch for workspace changes
+let lastWorkspace = (window as any).__remoteWorkspace?.path;
+const workspaceCheckInterval = setInterval(async () => {
+  const currentWorkspace = (window as any).__remoteWorkspace?.path;
+  if (currentWorkspace && currentWorkspace !== lastWorkspace) {
+    console.log('[MobileTerminal] Workspace changed from', lastWorkspace, 'to', currentWorkspace);
+    lastWorkspace = currentWorkspace;
+    
+    // Clear existing sessions
+    for (const session of terminalSessions.value.values()) {
+      if (session.dataHandler) {
+        session.dataHandler();
+      }
+    }
+    terminalSessions.value.clear();
+    
+    // Reload terminals for new workspace
+    await loadTerminals();
+  }
+}, 1000);
+
 // Load existing terminals from the service
 async function loadTerminals() {
   if (!services.value || isInitializing.value) return;
@@ -166,32 +187,35 @@ async function loadTerminals() {
     isInitializing.value = true;
     console.log('[MobileTerminal] Loading terminals...');
     
-    // Try to get all active terminals
-    try {
-      const activeTerminals = await services.value.terminal.listActiveTerminals();
-      console.log('[MobileTerminal] Active terminals:', activeTerminals);
-      
-      if (activeTerminals && activeTerminals.length > 0) {
-        terminals.value = activeTerminals;
-        
-        // Initialize sessions for each terminal
-        for (const terminal of activeTerminals) {
-          await initializeTerminalSession(terminal);
-        }
-        
-        // Set the first terminal as active if none is set
-        if (!activeTerminalId.value) {
-          setActiveTerminal(activeTerminals[0].id);
-        }
-        return;
-      }
-    } catch (listError) {
-      console.log('[MobileTerminal] List terminals not supported or failed:', listError.message);
-    }
+    // Get all active terminals from desktop
+    const activeTerminals = await services.value.terminal.listActiveTerminals();
+    console.log('[MobileTerminal] Active terminals:', activeTerminals);
     
-    // If no terminals or list failed, start fresh
-    console.log('[MobileTerminal] No terminals found or list not supported, starting fresh');
-    terminals.value = [];
+    if (activeTerminals && activeTerminals.length > 0) {
+      // Filter terminals for current workspace
+      const workspace = (window as any).__remoteWorkspace?.path || '/';
+      const workspaceTerminals = activeTerminals.filter(t => 
+        t.workingDirectory === workspace || 
+        // Also include terminals without explicit workspace (legacy)
+        (!t.workingDirectory && activeTerminals.length === 1)
+      );
+      
+      console.log('[MobileTerminal] Workspace terminals:', workspaceTerminals);
+      terminals.value = workspaceTerminals;
+      
+      // Initialize sessions for each terminal
+      for (const terminal of workspaceTerminals) {
+        await initializeTerminalSession(terminal);
+      }
+      
+      // Set the first terminal as active if none is set
+      if (!activeTerminalId.value && workspaceTerminals.length > 0) {
+        setActiveTerminal(workspaceTerminals[0].id);
+      }
+    } else {
+      // No terminals exist on desktop
+      terminals.value = [];
+    }
     
   } catch (error) {
     console.error('[MobileTerminal] Failed to load terminals:', error);
@@ -203,7 +227,7 @@ async function loadTerminals() {
 
 // Initialize a terminal session
 async function initializeTerminalSession(terminal: any) {
-  if (terminalSessions.has(terminal.id)) return;
+  if (terminalSessions.value.has(terminal.id)) return;
   
   console.log('[MobileTerminal] Initializing session for terminal:', terminal.id);
   
@@ -223,18 +247,45 @@ async function initializeTerminalSession(terminal: any) {
     // Skip saveTerminalState since it's not implemented on desktop yet
     console.log('[MobileTerminal] Skipping terminal state sync (not implemented)');
     
-    // Set up data handler
+    // First set up data handler before storing session
     session.dataHandler = services.value!.terminal.onTerminalData(terminal.id, (data: string) => {
+      console.log(`[MobileTerminal] Received data for terminal ${terminal.id}:`, data);
       if (data) {
-        session.output.push({
-          type: 'output',
-          content: data
-        });
+        // Handle carriage returns by processing line overwrites
+        const lines = data.split('\n');
+        for (const line of lines) {
+          if (line.includes('\r')) {
+            // Handle carriage return - overwrite the last line
+            const parts = line.split('\r');
+            const lastPart = parts[parts.length - 1];
+            if (session.output.length > 0 && session.output[session.output.length - 1].type === 'output') {
+              // Overwrite the last output line
+              session.output[session.output.length - 1].content = lastPart;
+            } else {
+              session.output.push({
+                type: 'output',
+                content: lastPart
+              });
+            }
+          } else if (line) {
+            session.output.push({
+              type: 'output',
+              content: line
+            });
+          }
+        }
+        // Force reactivity update
+        terminalSessions.value = new Map(terminalSessions.value);
         scrollToBottom(terminal.id);
       }
     });
     
-    terminalSessions.set(terminal.id, session);
+    // Store session with handler already attached
+    terminalSessions.value.set(terminal.id, session);
+    terminalSessions.value = new Map(terminalSessions.value);
+    
+    // Small delay to ensure handler is registered before triggering prompt
+    await new Promise(resolve => setTimeout(resolve, 100));
     
     // Send empty string to trigger initial prompt
     await services.value!.terminal.writeToTerminal(terminal.id, '');
@@ -245,7 +296,8 @@ async function initializeTerminalSession(terminal: any) {
       type: 'error',
       content: `Failed to initialize terminal: ${error.message}`
     });
-    terminalSessions.set(terminal.id, session);
+    terminalSessions.value.set(terminal.id, session);
+    terminalSessions.value = new Map(terminalSessions.value);
   }
 }
 
@@ -256,22 +308,24 @@ async function createNewTerminal() {
   try {
     const workspace = (window as any).__remoteWorkspace?.path || '/';
     const terminalNumber = terminals.value.length + 1;
+    const terminalName = `Terminal ${terminalNumber}`;
     
-    // Create terminal through service
+    // Create terminal through service with name
     const terminalId = await services.value.terminal.createTerminal({
       cwd: workspace,
       cols: 80,
-      rows: 24
+      rows: 24,
+      name: terminalName
     });
     
     console.log('[MobileTerminal] Created new terminal:', terminalId);
     
-    // Create terminal info object
+    // Create terminal info object matching desktop format
     const newTerminal = {
       id: terminalId,
-      name: `Terminal ${terminalNumber}`,
-      cwd: workspace,
-      createdAt: new Date()
+      name: terminalName,
+      workingDirectory: workspace,
+      createdAt: new Date().toISOString()
     };
     
     terminals.value.push(newTerminal);
@@ -293,11 +347,12 @@ async function removeTerminal(terminalId: string) {
   
   try {
     // Clean up session
-    const session = terminalSessions.get(terminalId);
+    const session = terminalSessions.value.get(terminalId);
     if (session?.dataHandler) {
       session.dataHandler(); // Call to remove listener
     }
-    terminalSessions.delete(terminalId);
+    terminalSessions.value.delete(terminalId);
+    terminalSessions.value = new Map(terminalSessions.value);
     delete terminalInputs[terminalId];
     
     // Remove from list
@@ -334,13 +389,13 @@ function setActiveTerminal(terminalId: string) {
 
 // Get terminal output
 function getTerminalOutput(terminalId: string): TerminalLine[] {
-  const session = terminalSessions.get(terminalId);
+  const session = terminalSessions.value.get(terminalId);
   return session?.output || [];
 }
 
 // Execute command in a terminal
 async function executeCommand(terminalId: string) {
-  const session = terminalSessions.get(terminalId);
+  const session = terminalSessions.value.get(terminalId);
   const command = terminalInputs[terminalId]?.trim();
   
   if (!session || !command || !services.value) return;
@@ -380,7 +435,7 @@ async function executeCommand(terminalId: string) {
 // Clear current terminal
 function clearCurrentTerminal() {
   if (!activeTerminalId.value) return;
-  const session = terminalSessions.get(activeTerminalId.value);
+  const session = terminalSessions.value.get(activeTerminalId.value);
   if (session) {
     session.output = [];
   }
@@ -388,7 +443,7 @@ function clearCurrentTerminal() {
 
 // Navigate command history
 function navigateHistory(terminalId: string, direction: number) {
-  const session = terminalSessions.get(terminalId);
+  const session = terminalSessions.value.get(terminalId);
   if (!session || session.history.length === 0) return;
   
   if (session.historyIndex === -1 && direction === -1) {
@@ -415,10 +470,14 @@ function scrollToBottom(terminalId: string) {
   });
 }
 
-// Format terminal output (convert ANSI codes to HTML if needed)
+// Format terminal output (strip ANSI codes and format for HTML)
 function formatOutput(text: string): string {
-  // For now, just escape HTML and preserve whitespace
-  return text
+  // Strip ANSI escape codes
+  const ansiRegex = /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
+  const cleanText = text.replace(ansiRegex, '');
+  
+  // Escape HTML and preserve whitespace
+  return cleanText
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
@@ -445,8 +504,11 @@ watch(activeTerminalId, (terminalId) => {
 
 // Clean up on unmount
 onUnmounted(() => {
+  // Clear workspace check interval
+  clearInterval(workspaceCheckInterval);
+  
   // Clean up all data handlers
-  for (const session of terminalSessions.values()) {
+  for (const session of terminalSessions.value.values()) {
     if (session.dataHandler) {
       session.dataHandler();
     }

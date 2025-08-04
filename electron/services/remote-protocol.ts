@@ -63,6 +63,7 @@ export namespace TerminalProtocol {
     rows: number;
     cwd?: string;
     env?: Record<string, string>;
+    name?: string;
   }
   
   export interface CreateResponse {

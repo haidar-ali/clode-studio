@@ -31,6 +31,7 @@ export interface TerminalOptions {
   cols?: number;
   rows?: number;
   userId?: string;
+  name?: string;
 }
 
 export interface TerminalInfo {

@@ -141,6 +141,16 @@ app.whenReady().then(async () => {
     try {
       await remoteServer.start();
       console.log('Remote server started successfully');
+      
+      // Make remote server globally accessible for handlers
+      (global as any).__remoteServer = remoteServer;
+      
+      // Set up IPC handler for terminal data forwarding
+      ipcMain.on('forward-terminal-data', (event, data) => {
+        if (remoteServer && data.socketId && data.terminalId) {
+          remoteServer.forwardTerminalData(data.socketId, data.terminalId, data.data);
+        }
+      });
     } catch (error) {
       console.error('Failed to start remote server:', error);
       dialog.showErrorBox('Remote Server Error', 
@@ -1237,6 +1247,11 @@ ipcMain.handle('terminal:create', async (event, options) => {
 
     ptyProcess.onData((data) => {
       mainWindow?.webContents.send(`terminal:data:${id}`, data);
+      
+      // Also forward to remote clients if in hybrid mode
+      if (remoteServer) {
+        remoteServer.forwardDesktopTerminalData(id, data);
+      }
     });
 
     ptyProcess.onExit(({ exitCode, signal }) => {

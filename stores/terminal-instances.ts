@@ -319,3 +319,19 @@ export const useTerminalInstancesStore = defineStore('terminalInstances', {
     }
   }
 });
+
+// Export a global function for accessing terminal instances from Electron
+if (typeof window !== 'undefined') {
+  (window as any).__getTerminalInstances = () => {
+    const store = useTerminalInstancesStore();
+    // Return only serializable properties
+    return Array.from(store.instances.values()).map(instance => ({
+      id: instance.id,
+      name: instance.name,
+      workingDirectory: instance.workingDirectory,
+      ptyProcessId: instance.ptyProcessId,
+      createdAt: instance.createdAt,
+      lastActiveAt: instance.lastActiveAt
+    }));
+  };
+}

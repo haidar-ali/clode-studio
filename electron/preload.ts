@@ -1,6 +1,13 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 const electronAPI = {
+  // General IPC send for specific allowed channels
+  send: (channel: string, data: any) => {
+    const allowedChannels = ['forward-terminal-data'];
+    if (allowedChannels.includes(channel)) {
+      ipcRenderer.send(channel, data);
+    }
+  },
   claude: {
     start: (instanceId: string, workingDirectory: string, instanceName?: string, runConfig?: { command?: string; args?: string[] }): Promise<{
       success: boolean;

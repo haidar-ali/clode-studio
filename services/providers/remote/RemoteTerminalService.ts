@@ -107,17 +107,37 @@ export class RemoteTerminalService implements ITerminalService {
   onTerminalData(terminalId: string, callback: (data: string) => void): () => void {
     const socket = this.getSocket();
     if (!socket) {
+      console.error('[RemoteTerminalService] No socket available for onTerminalData');
       return () => {};
     }
     
-    // Desktop sends data as TERMINAL_DATA event with { terminalId, data }
-    const eventName = 'TERMINAL_DATA';
+    console.log(`[RemoteTerminalService] Setting up data handler for terminal ${terminalId}`);
+    console.log(`[RemoteTerminalService] Socket connected:`, socket.connected);
+    console.log(`[RemoteTerminalService] Socket ID:`, socket.id);
+    
+    // Desktop sends data as terminal:data event
+    const eventName = 'terminal:data';
     const handler = (event: { terminalId: string; data: Buffer | string }) => {
+      console.log(`[RemoteTerminalService] Received TERMINAL_DATA event for ${event.terminalId}, listening for ${terminalId}`);
       if (event.terminalId === terminalId) {
-        // Convert Buffer to string if needed
-        const dataStr = event.data instanceof Buffer 
-          ? event.data.toString('utf8') 
-          : event.data;
+        // Convert data to string
+        let dataStr: string;
+        if (event.data instanceof Buffer) {
+          dataStr = event.data.toString('utf8');
+        } else if (typeof event.data === 'string') {
+          // Check if it's base64 encoded (from polling transport)
+          try {
+            // Try to decode as base64
+            dataStr = Buffer.from(event.data, 'base64').toString('utf8');
+          } catch (e) {
+            // If not base64, use as is
+            dataStr = event.data;
+          }
+        } else {
+          console.error('[RemoteTerminalService] Unknown data type:', typeof event.data);
+          return;
+        }
+        console.log(`[RemoteTerminalService] Forwarding data to callback, length: ${dataStr.length}`);
         callback(dataStr);
       }
     };
@@ -130,6 +150,11 @@ export class RemoteTerminalService implements ITerminalService {
     
     // Listen for data events
     socket.on(eventName, handler);
+    console.log(`[RemoteTerminalService] Registered handler for ${eventName} events on terminal ${terminalId}`);
+    
+    // Check current listeners
+    const listeners = socket.listeners(eventName);
+    console.log(`[RemoteTerminalService] Total ${eventName} listeners: ${listeners.length}`);
     
     // Return cleanup function
     return () => {

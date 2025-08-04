@@ -10,6 +10,7 @@ import { RemoteTerminalHandler } from './remote-handlers/RemoteTerminalHandler.j
 import { RemoteClaudeHandler } from './remote-handlers/RemoteClaudeHandler.js';
 import { RemoteSyncHandler } from './remote-handlers/RemoteSyncHandler.js';
 import { RemoteWorkspaceHandler } from './remote-handlers/RemoteWorkspaceHandler.js';
+import { RemoteEvent } from './remote-protocol.js';
 export class RemoteServer {
     io = null;
     httpServer = null;
@@ -98,6 +99,8 @@ export class RemoteServer {
             this.claudeHandler.registerHandlers(socket);
             this.syncHandler.registerHandlers(socket);
             this.workspaceHandler.registerHandlers(socket);
+            // Set up desktop terminal data forwarding
+            this.setupDesktopTerminalForwarding(socket);
             // Send initial connection success
             socket.emit('connection:ready', {
                 sessionId: socket.sessionId,
@@ -153,5 +156,93 @@ export class RemoteServer {
             ...this.sessionManager.getStats(),
             config: this.config
         };
+    }
+    forwardTerminalData(socketId, terminalId, data) {
+        if (!this.io)
+            return;
+        // Get the specific socket
+        const socket = this.io.sockets.sockets.get(socketId);
+        if (socket && socket.connected) {
+            // Forward the terminal data to this specific socket
+            socket.emit(RemoteEvent.TERMINAL_DATA, {
+                terminalId,
+                data: Buffer.from(data)
+            });
+        }
+    }
+    forwardDesktopTerminalData(ptyId, data) {
+        if (!this.io)
+            return;
+        console.log(`[RemoteServer] Forwarding terminal data from PTY ${ptyId}, data length: ${data.length}`);
+        // Forward to all connected sockets
+        let forwardedCount = 0;
+        this.io.sockets.sockets.forEach((socket) => {
+            // Check if this socket has terminal forwarding set up
+            const ptyToInstanceMap = socket.__ptyToInstanceMap;
+            if (ptyToInstanceMap && ptyToInstanceMap.has(ptyId)) {
+                const instanceId = ptyToInstanceMap.get(ptyId);
+                console.log(`[RemoteServer] Forwarding to socket ${socket.id} for terminal ${instanceId}`);
+                console.log(`[RemoteServer] Emitting event: ${RemoteEvent.TERMINAL_DATA}`);
+                socket.emit(RemoteEvent.TERMINAL_DATA, {
+                    terminalId: instanceId,
+                    data: Buffer.from(data).toString('base64')
+                });
+                forwardedCount++;
+            }
+        });
+        if (forwardedCount === 0) {
+            console.log(`[RemoteServer] No sockets found with mapping for PTY ${ptyId}`);
+        }
+    }
+    updateSocketTerminalMapping(socketId, terminals) {
+        if (!this.io)
+            return;
+        const socket = this.io.sockets.sockets.get(socketId);
+        if (!socket)
+            return;
+        // Create a map of PTY ID to terminal instance ID
+        const ptyToInstanceMap = new Map();
+        terminals.forEach(terminal => {
+            if (terminal.ptyProcessId) {
+                ptyToInstanceMap.set(terminal.ptyProcessId, terminal.id);
+                console.log(`[RemoteServer] Mapping PTY ${terminal.ptyProcessId} to terminal ${terminal.id}`);
+            }
+        });
+        // Store the mapping on the socket
+        socket.__ptyToInstanceMap = ptyToInstanceMap;
+        console.log(`[RemoteServer] Updated terminal mapping for socket ${socketId}: ${ptyToInstanceMap.size} terminals`);
+    }
+    setupDesktopTerminalForwarding(socket) {
+        const socketId = socket.id;
+        // Initial setup - try to get terminals after a short delay
+        const timeoutId = setTimeout(() => {
+            // Check if mainWindow still exists and isn't destroyed
+            if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+                this.mainWindow.webContents.executeJavaScript(`
+          (() => {
+            if (typeof window.__getTerminalInstances === 'function') {
+              return window.__getTerminalInstances();
+            }
+            return null;
+          })()
+        `).then(instances => {
+                    if (instances && Array.isArray(instances) && instances.length > 0) {
+                        this.updateSocketTerminalMapping(socketId, instances);
+                    }
+                }).catch(err => {
+                    console.error('Failed to get initial terminal instances:', err);
+                });
+            }
+        }, 1000); // Wait 1 second for terminal store to be ready
+        // Clean up when socket disconnects
+        socket.on('disconnect', () => {
+            // Clear the timeout if socket disconnects early
+            clearTimeout(timeoutId);
+            // Remove mapping for this socket
+            const sock = this.io?.sockets.sockets.get(socketId);
+            if (sock && sock.__ptyToInstanceMap) {
+                delete sock.__ptyToInstanceMap;
+            }
+        });
     }
 }

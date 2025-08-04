@@ -20,7 +20,9 @@ interface RemoteTerminal {
   pty: pty.IPty;
   sessionId: string;
   socketId: string;
+  workspacePath: string;
   createdAt: Date;
+  name?: string;
 }
 
 export class RemoteTerminalHandler {
@@ -54,6 +56,11 @@ export class RemoteTerminalHandler {
     // Destroy terminal
     socket.on('terminal:destroy', async (request: RemoteRequest<TerminalProtocol.DestroyRequest>, callback) => {
       await this.handleTerminalDestroy(socket, request, callback);
+    });
+    
+    // List terminals for current workspace
+    socket.on('terminal:list', async (request: RemoteRequest, callback) => {
+      await this.handleTerminalList(socket, request, callback);
     });
   }
   
@@ -118,7 +125,9 @@ export class RemoteTerminalHandler {
         pty: termPty,
         sessionId: session.id,
         socketId: socket.id,
-        createdAt: new Date()
+        workspacePath: request.payload.cwd || process.env.HOME || '/',
+        createdAt: new Date(),
+        name: request.payload.name
       };
       this.terminals.set(terminalId, terminal);
       
@@ -130,10 +139,10 @@ export class RemoteTerminalHandler {
       
       // Set up PTY data handler - stream binary data
       termPty.onData((data) => {
-        // Send as binary buffer for efficiency
+        // Send as base64 string for Socket.IO polling compatibility
         socket.emit(RemoteEvent.TERMINAL_DATA, {
           terminalId,
-          data: Buffer.from(data)
+          data: Buffer.from(data).toString('base64')
         });
       });
       
@@ -191,31 +200,80 @@ export class RemoteTerminalHandler {
         });
       }
       
+      // Check if it's a remote terminal first
       const terminal = this.terminals.get(request.payload.terminalId);
-      if (!terminal) {
+      if (terminal) {
+        // Verify ownership
+        if (terminal.sessionId !== session.id) {
+          return callback({
+            id: request.id,
+            success: false,
+            error: { code: 'ACCESS_DENIED', message: 'Terminal belongs to another session' }
+          });
+        }
+        
+        // Write to PTY
+        terminal.pty.write(request.payload.data);
+        
         return callback({
+          id: request.id,
+          success: true
+        });
+      }
+      
+      // Not a remote terminal, try desktop terminal
+      // We need to find the PTY ID for this terminal instance ID
+      try {
+        const ptyInfo = await this.mainWindow.webContents.executeJavaScript(`
+          (() => {
+            if (typeof window.__getTerminalInstances === 'function') {
+              const instances = window.__getTerminalInstances();
+              const instance = instances.find(inst => inst.id === '${request.payload.terminalId}');
+              if (instance && instance.ptyProcessId) {
+                return { ptyId: instance.ptyProcessId };
+              }
+            }
+            return null;
+          })()
+        `);
+        
+        if (!ptyInfo || !ptyInfo.ptyId) {
+          return callback({
+            id: request.id,
+            success: false,
+            error: { code: 'TERMINAL_NOT_FOUND', message: 'Desktop terminal not found or no PTY process' }
+          });
+        }
+        
+        // Now write to the desktop terminal using its PTY ID
+        const result = await this.mainWindow.webContents.executeJavaScript(`
+          (async () => {
+            if (window.electronAPI?.terminal?.write) {
+              return await window.electronAPI.terminal.write('${ptyInfo.ptyId}', ${JSON.stringify(request.payload.data)});
+            }
+            return { success: false, error: 'Terminal API not available' };
+          })()
+        `);
+        
+        if (result && result.success) {
+          callback({
+            id: request.id,
+            success: true
+          });
+        } else {
+          callback({
+            id: request.id,
+            success: false,
+            error: { code: 'WRITE_FAILED', message: result?.error || 'Failed to write to desktop terminal' }
+          });
+        }
+      } catch (e) {
+        callback({
           id: request.id,
           success: false,
           error: { code: 'TERMINAL_NOT_FOUND', message: 'Terminal not found' }
         });
       }
-      
-      // Verify ownership
-      if (terminal.sessionId !== session.id) {
-        return callback({
-          id: request.id,
-          success: false,
-          error: { code: 'ACCESS_DENIED', message: 'Terminal belongs to another session' }
-        });
-      }
-      
-      // Write to PTY
-      terminal.pty.write(request.payload.data);
-      
-      callback({
-        id: request.id,
-        success: true
-      });
     } catch (error) {
       callback({
         id: request.id,
@@ -356,6 +414,86 @@ export class RemoteTerminalHandler {
     }
     
     console.log(`Destroyed terminal ${terminalId}`);
+  }
+  
+  private async handleTerminalList(
+    socket: Socket,
+    request: RemoteRequest,
+    callback: (response: RemoteResponse<any>) => void
+  ): Promise<void> {
+    try {
+      const session = this.sessionManager.getSessionBySocket(socket.id);
+      if (!session) {
+        return callback({
+          id: request.id,
+          success: false,
+          error: { code: 'NO_SESSION', message: 'No active session' }
+        });
+      }
+      
+      // Get desktop terminal instances from the renderer
+      let desktopTerminals: any[] = [];
+      try {
+        // Use the global function exposed by the terminal store
+        const result = await this.mainWindow.webContents.executeJavaScript(`
+          (() => {
+            if (typeof window.__getTerminalInstances === 'function') {
+              return window.__getTerminalInstances();
+            }
+            return [];
+          })()
+        `);
+        
+        if (result && Array.isArray(result)) {
+          desktopTerminals = result;
+          console.log(`Found ${desktopTerminals.length} desktop terminals`);
+          
+          // Update the socket's terminal mapping for forwarding
+          this.updateSocketTerminalMapping(socket.id, desktopTerminals);
+        }
+      } catch (e) {
+        console.log('Could not get desktop terminals:', e instanceof Error ? e.message : String(e));
+      }
+      
+      // Get remote-created terminals for this session
+      const remoteTerminals = Array.from(this.terminals.values())
+        .filter(term => term.sessionId === session.id)
+        .map(term => ({
+          id: term.id,
+          name: term.name || `Terminal ${term.id.split('-').pop()}`,
+          workingDirectory: term.workspacePath,
+          createdAt: term.createdAt.toISOString(),
+          isRemote: true
+        }));
+      
+      // Combine desktop and remote terminals
+      const allTerminals = [...desktopTerminals, ...remoteTerminals];
+      
+      console.log(`Returning ${allTerminals.length} terminals (${desktopTerminals.length} desktop, ${remoteTerminals.length} remote) for session ${session.id}`);
+      
+      callback({
+        id: request.id,
+        success: true,
+        data: allTerminals
+      });
+    } catch (error) {
+      callback({
+        id: request.id,
+        success: false,
+        error: { 
+          code: 'LIST_ERROR', 
+          message: (error as Error).message 
+        }
+      });
+    }
+  }
+  
+  private updateSocketTerminalMapping(socketId: string, terminals: any[]): void {
+    // Access the remote server through the global scope
+    const remoteServer = (global as any).__remoteServer;
+    if (remoteServer && typeof remoteServer.updateSocketTerminalMapping === 'function') {
+      remoteServer.updateSocketTerminalMapping(socketId, terminals);
+    }
   }
   
   /**

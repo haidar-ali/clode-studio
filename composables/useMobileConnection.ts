@@ -60,10 +60,10 @@ export function useMobileConnection() {
         // Create socket with mobile-optimized settings
         console.log('[MobileConnection] Creating socket with options...');
         mobileSocket = io(serverUrl, {
-          // Force polling for iOS Safari compatibility
-          transports: ['polling'],
-          // Don't try to upgrade to websocket
-          upgrade: false,
+          // Try websocket first, fall back to polling
+          transports: ['websocket', 'polling'],
+          // Allow upgrade from polling to websocket
+          upgrade: true,
           // Authentication
           auth: {
             deviceToken: options.deviceToken,
@@ -102,6 +102,18 @@ export function useMobileConnection() {
           // Store in singleton so services can use it
           remoteConnection.setSocket(mobileSocket);
           console.log('[MobileConnection] Socket stored in singleton');
+          
+          // Debug: Listen for terminal:data events globally
+          mobileSocket.on('terminal:data', (event: any) => {
+            console.log('[MobileConnection] DEBUG - Received terminal:data event:', event);
+          });
+          
+          // Debug: Check all events
+          mobileSocket.onAny((eventName: string, ...args: any[]) => {
+            if (eventName === 'terminal:data') {
+              console.log('[MobileConnection] DEBUG - onAny caught terminal:data:', args);
+            }
+          });
           
           resolve(true);
         });

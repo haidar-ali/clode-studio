@@ -2,6 +2,13 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const electron_1 = require("electron");
 const electronAPI = {
+    // General IPC send for specific allowed channels
+    send: (channel, data) => {
+        const allowedChannels = ['forward-terminal-data'];
+        if (allowedChannels.includes(channel)) {
+            electron_1.ipcRenderer.send(channel, data);
+        }
+    },
     claude: {
         start: (instanceId, workingDirectory, instanceName, runConfig) => electron_1.ipcRenderer.invoke('claude:start', instanceId, workingDirectory, instanceName, runConfig),
         detectInstallation: () => electron_1.ipcRenderer.invoke('claude:detectInstallation'),
