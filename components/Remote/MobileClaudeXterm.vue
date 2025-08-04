@@ -120,6 +120,8 @@ interface ClaudeSession {
   outputHandler?: () => void;
   errorHandler?: () => void;
   exitHandler?: () => void;
+  bufferRestored?: boolean; // Track if buffer has been restored
+  spawned?: boolean; // Track if spawn has been called for this session
 }
 
 // Use mobile connection for mobile devices
@@ -225,28 +227,17 @@ async function loadClaudeInstances() {
               session.terminal.write(data);
             });
             
-            const result = await services.value.claude.spawn(
-              instance.id,
-              instance.workingDirectory,
-              instance.name
-            );
-            console.log('[MobileClaude] Forwarding setup result:', result);
-            
-            // Optionally load buffer if needed
-            const buffer = await services.value.claude.getClaudeBuffer(instance.id);
-            if (buffer) {
-              // Add delay to ensure terminal is ready
-              setTimeout(() => {
-                try {
-                  session.terminal.clear();
-                  // Write the buffer directly - SerializeAddon only has serialize, not deserialize
-                  session.terminal.write(buffer);
-                  console.log('[MobileClaude] Successfully restored Claude terminal buffer');
-                } catch (e) {
-                  console.error('[MobileClaude] Failed to restore Claude buffer:', e);
-                  session.terminal.write(buffer);
-                }
-              }, 100);
+            // Only spawn if not already spawned for this session
+            if (!session.spawned) {
+              const result = await services.value.claude.spawn(
+                instance.id,
+                instance.workingDirectory,
+                instance.name
+              );
+              console.log('[MobileClaude] Spawn called in loadClaudeInstances, result:', result);
+              session.spawned = true;
+            } else {
+              console.log('[MobileClaude] Skipping spawn in loadClaudeInstances - already spawned');
             }
           } catch (error) {
             console.error('[MobileClaude] Failed to setup forwarding for existing session:', error);
@@ -300,8 +291,15 @@ async function initializeClaudeSession(instance: any) {
     fontSize: 14,
     lineHeight: 1.2,
     cursorBlink: true,
-    allowTransparency: true,
-    scrollback: 5000 // More scrollback for Claude conversations
+    cursorStyle: 'block',
+    scrollback: 10000,
+    convertEol: true, // Important for handling carriage returns properly
+    disableStdin: false,
+    smoothScrollDuration: 0,
+    fastScrollModifier: 'shift',
+    fastScrollSensitivity: 5,
+    windowsMode: false,
+    allowTransparency: true
   });
   
   const fitAddon = new FitAddon();
@@ -327,19 +325,33 @@ async function initializeClaudeSession(instance: any) {
   });
   
   try {
+    // Clean up any existing output handler first
+    if (session.outputHandler) {
+      session.outputHandler();
+      session.outputHandler = null;
+    }
+    
     // Set up output handler
     session.outputHandler = services.value!.claude.onOutput(instance.id, (data: string) => {
       console.log(`[MobileClaude] Output for ${instance.id}, length: ${data.length}`);
       terminal.write(data);
     });
     
-    // Set up error handler
+    // Clean up and set up error handler
+    if (session.errorHandler) {
+      session.errorHandler();
+      session.errorHandler = null;
+    }
     session.errorHandler = services.value!.claude.onError(instance.id, (error: string) => {
       console.error(`[MobileClaude] Error for ${instance.id}:`, error);
       terminal.write(`\x1b[31mError: ${error}\x1b[0m\r\n`);
     });
     
-    // Set up exit handler
+    // Clean up and set up exit handler
+    if (session.exitHandler) {
+      session.exitHandler();
+      session.exitHandler = null;
+    }
     session.exitHandler = services.value!.claude.onExit(instance.id, (code: number | null) => {
       console.log(`[MobileClaude] Exit for ${instance.id}, code:`, code);
       terminal.write(`\r\n\x1b[33mClaude exited${code !== null ? ` with code ${code}` : ''}\x1b[0m\r\n`);
@@ -385,15 +397,23 @@ async function initializeClaudeSession(instance: any) {
           terminal.write(data);
         });
         
-        const result = await services.value!.claude.spawn(
-          instance.id,
-          instance.workingDirectory,
-          instance.name
-        );
-        console.log('[MobileClaude] Forwarding setup result:', result);
+        // Only spawn if not already spawned
+        if (!session.spawned) {
+          const result = await services.value!.claude.spawn(
+            instance.id,
+            instance.workingDirectory,
+            instance.name
+          );
+          console.log('[MobileClaude] Spawn called in initializeClaudeSession, result:', result);
+          session.spawned = true;
+        } else {
+          console.log('[MobileClaude] Skipping spawn in initializeClaudeSession - already spawned');
+        }
         
         // Store buffer info to load after terminal is attached
-        (session as any).pendingBuffer = services.value!.claude.getClaudeBuffer(instance.id);
+        if (!session.bufferRestored) {
+          (session as any).pendingBuffer = services.value!.claude.getClaudeBuffer(instance.id);
+        }
       } catch (error) {
         console.error('[MobileClaude] Failed to setup forwarding:', error);
       }
@@ -443,6 +463,7 @@ function attachTerminal(instanceId: string) {
                 // The SerializeAddon doesn't have deserialize, we need to write the buffer directly
                 // The buffer from the desktop is already serialized terminal content
                 session.terminal.write(buffer);
+                session.bufferRestored = true; // Mark as restored
                 console.log('[MobileClaude] Successfully restored Claude terminal buffer after attach');
               } catch (e) {
                 console.error('[MobileClaude] Failed to restore buffer:', e);

@@ -897,7 +897,16 @@ export class RemoteClaudeHandler {
               console.log('[RemoteClaudeForwarding] Updating forwarding to new socket:', instanceId, 'from', existingSocketId, 'to', socketId);
               // Update to new socket ID
               window.__remoteClaudeForwarding.set(instanceId, socketId);
-              return true;
+              
+              // Clean up old listener if it exists
+              const existingListener = window.__remoteClaudeListeners.get(instanceId);
+              if (existingListener && existingListener.cleanup) {
+                console.log('[RemoteClaudeForwarding] Cleaning up old listener for:', instanceId);
+                existingListener.cleanup();
+                window.__remoteClaudeListeners.delete(instanceId);
+              }
+              
+              // Don't return here - continue to set up new listener
             }
           }
           
@@ -918,6 +927,14 @@ export class RemoteClaudeHandler {
                 });
               }
             };
+            
+            // Clean up any existing listener first
+            const existingListener = window.__remoteClaudeListeners.get(instanceId);
+            if (existingListener && existingListener.cleanup) {
+              console.log('[RemoteClaudeForwarding] Cleaning up existing listener before creating new one for:', instanceId);
+              existingListener.cleanup();
+              window.__remoteClaudeListeners.delete(instanceId);
+            }
             
             // Store handler reference for cleanup
             if (!window.__remoteClaudeListeners.has(instanceId)) {
