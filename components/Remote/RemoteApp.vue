@@ -19,26 +19,13 @@
     
     <!-- Mobile/Tablet Layout -->
     <div v-else class="mobile-layout">
-      <!-- Active Panel -->
+      <!-- Active Panel - Now takes full height -->
       <component 
         :is="activePanel.component" 
         v-bind="activePanel.props || {}"
         class="active-panel"
         @file-opened="handleFileOpened"
       />
-      
-      <!-- Bottom Navigation -->
-      <nav class="mobile-nav">
-        <button 
-          v-for="panel in panels" 
-          :key="panel.id"
-          :class="{ active: activePanelId === panel.id }"
-          @click="activePanelId = panel.id"
-        >
-          <Icon :name="panel.icon" />
-          <span>{{ panel.label }}</span>
-        </button>
-      </nav>
     </div>
     
     <!-- Connection Modal -->
@@ -64,6 +51,16 @@
         </div>
       </div>
     </Teleport>
+    
+    <!-- Mobile Menu Drawer -->
+    <MobileMenuDrawer
+      v-if="!isDesktop"
+      :show="showMenu"
+      :menu-items="panels"
+      :active-panel="activePanelId"
+      @close="showMenu = false"
+      @select-panel="activePanelId = $event"
+    />
   </div>
 </template>
 
@@ -80,6 +77,7 @@ import MobileEditor from './MobileEditor.vue';
 import MobileTerminal from './MobileTerminalXterm.vue';
 import MobileClaude from './MobileClaudeXterm.vue';
 import RemoteConnectionModal from './RemoteConnectionModal.vue';
+import MobileMenuDrawer from './MobileMenuDrawer.vue';
 import DebugPanel from './DebugPanel.vue';
 
 const { isPhone, isTablet, isDesktop, deviceClass } = useResponsive();
@@ -216,44 +214,11 @@ onMounted(async () => {
 .active-panel {
   flex: 1;
   overflow: auto;
+  /* Take full height now that bottom nav is gone */
+  height: 100%;
 }
 
-/* Mobile Navigation */
-.mobile-nav {
-  display: flex;
-  background: linear-gradient(180deg, #141518 0%, #0a0b0d 100%);
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 8px 0;
-  backdrop-filter: blur(10px);
-}
-
-.mobile-nav button {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  padding: 8px;
-  background: none;
-  border: none;
-  color: rgba(255, 255, 255, 0.5);
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.mobile-nav button.active {
-  color: #5CA0F2;
-}
-
-.mobile-nav button:hover:not(.active) {
-  color: rgba(255, 255, 255, 0.8);
-}
-
-.mobile-nav button span {
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.01em;
-}
+/* Mobile Navigation - Removed, now using menu drawer */
 
 /* Header Actions */
 .header-actions {

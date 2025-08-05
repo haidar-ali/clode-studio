@@ -365,4 +365,11 @@ export class RemoteServiceProvider implements IServiceProvider {
   getSessionId(): string | null {
     return this.sessionId;
   }
+  
+  /**
+   * Get socket for debugging
+   */
+  getSocket(): Socket | null {
+    return this.socket;
+  }
 }

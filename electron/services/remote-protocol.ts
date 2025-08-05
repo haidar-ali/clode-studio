@@ -132,6 +132,12 @@ export namespace ClaudeProtocol {
     rows: number;
   }
   
+  export interface ConfigureTerminalRequest {
+    instanceId: string;
+    cols: number;
+    rows: number;
+  }
+  
   // Events
   export interface OutputEvent {
     instanceId: string;
@@ -195,6 +201,7 @@ export enum RemoteEvent {
   CLAUDE_ERROR = 'claude:error',
   CLAUDE_EXIT = 'claude:exit',
   CLAUDE_INSTANCES_UPDATED = 'claude:instances:updated',
+  CLAUDE_RESPONSE_COMPLETE = 'claude:response:complete',
   
   // File events
   FILE_CHANGED = 'file:changed',

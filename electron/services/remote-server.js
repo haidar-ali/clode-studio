@@ -189,6 +189,29 @@ export class RemoteServer {
         // Broadcast to all connected clients that Claude instances have been updated
         this.io.emit(RemoteEvent.CLAUDE_INSTANCES_UPDATED);
     }
+    forwardClaudeResponseComplete(socketId, instanceId) {
+        console.log('[RemoteServer] ✅ forwardClaudeResponseComplete called for:', instanceId, 'to socket:', socketId);
+        if (!this.io) {
+            console.log('[RemoteServer] ❌ No Socket.IO server available');
+            return;
+        }
+        // Get the specific socket
+        const socket = this.io.sockets.sockets.get(socketId);
+        if (socket && socket.connected) {
+            console.log('[RemoteServer] 📡 Forwarding response complete to mobile for:', instanceId);
+            // Forward the response complete event to this specific socket
+            socket.emit(RemoteEvent.CLAUDE_RESPONSE_COMPLETE, {
+                instanceId
+            });
+        }
+        else {
+            console.log('[RemoteServer] ❌ Socket not found, broadcasting to all sockets');
+            // Try broadcasting to all sockets as fallback
+            this.io.emit(RemoteEvent.CLAUDE_RESPONSE_COMPLETE, {
+                instanceId
+            });
+        }
+    }
     forwardDesktopTerminalData(ptyId, data) {
         if (!this.io)
             return;

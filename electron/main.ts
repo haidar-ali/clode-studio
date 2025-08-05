@@ -159,6 +159,22 @@ app.whenReady().then(async () => {
         }
       });
       
+      // Set up IPC handler for Claude response complete forwarding
+      ipcMain.on('forward-claude-response-complete', (event, data) => {
+        console.log('[Main] ✅ Received IPC forward-claude-response-complete for:', data.instanceId, 'to socket:', data.socketId);
+        if (remoteServer && data.socketId && data.instanceId) {
+          console.log('[Main] 🔄 Forwarding to remote server...');
+          remoteServer.forwardClaudeResponseComplete(data.socketId, data.instanceId);
+          console.log('[Main] ✨ Forward complete!');
+        } else {
+          console.log('[Main] ❌ Missing requirements for forwarding:', {
+            remoteServer: !!remoteServer,
+            socketId: !!data.socketId,
+            instanceId: !!data.instanceId
+          });
+        }
+      });
+      
       // Set up IPC handler for Claude instance updates
       ipcMain.on('claude-instances-updated', () => {
         if (remoteServer) {

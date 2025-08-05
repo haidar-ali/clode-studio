@@ -369,6 +369,9 @@ const setupClaudeListeners = () => {
       } else if (!pendingPromptScroll) {
         autoScrollIfNeeded();
       }
+      
+      // Note: Completion detection is now handled by the JSON detector in main process
+      // No need for brittle ANSI parsing here anymore!
     }
   });
 

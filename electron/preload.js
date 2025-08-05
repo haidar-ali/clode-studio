@@ -4,7 +4,7 @@ const electron_1 = require("electron");
 const electronAPI = {
     // General IPC send for specific allowed channels
     send: (channel, data) => {
-        const allowedChannels = ['forward-terminal-data', 'forward-claude-output', 'claude-instances-updated'];
+        const allowedChannels = ['forward-terminal-data', 'forward-claude-output', 'forward-claude-response-complete', 'claude-instances-updated'];
         if (allowedChannels.includes(channel)) {
             electron_1.ipcRenderer.send(channel, data);
         }

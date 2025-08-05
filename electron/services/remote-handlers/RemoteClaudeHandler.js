@@ -2,12 +2,20 @@ import * as pty from 'node-pty';
 import { RemoteEvent, Permission } from '../remote-protocol.js';
 import { ClaudeDetector } from '../../claude-detector.js';
 import { userIsolation } from '../user-isolation.js';
+// @ts-ignore - xterm runs in Node.js for headless operation
+import pkg from '@xterm/headless';
+const { Terminal } = pkg;
+// @ts-ignore
+import serializePkg from '@xterm/addon-serialize';
+const { SerializeAddon } = serializePkg;
 export class RemoteClaudeHandler {
     mainWindow;
     sessionManager;
     instances = new Map();
     instancesBySocket = new Map();
     claudePath = null;
+    // Terminal translators for mobile clients - key is "socketId-instanceId"
+    terminalTranslators = new Map();
     constructor(mainWindow, sessionManager) {
         this.mainWindow = mainWindow;
         this.sessionManager = sessionManager;
@@ -34,6 +42,10 @@ export class RemoteClaudeHandler {
         socket.on('claude:resize', async (request, callback) => {
             await this.handleClaudeResize(socket, request, callback);
         });
+        // Configure terminal dimensions for mobile
+        socket.on('claude:configureTerminal', async (request, callback) => {
+            await this.handleConfigureTerminal(socket, request, callback);
+        });
         // Get active instances
         socket.on('claude:getInstances', async (request, callback) => {
             await this.handleGetInstances(socket, request, callback);
@@ -55,6 +67,14 @@ export class RemoteClaudeHandler {
         if (instanceIds) {
             instanceIds.forEach(instanceId => {
                 this.stopInstance(instanceId);
+                // Clean up terminal translator for this socket/instance
+                const translatorKey = `${socketId}-${instanceId}`;
+                const translator = this.terminalTranslators.get(translatorKey);
+                if (translator) {
+                    translator.terminal.dispose();
+                    this.terminalTranslators.delete(translatorKey);
+                    console.log(`[RemoteClaudeHandler] Cleaned up terminal translator for ${translatorKey}`);
+                }
             });
             this.instancesBySocket.delete(socketId);
         }
@@ -74,6 +94,13 @@ export class RemoteClaudeHandler {
                     if (handler) {
                         this.mainWindow.webContents.ipc.removeListener('forward-claude-output', handler);
                         this.claudeForwardHandlers?.delete(handlerKey);
+                    }
+                    // Also clean up response complete handler
+                    const responseCompleteHandlerKey = `${socketId}-${instanceId}-response-complete`;
+                    const responseCompleteHandler = this.claudeForwardHandlers?.get(responseCompleteHandlerKey);
+                    if (responseCompleteHandler) {
+                        this.mainWindow.webContents.ipc.removeListener('forward-claude-response-complete', responseCompleteHandler);
+                        this.claudeForwardHandlers?.delete(responseCompleteHandlerKey);
                     }
                     // Forwarding cleanup handled by removing from map
                 });
@@ -377,10 +404,17 @@ export class RemoteClaudeHandler {
             this.instancesBySocket.get(socket.id).add(request.payload.instanceId);
             // Set up PTY data handler
             claudePty.onData((data) => {
+                // Send raw output directly
                 socket.emit(RemoteEvent.CLAUDE_OUTPUT, {
                     instanceId: request.payload.instanceId,
                     data
                 });
+                // Also update the translator if exists (for buffer requests)
+                const translatorKey = `${socket.id}-${request.payload.instanceId}`;
+                const translator = this.terminalTranslators.get(translatorKey);
+                if (translator) {
+                    translator.terminal.write(data);
+                }
             });
             // Set up PTY exit handler
             claudePty.onExit((exitCode) => {
@@ -633,6 +667,70 @@ export class RemoteClaudeHandler {
             });
         }
     }
+    async handleConfigureTerminal(socket, request, callback) {
+        try {
+            const { instanceId, cols, rows } = request.payload;
+            // Create a terminal translator for this socket/instance combination
+            const translatorKey = `${socket.id}-${instanceId}`;
+            // Clean up existing translator if any
+            const existingTranslator = this.terminalTranslators.get(translatorKey);
+            if (existingTranslator) {
+                existingTranslator.terminal.dispose();
+            }
+            // Create new headless terminal with mobile dimensions
+            const terminal = new Terminal({
+                cols,
+                rows,
+                allowProposedApi: true
+            });
+            const serializeAddon = new SerializeAddon();
+            terminal.loadAddon(serializeAddon);
+            // Store the translator
+            this.terminalTranslators.set(translatorKey, {
+                terminal,
+                serializeAddon,
+                cols,
+                rows
+            });
+            console.log(`[RemoteClaudeHandler] Created terminal translator for ${translatorKey} with dimensions ${cols}x${rows}`);
+            // Get current buffer content from the Claude instance to populate the translator
+            const instance = this.instances.get(instanceId);
+            if (instance) {
+                // Get current buffer through desktop forwarding
+                try {
+                    const buffer = await this.mainWindow.webContents.executeJavaScript(`
+            (() => {
+              if (typeof window.__getClaudeTerminalBuffer === 'function') {
+                return window.__getClaudeTerminalBuffer('${instanceId}');
+              }
+              return null;
+            })()
+          `);
+                    if (buffer) {
+                        // Write existing buffer to translator so it starts with current content
+                        terminal.write(buffer);
+                    }
+                }
+                catch (error) {
+                    console.error('[RemoteClaudeHandler] Failed to get initial buffer:', error);
+                }
+            }
+            callback({
+                id: request.id,
+                success: true
+            });
+        }
+        catch (error) {
+            callback({
+                id: request.id,
+                success: false,
+                error: {
+                    code: 'CONFIGURE_ERROR',
+                    message: error.message
+                }
+            });
+        }
+    }
     async handleGetInstances(socket, request, callback) {
         try {
             const session = this.sessionManager.getSessionBySocket(socket.id);
@@ -815,6 +913,33 @@ export class RemoteClaudeHandler {
                     error: { code: 'NO_SESSION', message: 'No active session' }
                 });
             }
+            // For now, always return the desktop buffer to ensure we have full history
+            // The translator might not have the complete history if it was created mid-session
+            // TODO: Improve translator to maintain full history from desktop
+            console.log(`[RemoteClaudeHandler] Getting desktop buffer for ${request.payload.instanceId}`);
+            /* Disabled translator buffer for now - it may not have full history
+            const translatorKey = `${socket.id}-${request.payload.instanceId}`;
+            const translator = this.terminalTranslators.get(translatorKey);
+            
+            if (translator) {
+              // Use the translator's buffer which is properly sized for mobile
+              try {
+                const translatedBuffer = translator.serializeAddon.serialize({
+                  scrollback: translator.terminal.buffer.active.length
+                });
+                
+                callback({
+                  id: request.id,
+                  success: true,
+                  data: { buffer: translatedBuffer }
+                });
+                return;
+              } catch (error) {
+                console.error('[RemoteClaudeHandler] Failed to serialize translator buffer:', error);
+                // Fall back to desktop buffer
+              }
+            }
+            */
             // Get buffer from desktop Claude instance
             const buffer = await this.mainWindow.webContents.executeJavaScript(`
         (() => {
@@ -864,6 +989,27 @@ export class RemoteClaudeHandler {
      * Set up forwarding for desktop Claude instances
      */
     setupDesktopClaudeForwarding(socket, instanceId) {
+        // Clean up any existing handlers first
+        const existingHandlerKey = `${socket.id}-${instanceId}`;
+        const existingHandler = this.claudeForwardHandlers?.get(existingHandlerKey);
+        if (existingHandler && this.mainWindow && !this.mainWindow.isDestroyed() && this.mainWindow.webContents) {
+            console.log(`[RemoteClaudeHandler] Cleaning up existing handler for ${existingHandlerKey}`);
+            try {
+                this.mainWindow.webContents.ipc.removeListener('forward-claude-output', existingHandler);
+            }
+            catch (e) {
+                console.error('[RemoteClaudeHandler] Error removing existing output listener:', e);
+            }
+        }
+        const existingResponseHandler = this.claudeForwardHandlers?.get(`${existingHandlerKey}-response-complete`);
+        if (existingResponseHandler && this.mainWindow && !this.mainWindow.isDestroyed() && this.mainWindow.webContents) {
+            try {
+                this.mainWindow.webContents.ipc.removeListener('forward-claude-response-complete', existingResponseHandler);
+            }
+            catch (e) {
+                console.error('[RemoteClaudeHandler] Error removing existing response listener:', e);
+            }
+        }
         // Store mapping for this socket
         if (!this.desktopClaudeForwarding) {
             this.desktopClaudeForwarding = new Map();
@@ -949,6 +1095,24 @@ export class RemoteClaudeHandler {
             const cleanup = window.electronAPI.claude.onOutput(instanceId, outputHandler);
             window.__remoteClaudeListeners.get(instanceId).cleanup = cleanup;
             
+            // Also listen for Claude response complete events
+            const responseCompleteHandler = () => {
+              console.log('[RemoteClaudeForwarding] Response complete event fired for:', instanceId);
+              const currentSocketId = window.__remoteClaudeForwarding.get(instanceId);
+              if (currentSocketId) {
+                console.log('[RemoteClaudeForwarding] Forwarding to socket:', currentSocketId);
+                window.electronAPI.send('forward-claude-response-complete', {
+                  instanceId,
+                  socketId: currentSocketId
+                });
+              } else {
+                console.log('[RemoteClaudeForwarding] No socket ID found for instance:', instanceId);
+              }
+            };
+            
+            window.addEventListener('claude-response-complete-' + instanceId, responseCompleteHandler);
+            window.__remoteClaudeListeners.get(instanceId).responseCompleteHandler = responseCompleteHandler;
+            
             console.log('[RemoteClaudeForwarding] Set up output forwarding for:', instanceId);
             return true;
           } else {
@@ -966,19 +1130,37 @@ export class RemoteClaudeHandler {
                 // Set up IPC listener to forward Claude output
                 const forwardHandler = (event, data) => {
                     if (data.instanceId === instanceId && data.socketId === socket.id) {
+                        // Send raw output directly
                         socket.emit(RemoteEvent.CLAUDE_OUTPUT, {
                             instanceId: data.instanceId,
                             data: data.data
                         });
+                        // Also update the translator if exists (for buffer requests)
+                        const translatorKey = `${socket.id}-${instanceId}`;
+                        const translator = this.terminalTranslators.get(translatorKey);
+                        if (translator) {
+                            translator.terminal.write(data.data);
+                        }
                     }
                 };
-                // Store handler for cleanup
+                // Set up IPC listener for response complete events
+                const responseCompleteHandler = (event, data) => {
+                    if (data.instanceId === instanceId && data.socketId === socket.id) {
+                        console.log(`[RemoteClaudeHandler] Forwarding response complete for ${instanceId}`);
+                        socket.emit(RemoteEvent.CLAUDE_RESPONSE_COMPLETE, {
+                            instanceId: data.instanceId
+                        });
+                    }
+                };
+                // Store handlers for cleanup
                 if (!this.claudeForwardHandlers) {
                     this.claudeForwardHandlers = new Map();
                 }
                 this.claudeForwardHandlers.set(`${socket.id}-${instanceId}`, forwardHandler);
+                this.claudeForwardHandlers.set(`${socket.id}-${instanceId}-response-complete`, responseCompleteHandler);
                 // Listen for forwarded Claude output
                 this.mainWindow.webContents.ipc.on('forward-claude-output', forwardHandler);
+                this.mainWindow.webContents.ipc.on('forward-claude-response-complete', responseCompleteHandler);
             }
         }).catch(error => {
             console.error('[RemoteClaudeHandler] Failed to set up desktop Claude forwarding:', error);

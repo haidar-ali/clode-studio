@@ -135,4 +135,13 @@ export class RemoteClaudeService implements IClaudeService {
       return null;
     }
   }
+  
+  async configureTerminal(instanceId: string, cols: number, rows: number): Promise<void> {
+    try {
+      await this.request('claude:configureTerminal', { instanceId, cols, rows });
+    } catch (error) {
+      console.error('[RemoteClaudeService] Failed to configure terminal:', error);
+      throw error;
+    }
+  }
 }
