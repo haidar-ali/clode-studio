@@ -15,7 +15,7 @@
     </header>
     
     <!-- Desktop Layout -->
-    <IDELayout v-if="isDesktop" />
+    <RemoteDesktopLayout v-if="isDesktop" />
     
     <!-- Mobile/Tablet Layout -->
     <div v-else class="mobile-layout">
@@ -69,13 +69,14 @@ import { ref, computed, onMounted } from 'vue';
 import { useRemoteConnection } from '~/composables/useRemoteConnection';
 import { useMobileConnection } from '~/composables/useMobileConnection';
 import { useResponsive } from '~/composables/useResponsive';
-import IDELayout from '~/components/Layout/IDELayout.vue';
+import RemoteDesktopLayout from './RemoteDesktopLayout.vue';
 import ConnectionStatus from '~/components/Layout/ConnectionStatus.vue';
 // Import mobile wrapper components
 import MobileExplorer from './MobileExplorer.vue';
 import MobileEditor from './MobileEditor.vue';
 import MobileTerminal from './MobileTerminalXterm.vue';
 import MobileClaude from './MobileClaudeXterm.vue';
+import RemoteKanbanBoard from './RemoteKanbanBoard.vue';
 import RemoteConnectionModal from './RemoteConnectionModal.vue';
 import MobileMenuDrawer from './MobileMenuDrawer.vue';
 import DebugPanel from './DebugPanel.vue';
@@ -100,7 +101,8 @@ const panels = computed(() => [
     props: { fileData: openedFile.value }
   },
   { id: 'terminal', label: 'Terminal', icon: 'mdi:console', component: MobileTerminal },
-  { id: 'claude', label: 'Claude', icon: 'mdi:robot', component: MobileClaude }
+  { id: 'claude', label: 'Claude', icon: 'mdi:robot', component: MobileClaude },
+  { id: 'tasks', label: 'Tasks', icon: 'mdi:checkbox-marked-outline', component: RemoteKanbanBoard }
 ]);
 
 const activePanelId = ref('explorer');

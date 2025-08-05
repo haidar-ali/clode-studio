@@ -845,9 +845,9 @@ function scheduleAutoRefresh(instanceId: string) {
           restoreSerializedBuffer(session.terminal, buffer);
           
           // Restore scroll position
-          if (wasAtBottom) {
+          
             session.terminal.scrollToBottom();
-          }
+          
           
           console.log(`[MobileClaude] Terminal synced - buffer changed`);
         }
@@ -940,6 +940,14 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   background: #0a0b0d;
+  position: relative;
+}
+
+/* When inside a dock/sidebar, add padding for chat input */
+.right-sidebar .mobile-claude,
+.left-dock .mobile-claude,
+.bottom-dock .mobile-claude {
+  padding-bottom: 80px;
 }
 
 /* Claude Header */
@@ -1197,6 +1205,14 @@ onUnmounted(() => {
   backdrop-filter: blur(10px);
   border-top: 1px solid rgba(255, 255, 255, 0.1);
   z-index: 100;
+}
+
+/* When inside a dock/sidebar, use absolute positioning */
+.right-sidebar .mobile-chat-input-overlay,
+.left-dock .mobile-chat-input-overlay,
+.bottom-dock .mobile-chat-input-overlay {
+  position: absolute;
+  z-index: 10;
 }
 
 .chat-textarea {
