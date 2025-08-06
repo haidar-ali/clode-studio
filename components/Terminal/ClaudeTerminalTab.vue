@@ -205,6 +205,15 @@ const initTerminal = () => {
 
   terminal.attachCustomKeyEventHandler((event: KeyboardEvent) => {
 
+    // Block Cmd+Enter to prevent unwanted character insertion
+    if (event.metaKey && event.key === 'Enter') {
+      event.preventDefault();
+      // Just send a regular Enter instead
+      if (props.instance.status === 'connected') {
+        window.electronAPI.claude.send(props.instance.id, '\r');
+      }
+      return false;
+    }
     
     // Only handle on Mac
     if (navigator.platform.toLowerCase().indexOf('mac') !== -1) {
