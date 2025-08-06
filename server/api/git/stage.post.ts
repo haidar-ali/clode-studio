@@ -17,8 +17,15 @@ export default defineEventHandler(async (event) => {
       return { success: false, error: 'No files specified' };
     }
 
-    // Stage files
-    const filePaths = files.map(f => `"${f}"`).join(' ');
+    // Stage files - properly escape file names
+    // Remove any surrounding quotes first, then escape for shell
+    const filePaths = files.map(f => {
+      // Remove surrounding quotes if present
+      const cleanPath = f.replace(/^["']|["']$/g, '');
+      // Escape special characters for shell
+      return `"${cleanPath.replace(/"/g, '\\"')}"`;
+    }).join(' ');
+    
     await execAsync(`git add ${filePaths}`, { cwd: workspacePath });
 
     return { success: true };

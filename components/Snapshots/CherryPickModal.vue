@@ -354,9 +354,8 @@ async function scanWorkspaceFiles() {
   
   try {
     // Get current workspace files
-    const result = await window.electronAPI.snapshots.scanProjectFiles({
-      projectPath: props.sourceSnapshot.projectPath
-    });
+    const fileContentManager = useFileContentManager(props.sourceSnapshot.projectPath);
+    const result = await fileContentManager.scanProjectFiles();
     
     if (result.success) {
       const fileMap = new Map<string, boolean>();

@@ -3,9 +3,43 @@ import { contextBridge, ipcRenderer } from 'electron';
 const electronAPI = {
   // General IPC send for specific allowed channels
   send: (channel: string, data: any) => {
-    const allowedChannels = ['forward-terminal-data', 'forward-claude-output', 'forward-claude-response-complete', 'claude-instances-updated'];
+    const allowedChannels = [
+      'forward-terminal-data', 
+      'forward-claude-output', 
+      'forward-claude-response-complete', 
+      'claude-instances-updated',
+      'snapshots-list-response',
+      'snapshots-capture-response', 
+      'snapshots-restore-response',
+      'snapshots-delete-response',
+      'snapshots-update-response',
+      'snapshots-content-response',
+      'snapshots-getDiff-response',
+      'snapshots-scanProjectFiles-response'
+    ];
     if (allowedChannels.includes(channel)) {
       ipcRenderer.send(channel, data);
+    }
+  },
+  // Expose ipcRenderer for remote snapshot handlers
+  ipcRenderer: {
+    on: (channel: string, listener: (...args: any[]) => void) => {
+      const allowedChannels = [
+        'remote-snapshot-list',
+        'remote-snapshot-capture', 
+        'remote-snapshot-restore',
+        'remote-snapshot-delete',
+        'remote-snapshot-update',
+        'remote-snapshot-content',
+        'remote-snapshot-getDiff',
+        'remote-snapshot-scanProjectFiles'
+      ];
+      if (allowedChannels.includes(channel)) {
+        ipcRenderer.on(channel, listener);
+      }
+    },
+    removeListener: (channel: string, listener: (...args: any[]) => void) => {
+      ipcRenderer.removeListener(channel, listener);
     }
   },
   claude: {

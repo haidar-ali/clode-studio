@@ -17,8 +17,14 @@ export default defineEventHandler(async (event) => {
       return { success: false, error: 'No files specified' };
     }
 
-    // Unstage files
-    const filePaths = files.map(f => `"${f}"`).join(' ');
+    // Unstage files - properly escape file names
+    const filePaths = files.map(f => {
+      // Remove surrounding quotes if present
+      const cleanPath = f.replace(/^["']|["']$/g, '');
+      // Escape special characters for shell
+      return `"${cleanPath.replace(/"/g, '\\"')}"`;
+    }).join(' ');
+    
     await execAsync(`git reset HEAD ${filePaths}`, { cwd: workspacePath });
 
     return { success: true };

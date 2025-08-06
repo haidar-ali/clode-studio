@@ -98,23 +98,162 @@ export class FileContentManager {
   }
 
   /**
-   * Retrieve content from storage (via IPC)
+   * Retrieve content from storage (via IPC or Socket.IO in remote mode)
    */
   async getContent(hash: string): Promise<string | null> {
+    const isRemoteMode = !window.electronAPI;
+    
     try {
-      const result = await window.electronAPI.snapshots.getContent({
-        hash,
-        projectPath: this.projectPath
-      });
-      
-      if (result.success && result.content) {
-        return result.content;
+      if (isRemoteMode) {
+        // Remote mode - use Socket.IO
+        const { remoteConnection } = await import('~/services/remote-client/RemoteConnectionSingleton');
+        
+        if (!remoteConnection.isConnected()) {
+          throw new Error('Remote connection not available');
+        }
+        
+        const socket = remoteConnection.getSocket();
+        if (!socket) {
+          throw new Error('Socket not available');
+        }
+        
+        const result = await new Promise<any>((resolve, reject) => {
+          const request = {
+            id: `req-${Date.now()}`,
+            payload: {
+              hash,
+              projectPath: this.projectPath
+            }
+          };
+          
+          socket.emit('snapshot:content', request, (response: any) => {
+            if (response.success) {
+              resolve(response.data);
+            } else {
+              reject(new Error(response.error || 'Request failed'));
+            }
+          });
+        });
+        
+        return result?.content || null;
+      } else {
+        // Desktop mode - use Electron API
+        const result = await window.electronAPI.snapshots.getContent({
+          hash,
+          projectPath: this.projectPath
+        });
+        
+        if (result.success && result.content) {
+          return result.content;
+        }
+        
+        return null;
       }
-      
-      return null;
     } catch (error) {
       console.error(`Failed to get content ${hash}:`, error);
       return null;
+    }
+  }
+
+  /**
+   * Get diff object from storage (via IPC or Socket.IO in remote mode)
+   */
+  async getDiff(hash: string): Promise<any> {
+    const isRemoteMode = !window.electronAPI;
+    
+    try {
+      if (isRemoteMode) {
+        // Remote mode - use Socket.IO
+        const { remoteConnection } = await import('~/services/remote-client/RemoteConnectionSingleton');
+        
+        if (!remoteConnection.isConnected()) {
+          throw new Error('Remote connection not available');
+        }
+        
+        const socket = remoteConnection.getSocket();
+        if (!socket) {
+          throw new Error('Socket not available');
+        }
+        
+        const result = await new Promise<any>((resolve, reject) => {
+          const request = {
+            id: `req-${Date.now()}`,
+            payload: {
+              hash,
+              projectPath: this.projectPath
+            }
+          };
+          
+          socket.emit('snapshot:getDiff', request, (response: any) => {
+            if (response.success) {
+              resolve(response.data);
+            } else {
+              reject(new Error(response.error || 'Request failed'));
+            }
+          });
+        });
+        
+        return result;
+      } else {
+        // Desktop mode - use Electron API
+        return await window.electronAPI.snapshots.getDiff({
+          hash,
+          projectPath: this.projectPath
+        });
+      }
+    } catch (error) {
+      console.error(`Failed to get diff ${hash}:`, error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Scan project files (via IPC or Socket.IO in remote mode)
+   */
+  async scanProjectFiles(): Promise<any> {
+    const isRemoteMode = !window.electronAPI;
+    
+    try {
+      if (isRemoteMode) {
+        // Remote mode - use Socket.IO
+        const { remoteConnection } = await import('~/services/remote-client/RemoteConnectionSingleton');
+        
+        if (!remoteConnection.isConnected()) {
+          throw new Error('Remote connection not available');
+        }
+        
+        const socket = remoteConnection.getSocket();
+        if (!socket) {
+          throw new Error('Socket not available');
+        }
+        
+        const result = await new Promise<any>((resolve, reject) => {
+          const request = {
+            id: `req-${Date.now()}`,
+            payload: {
+              projectPath: this.projectPath
+            }
+          };
+          
+          socket.emit('snapshot:scanProjectFiles', request, (response: any) => {
+            if (response.success) {
+              resolve(response.data);
+            } else {
+              reject(new Error(response.error || 'Request failed'));
+            }
+          });
+        });
+        
+        return result;
+      } else {
+        // Desktop mode - use Electron API
+        return await window.electronAPI.snapshots.scanProjectFiles({
+          projectPath: this.projectPath
+        });
+      }
+    } catch (error) {
+      console.error(`Failed to scan project files:`, error);
+      return { success: false, error: error.message };
     }
   }
 
@@ -553,6 +692,8 @@ export function useFileContentManager(projectPath?: string) {
     scanFileChanges: manager.scanFileChanges.bind(manager),
     storeContent: manager.storeContent.bind(manager),
     getContent: manager.getContent.bind(manager),
+    getDiff: manager.getDiff.bind(manager),
+    scanProjectFiles: manager.scanProjectFiles.bind(manager),
     createDiff: manager.createDiff.bind(manager),
     applyDiff: manager.applyDiff.bind(manager),
     restoreFiles: manager.restoreFiles.bind(manager),
