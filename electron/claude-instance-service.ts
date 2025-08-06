@@ -3,8 +3,8 @@ import { BrowserWindow, ipcMain } from 'electron';
 import { join } from 'path';
 import { homedir } from 'os';
 import { existsSync, readdirSync, statSync } from 'fs';
-import { ClaudeDetector } from './claude-detector';
-import { ClaudeSessionService } from './claude-session-service';
+import { ClaudeDetector } from './claude-detector.js';
+import { ClaudeSessionService } from './claude-session-service.js';
 import type { IPty } from 'node-pty';
 
 interface ClaudeInstanceConfig {

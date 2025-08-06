@@ -2,7 +2,7 @@ import * as pty from 'node-pty';
 import { join } from 'path';
 import { homedir } from 'os';
 import { existsSync, readdirSync, statSync } from 'fs';
-import { ClaudeDetector } from './claude-detector';
+import { ClaudeDetector } from './claude-detector.js';
 export class ClaudeInstanceService {
     claudeInstances = new Map();
     sessionService;
