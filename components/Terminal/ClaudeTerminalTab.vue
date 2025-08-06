@@ -122,6 +122,7 @@ let cleanupErrorListener: (() => void) | null = null;
 let cleanupExitListener: (() => void) | null = null;
 let emergencyCleanupListener: (() => void) | null = null;
 
+
 const personality = computed(() => {
   return props.instance.personalityId
     ? instancesStore.getPersonalityById(props.instance.personalityId)
@@ -160,6 +161,7 @@ const autoScrollIfNeeded = () => {
 
 const initTerminal = () => {
   if (!terminalElement.value) return;
+  
 
   terminal = new Terminal({
     theme: {
@@ -204,7 +206,7 @@ const initTerminal = () => {
   fitAddon.fit();
 
   terminal.attachCustomKeyEventHandler((event: KeyboardEvent) => {
-
+    
     // Block Cmd+Enter to prevent unwanted character insertion
     if (event.metaKey && event.key === 'Enter') {
       event.preventDefault();
@@ -291,6 +293,37 @@ const initTerminal = () => {
 
   // Send terminal input to Claude
   terminal.onData(async (data: string) => {
+    // Block the specific 13-byte bracketed paste sequence that occurs with Cmd+Enter + clipboard image
+    // [27, 91, 50, 48, 48, 126, 13, 27, 91, 50, 48, 49, 126] = ESC[200~\rESC[201~
+    if (data.length === 13 && 
+        data.charCodeAt(0) === 27 && data.charCodeAt(1) === 91 && 
+        data.charCodeAt(2) === 50 && data.charCodeAt(3) === 48 && 
+        data.charCodeAt(4) === 48 && data.charCodeAt(5) === 126 &&
+        data.charCodeAt(6) === 13 && // CR in the middle
+        data.charCodeAt(7) === 27 && data.charCodeAt(8) === 91 &&
+        data.charCodeAt(9) === 50 && data.charCodeAt(10) === 48 &&
+        data.charCodeAt(11) === 49 && data.charCodeAt(12) === 126) {
+      // Just send a newline instead of the bracketed paste
+      if (props.instance.status === 'connected') {
+        window.electronAPI.claude.send(props.instance.id, '\n');
+        window.dispatchEvent(new CustomEvent(`claude-prompt-sent-${props.instance.id}`));
+      }
+      return;
+    }
+    
+    // Also block minimal bracketed paste sequences (just newline content)
+    if (data.includes('\x1b[200~') && data.includes('\x1b[201~')) {
+      const pasteContent = data.replace(/\x1b\[200~/, '').replace(/\x1b\[201~/, '');
+      if (pasteContent.length <= 2 && (pasteContent === '\r' || pasteContent === '\n' || pasteContent === '\r\n')) {
+        // Send just a newline
+        if (props.instance.status === 'connected') {
+          window.electronAPI.claude.send(props.instance.id, '\n');
+          window.dispatchEvent(new CustomEvent(`claude-prompt-sent-${props.instance.id}`));
+        }
+        return;
+      }
+    }
+    
     if (props.instance.status === 'connected') {
       // Send all data to Claude immediately for proper terminal handling
       window.electronAPI.claude.send(props.instance.id, data);
