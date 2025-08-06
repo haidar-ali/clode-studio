@@ -32,10 +32,10 @@
           v-if="instance.status === 'connected' || hasSession"
           @click="deleteSession"
           class="icon-button delete-button"
-          title="Stop and delete Claude session permanently"
+          :title="instance.status === 'connected' ? 'Stop and delete Claude session permanently' : 'Delete Claude session permanently'"
         >
           <Icon name="mdi:delete" size="16" />
-          <span>Stop & Delete</span>
+          <span>{{ instance.status === 'connected' ? 'Stop & Delete' : 'Delete' }}</span>
         </button>
         <ClaudeRunConfigSelector
           v-if="instance.status === 'disconnected'"
