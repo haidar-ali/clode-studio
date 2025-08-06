@@ -97,6 +97,20 @@ onMounted(async () => {
       if (connected.value) {
         console.log('Socket.IO connected successfully - real-time features enabled');
         toast.success('Connected to desktop with real-time sync');
+        
+        // After successful connection, wait a bit for workspace info to be received
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Check if we have workspace info from Socket.IO
+        const remoteWorkspace = (window as any).__remoteWorkspace;
+        if (remoteWorkspace?.path) {
+          console.log('Setting workspace from Socket.IO:', remoteWorkspace.path);
+          // Sync workspace to server for API calls
+          await $fetch('/api/workspace/set', {
+            method: 'POST',
+            body: { workspacePath: remoteWorkspace.path }
+          });
+        }
       } else {
         console.warn('Socket.IO connection failed - running in read-only mode');
         toast.warning('Running in read-only mode (no real-time sync)');

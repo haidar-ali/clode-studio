@@ -1,0 +1,32 @@
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
+
+export default defineEventHandler(async (event) => {
+  try {
+    const body = await readBody(event);
+    const { files } = body;
+    
+    const workspacePath = global.__currentWorkspace;
+    if (!workspacePath) {
+      return { success: false, error: 'No workspace selected' };
+    }
+
+    if (!files || !Array.isArray(files) || files.length === 0) {
+      return { success: false, error: 'No files specified' };
+    }
+
+    // Unstage files
+    const filePaths = files.map(f => `"${f}"`).join(' ');
+    await execAsync(`git reset HEAD ${filePaths}`, { cwd: workspacePath });
+
+    return { success: true };
+  } catch (error) {
+    console.error('[API] /git/unstage error:', error);
+    return { 
+      success: false,
+      error: error.message || 'Failed to unstage files' 
+    };
+  }
+});

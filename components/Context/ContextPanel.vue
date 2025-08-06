@@ -141,7 +141,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useContextManager } from '~/composables/useContextManager';
 import { useProjectContextStore } from '~/stores/project-context';
 import { useEditorStore } from '~/stores/editor';
@@ -149,6 +149,16 @@ import { useEditorStore } from '~/stores/editor';
 const contextManager = useContextManager();
 const contextStore = useProjectContextStore();
 const editorStore = useEditorStore();
+
+// Initialize context on mount in remote mode
+onMounted(async () => {
+  const isRemoteMode = !window.electronAPI;
+  
+  if (isRemoteMode && !contextStore.isInitialized) {
+    // Initialize without workspace path - will use remote workspace
+    await contextStore.initialize();
+  }
+});
 
 // Reactive state from composable
 const {
