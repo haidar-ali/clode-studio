@@ -4,7 +4,7 @@ import { dirname, join } from 'path';
 import { spawn, ChildProcess } from 'child_process';
 import Store from 'electron-store';
 import * as pty from 'node-pty';
-import { FSWatcher, existsSync } from 'fs';
+import { FSWatcher, existsSync, mkdirSync, writeFileSync, readFileSync, unlinkSync } from 'fs';
 import { readFile, mkdir } from 'fs/promises';
 import { watch as chokidarWatch } from 'chokidar';
 import { homedir } from 'os';
@@ -72,6 +72,76 @@ const snapshotServices: Map<string, SnapshotService> = new Map();
 const isDev = process.env.NODE_ENV !== 'production';
 const nuxtURL = isDev ? 'http://localhost:3000' : `file://${join(__dirname, '../.output/public/index.html')}`;
 
+// Helper function to save sessions to .claude/sessions/
+function saveSessionsToDisk() {
+  try {
+    const sessionsDir = join(homedir(), '.claude', 'sessions');
+    
+    // Ensure directory exists
+    if (!existsSync(sessionsDir)) {
+      mkdirSync(sessionsDir, { recursive: true });
+    }
+    
+    // Save each session to its own file
+    claudeSessions.forEach((session) => {
+      const sessionFile = join(sessionsDir, `${session.instanceId}.json`);
+      writeFileSync(sessionFile, JSON.stringify(session, null, 2));
+    });
+    
+    // Also save a manifest of active sessions
+    const manifest = {
+      sessions: Array.from(claudeSessions.keys()),
+      lastUpdated: Date.now()
+    };
+    writeFileSync(join(sessionsDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
+    
+    console.log(`Saved ${claudeSessions.size} sessions to .claude/sessions/`);
+  } catch (error) {
+    console.error('Failed to save sessions to disk:', error);
+  }
+}
+
+// Helper function to load sessions from .claude/sessions/
+function loadSessionsFromDisk() {
+  try {
+    const sessionsDir = join(homedir(), '.claude', 'sessions');
+    
+    if (!existsSync(sessionsDir)) {
+      return;
+    }
+    
+    // Load manifest if it exists
+    const manifestFile = join(sessionsDir, 'manifest.json');
+    if (existsSync(manifestFile)) {
+      const manifest = JSON.parse(readFileSync(manifestFile, 'utf-8'));
+      
+      // Load each session file
+      manifest.sessions.forEach((sessionId: string) => {
+        const sessionFile = join(sessionsDir, `${sessionId}.json`);
+        if (existsSync(sessionFile)) {
+          try {
+            const session = JSON.parse(readFileSync(sessionFile, 'utf-8')) as ClaudeSessionData;
+            
+            // Only load sessions less than 24 hours old
+            if (Date.now() - session.lastActive < 24 * 60 * 60 * 1000) {
+              claudeSessions.set(session.instanceId, session);
+            } else {
+              // Clean up old session files
+              unlinkSync(sessionFile);
+            }
+          } catch (err) {
+            console.error(`Failed to load session ${sessionId}:`, err);
+          }
+        }
+      });
+      
+      console.log(`Loaded ${claudeSessions.size} sessions from .claude/sessions/`);
+    }
+  } catch (error) {
+    console.error('Failed to load sessions from disk:', error);
+  }
+}
+
 // Helper function to clean up all resources on reload/refresh
 function cleanupResourcesOnReload() {
   console.log('Cleaning up resources on reload...');
@@ -88,6 +158,8 @@ function cleanupResourcesOnReload() {
         console.log(`Marked session ${instanceId} for auto-start`);
       }
     });
+    // Save sessions to disk before clearing
+    saveSessionsToDisk();
     // Clear the instances map without killing processes
     claudeInstances.clear();
   }
@@ -176,6 +248,9 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  // Load preserved sessions from .claude/sessions/
+  loadSessionsFromDisk();
+  
   // Initialize all service managers (singletons)
   GitServiceManager.getInstance();
   WorktreeManagerGlobal.getInstance();
@@ -307,6 +382,9 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
       lastActive: Date.now()
     });
     
+    // Save to disk immediately
+    saveSessionsToDisk();
+    
     if (shouldRestore) {
       console.log(`Successfully restored Claude session for instance ${instanceId}`);
     }
@@ -327,8 +405,13 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
     claudePty.onExit(({ exitCode, signal }) => {
       mainWindow?.webContents.send(`claude:exit:${instanceId}`, exitCode);
       claudeInstances.delete(instanceId);
-      // Keep session data for potential restoration
-      // It will be cleaned up after 24 hours
+      
+      // Clear auto-start flag when session exits normally
+      const session = claudeSessions.get(instanceId);
+      if (session) {
+        session.shouldAutoStart = false;
+        saveSessionsToDisk();
+      }
     });
 
     return {
