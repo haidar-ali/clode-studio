@@ -88,14 +88,8 @@ function loadSessionsFromDisk() {
                 if (existsSync(sessionFile)) {
                     try {
                         const session = JSON.parse(readFileSync(sessionFile, 'utf-8'));
-                        // Only load sessions less than 24 hours old
-                        if (Date.now() - session.lastActive < 24 * 60 * 60 * 1000) {
-                            claudeSessions.set(session.instanceId, session);
-                        }
-                        else {
-                            // Clean up old session files
-                            unlinkSync(sessionFile);
-                        }
+                        // Load all sessions, no time limit
+                        claudeSessions.set(session.instanceId, session);
                     }
                     catch (err) {
                         console.error(`Failed to load session ${sessionId}:`, err);
@@ -143,19 +137,7 @@ function cleanupResourcesOnReload() {
         });
         terminals.clear();
     }
-    // Clean up very old sessions (older than 24 hours)
-    // We keep sessions for a full day to handle overnight sleep, long breaks, etc.
-    const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
-    const oldSessions = [];
-    claudeSessions.forEach((session, id) => {
-        if (session.lastActive < oneDayAgo) {
-            oldSessions.push(id);
-        }
-    });
-    oldSessions.forEach(id => {
-        console.log(`Removing old session (>24h): ${id}`);
-        claudeSessions.delete(id);
-    });
+    // No cleanup - sessions are kept indefinitely until explicitly deleted by user
     console.log(`Preserved ${claudeSessions.size} recent Claude sessions for restoration`);
     console.log('Resource cleanup completed');
 }
@@ -234,10 +216,8 @@ ipcMain.handle('claude:start', async (event, instanceId, workingDirectory, insta
     }
     // Check if we have a preserved session for this instance
     const preservedSession = claudeSessions.get(instanceId);
-    // Try to restore sessions up to 24 hours old
-    // Claude CLI should handle expired sessions gracefully and create new ones if needed
-    const shouldRestore = preservedSession &&
-        (Date.now() - preservedSession.lastActive < 24 * 60 * 60 * 1000); // Within 24 hours
+    // Always try to restore if session exists
+    const shouldRestore = !!preservedSession;
     try {
         // Detect Claude installation
         const claudeInfo = await ClaudeDetector.detectClaude(workingDirectory);
@@ -451,12 +431,15 @@ ipcMain.handle('claude:send', async (event, instanceId, command) => {
 ipcMain.handle('claude:getPreservedSessions', async () => {
     const preserved = [];
     claudeSessions.forEach((session) => {
-        if (session.shouldAutoStart &&
-            (Date.now() - session.lastActive < 24 * 60 * 60 * 1000)) {
+        if (session.shouldAutoStart) {
             preserved.push({ ...session });
         }
     });
     return preserved;
+});
+// Check if a session exists for an instance
+ipcMain.handle('claude:hasSession', async (event, instanceId) => {
+    return claudeSessions.has(instanceId);
 });
 // Clear auto-start flag after session is restored
 ipcMain.handle('claude:clearAutoStart', async (event, instanceId) => {
@@ -466,6 +449,7 @@ ipcMain.handle('claude:clearAutoStart', async (event, instanceId) => {
     }
     return { success: true };
 });
+// Pause Claude instance (keeps session data)
 ipcMain.handle('claude:stop', async (event, instanceId) => {
     const claudePty = claudeInstances.get(instanceId);
     if (claudePty) {
@@ -474,6 +458,32 @@ ipcMain.handle('claude:stop', async (event, instanceId) => {
         return { success: true };
     }
     return { success: false, error: `No Claude PTY running for instance ${instanceId}` };
+});
+// Stop and delete Claude session permanently
+ipcMain.handle('claude:deleteSession', async (event, instanceId) => {
+    // Stop the process if running
+    const claudePty = claudeInstances.get(instanceId);
+    if (claudePty) {
+        claudePty.kill();
+        claudeInstances.delete(instanceId);
+    }
+    // Remove from session storage
+    claudeSessions.delete(instanceId);
+    // Delete session file from disk
+    try {
+        const sessionsDir = join(homedir(), '.claude', 'sessions');
+        const sessionFile = join(sessionsDir, `${instanceId}.json`);
+        if (existsSync(sessionFile)) {
+            unlinkSync(sessionFile);
+        }
+        // Update manifest
+        saveSessionsToDisk();
+        return { success: true };
+    }
+    catch (error) {
+        console.error(`Failed to delete session ${instanceId}:`, error);
+        return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
 });
 ipcMain.handle('claude:resize', async (event, instanceId, cols, rows) => {
     const claudePty = claudeInstances.get(instanceId);

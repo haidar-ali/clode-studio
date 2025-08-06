@@ -14,19 +14,28 @@
           v-if="instance.status === 'disconnected'"
           @click="startClaude"
           class="icon-button start-button"
-          title="Start Claude"
+          :title="hasSession ? 'Continue Claude session' : 'Start new Claude session'"
         >
           <Icon name="mdi:play" size="16" />
-          <span>Start</span>
+          <span>{{ hasSession ? 'Continue' : 'Start' }}</span>
         </button>
         <button
           v-else-if="instance.status === 'connected'"
           @click="stopClaude"
-          class="icon-button stop-button"
-          title="Stop Claude"
+          class="icon-button pause-button"
+          title="Pause Claude (keeps session)"
         >
-          <Icon name="mdi:stop" size="16" />
-          <span>Stop</span>
+          <Icon name="mdi:pause" size="16" />
+          <span>Pause</span>
+        </button>
+        <button
+          v-if="instance.status === 'connected' || hasSession"
+          @click="deleteSession"
+          class="icon-button delete-button"
+          title="Stop and delete Claude session permanently"
+        >
+          <Icon name="mdi:delete" size="16" />
+          <span>Stop & Delete</span>
         </button>
         <ClaudeRunConfigSelector
           v-if="instance.status === 'disconnected'"
@@ -91,9 +100,14 @@ const selectedRunConfig = ref<ClaudeRunConfig | null>(null);
 provide('workingDirectory', props.instance.workingDirectory);
 
 // Terminal state
+const hasSession = ref(false);
 
-
-
+// Check if session exists on mount
+onMounted(async () => {
+  if (window.electronAPI?.claude?.hasSession) {
+    hasSession.value = await window.electronAPI.claude.hasSession(props.instance.id);
+  }
+});
 
 let terminal: Terminal | null = null;
 let fitAddon: FitAddon | null = null;
@@ -317,9 +331,22 @@ const showWelcomeMessage = () => {
   terminal.writeln('\x1b[36m[Lightweight Context: Enabled]\x1b[0m');
   terminal.writeln('\x1b[90mSmart file discovery and project context available\x1b[0m');
   terminal.writeln('\x1b[33m[Slash Commands: /help]\x1b[0m');
-  terminal.writeln('Click the \x1b[32mStart\x1b[0m button above to launch Claude CLI');
-  terminal.writeln('');
-  terminal.scrollToBottom();
+  
+  // Check if we have a session to show correct button text
+  window.electronAPI?.claude?.hasSession(props.instance.id).then((hasStoredSession: boolean) => {
+    hasSession.value = hasStoredSession;
+    if (hasStoredSession) {
+      terminal.writeln('Click the \x1b[32mContinue\x1b[0m button above to resume your Claude session');
+    } else {
+      terminal.writeln('Click the \x1b[32mStart\x1b[0m button above to launch Claude CLI');
+    }
+    terminal.writeln('');
+    terminal.scrollToBottom();
+  }).catch(() => {
+    terminal.writeln('Click the \x1b[32mStart\x1b[0m button above to launch Claude CLI');
+    terminal.writeln('');
+    terminal.scrollToBottom();
+  });
 };
 
 
@@ -571,14 +598,14 @@ const startClaude = async () => {
 
 const stopClaude = async () => {
   if (terminal) {
-    terminal.writeln('\r\n\x1b[33mStopping Claude CLI...\x1b[0m');
+    terminal.writeln('\r\n\x1b[33mPausing Claude CLI (session preserved)...\x1b[0m');
     autoScrollIfNeeded();
   }
 
   try {
     await window.electronAPI.claude.stop(props.instance.id);
   } catch (error) {
-    console.error('Failed to stop Claude:', error);
+    console.error('Failed to pause Claude:', error);
   }
   
   removeClaudeListeners();
@@ -587,6 +614,39 @@ const stopClaude = async () => {
   if (terminal) {
     terminal.clear();
     showWelcomeMessage();
+  }
+};
+
+const deleteSession = async () => {
+  const confirmed = confirm('Are you sure you want to delete this Claude session? This cannot be undone.');
+  if (!confirmed) return;
+  
+  if (terminal) {
+    terminal.writeln('\r\n\x1b[31mDeleting Claude session permanently...\x1b[0m');
+    autoScrollIfNeeded();
+  }
+
+  try {
+    await window.electronAPI.claude.deleteSession(props.instance.id);
+    hasSession.value = false;
+    
+    // If currently connected, update status
+    if (props.instance.status === 'connected') {
+      removeClaudeListeners();
+      emit('status-change', 'disconnected');
+    }
+    
+    if (terminal) {
+      terminal.clear();
+      terminal.writeln('\x1b[90mSession deleted. Start a new session when ready.\x1b[0m');
+      showWelcomeMessage();
+    }
+  } catch (error) {
+    console.error('Failed to delete Claude session:', error);
+    if (terminal) {
+      terminal.writeln('\x1b[31mFailed to delete session\x1b[0m');
+      autoScrollIfNeeded();
+    }
   }
 };
 
@@ -828,12 +888,22 @@ onUnmounted(() => {
   background: #0fa418;
 }
 
-.stop-button {
-  background: #cd3131;
+.pause-button {
+  background: #f59e0b;
   color: white;
 }
 
-.stop-button:hover {
+.pause-button:hover {
+  background: #f97316;
+}
+
+.delete-button {
+  background: #cd3131;
+  color: white;
+  margin-left: 4px;
+}
+
+.delete-button:hover {
   background: #e14444;
 }
 

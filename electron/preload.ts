@@ -23,6 +23,8 @@ const electronAPI = {
     }> => ipcRenderer.invoke('claude:detectInstallation'),
     getPreservedSessions: () => ipcRenderer.invoke('claude:getPreservedSessions'),
     clearAutoStart: (instanceId: string) => ipcRenderer.invoke('claude:clearAutoStart', instanceId),
+    hasSession: (instanceId: string) => ipcRenderer.invoke('claude:hasSession', instanceId),
+    deleteSession: (instanceId: string) => ipcRenderer.invoke('claude:deleteSession', instanceId),
     send: (instanceId: string, command: string) => 
       ipcRenderer.invoke('claude:send', instanceId, command),
     stop: (instanceId: string) => 
