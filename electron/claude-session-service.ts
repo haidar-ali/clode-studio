@@ -4,6 +4,7 @@ import { join } from 'path';
 interface SessionData {
   instanceId: string;
   sessionId?: string;
+  previousSessionIds?: string[]; // Keep history of previous session IDs for fallback
   instanceName?: string;
   workingDirectory: string;
   lastActive: number;
@@ -197,5 +198,56 @@ export class ClaudeSessionService {
         console.log(`Marked session ${instanceId} for auto-start`);
       }
     });
+  }
+
+  // Update session ID and maintain history
+  updateSessionId(instanceId: string, newSessionId: string): void {
+    const session = this.claudeSessions.get(instanceId);
+    if (session) {
+      // Initialize previousSessionIds if it doesn't exist
+      if (!session.previousSessionIds) {
+        session.previousSessionIds = [];
+      }
+      
+      // Add current sessionId to history if it exists and is different
+      if (session.sessionId && session.sessionId !== newSessionId) {
+        // Keep only the last 5 session IDs for fallback
+        session.previousSessionIds.unshift(session.sessionId);
+        if (session.previousSessionIds.length > 5) {
+          session.previousSessionIds = session.previousSessionIds.slice(0, 5);
+        }
+      }
+      
+      // Update to new session ID
+      session.sessionId = newSessionId;
+      this.saveSessionsToDisk();
+      
+      console.log(`Updated session ID for ${instanceId}: ${newSessionId} (history: ${session.previousSessionIds.length} previous IDs)`);
+    }
+  }
+
+  // Get session with fallback IDs for restoration attempts
+  getSessionWithFallbacks(instanceId: string): { current?: string; fallbacks: string[] } {
+    const session = this.claudeSessions.get(instanceId);
+    if (!session) {
+      return { fallbacks: [] };
+    }
+    
+    const fallbacks: string[] = [];
+    
+    // Add current session ID first
+    if (session.sessionId) {
+      fallbacks.push(session.sessionId);
+    }
+    
+    // Add previous session IDs as fallbacks
+    if (session.previousSessionIds && session.previousSessionIds.length > 0) {
+      fallbacks.push(...session.previousSessionIds);
+    }
+    
+    return {
+      current: session.sessionId,
+      fallbacks: fallbacks
+    };
   }
 }

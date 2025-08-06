@@ -184,12 +184,24 @@ ipcMain.handle('claude:start', async (event, instanceId, workingDirectory, insta
             const v = c === 'x' ? r : (r & 0x3 | 0x8);
             return v.toString(16);
         });
-        // Build base arguments
+        // Build base arguments with fallback support
         let baseArgs;
-        if (shouldRestore && preservedSession?.sessionId) {
-            // Use --resume to continue the previous conversation
-            baseArgs = ['--resume', preservedSession.sessionId, ...debugArgs];
-            console.log(`Resuming conversation with session ID ${preservedSession.sessionId} for instance ${instanceId}`);
+        let sessionToRestore;
+        if (shouldRestore && preservedSession) {
+            // Get all possible session IDs (current + fallbacks)
+            const sessionOptions = sessionService.getSessionWithFallbacks(instanceId);
+            if (sessionOptions.fallbacks.length > 0) {
+                // We'll try the first one, and handle failures in the process output
+                sessionToRestore = sessionOptions.fallbacks[0];
+                baseArgs = ['--resume', sessionToRestore, ...debugArgs];
+                console.log(`Attempting to resume conversation with session ID ${sessionToRestore} for instance ${instanceId}`);
+                console.log(`Have ${sessionOptions.fallbacks.length - 1} fallback session IDs available if needed`);
+            }
+            else {
+                // No session IDs available, start fresh
+                baseArgs = ['--session-id', sessionUuid, ...debugArgs];
+                console.log(`No session IDs available for restoration, starting new session with ID ${sessionUuid}`);
+            }
         }
         else {
             // Start a new session with a specific ID
@@ -207,8 +219,8 @@ ipcMain.handle('claude:start', async (event, instanceId, workingDirectory, insta
                 // When we have custom args, we need to rebuild the command
                 // Include resume or session-id based on whether we're restoring
                 let allArgs;
-                if (shouldRestore && preservedSession?.sessionId) {
-                    allArgs = ['--resume', preservedSession.sessionId, ...runConfig.args, ...debugArgs];
+                if (sessionToRestore) {
+                    allArgs = ['--resume', sessionToRestore, ...runConfig.args, ...debugArgs];
                 }
                 else {
                     allArgs = ['--session-id', sessionUuid, ...runConfig.args, ...debugArgs];
@@ -250,18 +262,28 @@ ipcMain.handle('claude:start', async (event, instanceId, workingDirectory, insta
         // Store this instance
         claudeInstances.set(instanceId, claudePty);
         // Store session data for potential restoration
-        // Store the initial session ID (either new UUID or the one we're trying to resume)
-        const initialSessionId = shouldRestore && preservedSession?.sessionId
-            ? preservedSession.sessionId
-            : sessionUuid;
-        sessionService.set(instanceId, {
-            sessionId: initialSessionId,
-            instanceId,
-            workingDirectory,
-            instanceName,
-            runConfig,
-            lastActive: Date.now()
-        });
+        // Store the initial session ID (either the one we're trying to resume or new UUID)
+        const initialSessionId = sessionToRestore || sessionUuid;
+        // If we're restoring, keep the existing session data with history
+        if (shouldRestore && preservedSession) {
+            // Update existing session, preserving history
+            preservedSession.lastActive = Date.now();
+            if (!sessionToRestore) {
+                // Starting fresh, but keep history
+                sessionService.updateSessionId(instanceId, sessionUuid);
+            }
+        }
+        else {
+            // Create new session
+            sessionService.set(instanceId, {
+                sessionId: initialSessionId,
+                instanceId,
+                workingDirectory,
+                instanceName,
+                runConfig,
+                lastActive: Date.now()
+            });
+        }
         // Save to disk immediately
         sessionService.saveSessionsToDisk();
         if (shouldRestore) {
@@ -290,8 +312,7 @@ ipcMain.handle('claude:start', async (event, instanceId, workingDirectory, insta
                             const session = sessionService.get(instanceId);
                             if (session && newestSessionId !== session.sessionId) {
                                 console.log(`[Claude Session] Updated session ID for ${instanceId}: ${newestSessionId} (was: ${session.sessionId})`);
-                                session.sessionId = newestSessionId;
-                                sessionService.saveSessionsToDisk();
+                                sessionService.updateSessionId(instanceId, newestSessionId);
                                 // Send log to renderer
                                 mainWindow?.webContents.send('log', `Session updated to: ${newestSessionId}`);
                             }
@@ -303,8 +324,26 @@ ipcMain.handle('claude:start', async (event, instanceId, workingDirectory, insta
                 }
             }, 3000); // Wait 3 seconds for Claude to create the session file
         }
+        // Track if we've seen a session restoration failure
+        let sessionRestorationFailed = false;
+        let attemptedFallback = false;
         // Handle output from Claude
         claudePty.onData((data) => {
+            // Detect session restoration failure
+            if (!attemptedFallback && data.includes('No conversation found with session ID:')) {
+                sessionRestorationFailed = true;
+                console.log(`[Claude Session] Session restoration failed for ${instanceId}`);
+                // Get fallback sessions
+                const sessionOptions = sessionService.getSessionWithFallbacks(instanceId);
+                if (sessionOptions.fallbacks.length > 1) {
+                    // We have fallbacks (skip the first one as we already tried it)
+                    const fallbackId = sessionOptions.fallbacks[1];
+                    console.log(`[Claude Session] Could retry with fallback session ID: ${fallbackId}`);
+                    // Note: We can't restart the process here, but we log for debugging
+                    // In future, we could implement automatic retry with fallback
+                }
+                attemptedFallback = true;
+            }
             // Update last active time on any output
             const session = sessionService.get(instanceId);
             if (session) {
