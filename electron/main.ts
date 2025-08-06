@@ -4,7 +4,7 @@ import { dirname, join } from 'path';
 import { spawn, ChildProcess } from 'child_process';
 import Store from 'electron-store';
 import * as pty from 'node-pty';
-import { FSWatcher, existsSync, mkdirSync, writeFileSync, readFileSync, unlinkSync } from 'fs';
+import { FSWatcher, existsSync, mkdirSync, writeFileSync, readFileSync, unlinkSync, readdirSync, statSync } from 'fs';
 import { readFile, mkdir } from 'fs/promises';
 import { watch as chokidarWatch } from 'chokidar';
 import { homedir } from 'os';
@@ -43,7 +43,7 @@ const claudeInstances: Map<string, pty.IPty> = new Map();
 
 // Map to store Claude session data for restoration after refresh
 interface ClaudeSessionData {
-  claudeSessionId?: string;  // Claude's internal session ID (captured from output)
+  sessionId?: string;  // Claude's session ID (we'll capture the new one after resume)
   instanceId: string;
   workingDirectory: string;
   instanceName?: string;
@@ -274,11 +274,11 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
   // Always try to restore if session exists
   const shouldRestore = !!preservedSession;
 
-  // If restoring, add a delay to ensure any locks are released
+  // If restoring, add a small delay to ensure clean state
   if (shouldRestore) {
     console.log(`Preparing to restore session for ${instanceId}...`);
-    // Longer wait to ensure lock files are completely released
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    // Small delay to ensure clean state
+    await new Promise(resolve => setTimeout(resolve, 1000));
   }
 
   try {
@@ -288,29 +288,27 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
     // Get the command configuration
     const debugArgs = process.env.CLAUDE_DEBUG === 'true' ? ['--debug'] : [];
     
-    // Always generate a new session ID to avoid lock conflicts
-    // The conversation context is preserved through --continue, not the session ID
+    // Session management strategy:
+    // - Use --resume <sessionId> when restoring to continue the conversation
+    // - Use --session-id <uuid> for new sessions to have a specific ID
+    // - We need to capture the NEW session ID that Claude creates after resuming
+    
     let sessionUuid: string = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
       const r = Math.random() * 16 | 0;
       const v = c === 'x' ? r : (r & 0x3 | 0x8);
       return v.toString(16);
     });
     
-    console.log(`Using session ID ${sessionUuid} for instance ${instanceId}`);
-    
-    // If we had a previous session ID, log it for debugging
-    if (preservedSession?.claudeSessionId) {
-      console.log(`Previous session ID was ${preservedSession.claudeSessionId}, using new ID to avoid lock conflicts`);
-    }
-    
     // Build base arguments
-    // Add --continue if we're restoring a session
-    const baseArgs = shouldRestore 
-      ? ['--continue', '--session-id', sessionUuid, ...debugArgs]
-      : ['--session-id', sessionUuid, ...debugArgs];
-    
-    if (shouldRestore) {
-      console.log(`Adding --continue flag to restore conversation for ${instanceId}`);
+    let baseArgs: string[];
+    if (shouldRestore && preservedSession?.sessionId) {
+      // Use --resume to continue the previous conversation
+      baseArgs = ['--resume', preservedSession.sessionId, ...debugArgs];
+      console.log(`Resuming conversation with session ID ${preservedSession.sessionId} for instance ${instanceId}`);
+    } else {
+      // Start a new session with a specific ID
+      baseArgs = ['--session-id', sessionUuid, ...debugArgs];
+      console.log(`Starting new session with ID ${sessionUuid} for instance ${instanceId}`);
     }
 
     let { command, args: commandArgs, useShell } = ClaudeDetector.getClaudeCommand(claudeInfo, baseArgs);
@@ -323,10 +321,13 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
       }
       if (runConfig.args && runConfig.args.length > 0) {
         // When we have custom args, we need to rebuild the command
-        // Include --continue if restoring, and always include session-id to ensure isolation
-        const allArgs = shouldRestore
-          ? ['--continue', '--session-id', sessionUuid, ...runConfig.args, ...debugArgs]
-          : ['--session-id', sessionUuid, ...runConfig.args, ...debugArgs];
+        // Include resume or session-id based on whether we're restoring
+        let allArgs: string[];
+        if (shouldRestore && preservedSession?.sessionId) {
+          allArgs = ['--resume', preservedSession.sessionId, ...runConfig.args, ...debugArgs];
+        } else {
+          allArgs = ['--session-id', sessionUuid, ...runConfig.args, ...debugArgs];
+        }
         const result = ClaudeDetector.getClaudeCommand(claudeInfo, allArgs);
         command = result.command;
         commandArgs = result.args;
@@ -372,8 +373,13 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
     claudeInstances.set(instanceId, claudePty);
     
     // Store session data for potential restoration
+    // Store the initial session ID (either new UUID or the one we're trying to resume)
+    const initialSessionId = shouldRestore && preservedSession?.sessionId 
+      ? preservedSession.sessionId 
+      : sessionUuid;
+    
     claudeSessions.set(instanceId, {
-      claudeSessionId: sessionUuid,  // Store the UUID we're using
+      sessionId: initialSessionId,
       instanceId,
       workingDirectory,
       instanceName,
@@ -388,6 +394,46 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
       console.log(`Successfully restored Claude session for instance ${instanceId}`);
     }
 
+    // After starting Claude, detect the new session file
+    if (shouldRestore) {
+      // Get the Claude project directory for this workspace
+      const projectDirName = workingDirectory.replace(/\//g, '-');
+      const claudeProjectDir = join(homedir(), '.claude', 'projects', projectDirName);
+      
+      // Wait a bit for Claude to create the new session file
+      setTimeout(async () => {
+        try {
+          if (existsSync(claudeProjectDir)) {
+            // Get all .jsonl files sorted by creation time
+            const files = readdirSync(claudeProjectDir)
+              .filter(f => f.endsWith('.jsonl'))
+              .map(f => {
+                const fullPath = join(claudeProjectDir, f);
+                const stats = statSync(fullPath);
+                return { name: f.replace('.jsonl', ''), time: stats.mtimeMs };
+              })
+              .sort((a, b) => b.time - a.time);
+            
+            if (files.length > 0) {
+              const newestSessionId = files[0].name;
+              const session = claudeSessions.get(instanceId);
+              
+              if (session && newestSessionId !== session.sessionId) {
+                console.log(`[Claude Session] Updated session ID for ${instanceId}: ${newestSessionId} (was: ${session.sessionId})`);
+                session.sessionId = newestSessionId;
+                saveSessionsToDisk();
+                
+                // Send log to renderer
+                mainWindow?.webContents.send('log', `Session updated to: ${newestSessionId}`);
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Failed to detect new session ID:', error);
+        }
+      }, 3000); // Wait 3 seconds for Claude to create the session file
+    }
+    
     // Handle output from Claude
     claudePty.onData((data: string) => {
       // Update last active time on any output
@@ -561,14 +607,13 @@ ipcMain.handle('claude:stop', async (event, instanceId: string) => {
     try {
       console.log(`Stopping Claude instance ${instanceId} (PID: ${claudePty.pid})...`);
       
-      // Send exit command to Claude to ensure clean shutdown
-      claudePty.write('/exit\n');
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Then try graceful shutdown with SIGINT (Ctrl+C)
+      // Send SIGINT (Ctrl+C) for graceful shutdown
+      // This should trigger Claude to save the session
       claudePty.kill('SIGINT');
+      console.log(`Sent SIGINT to process ${claudePty.pid}`);
       
-      // Wait for graceful shutdown
+      // Wait for graceful shutdown and session save
+      // Claude likely auto-saves on exit, so give it time
       await new Promise(resolve => setTimeout(resolve, 2000));
       
       // Check if process is still alive and send SIGTERM if needed
@@ -617,11 +662,7 @@ ipcMain.handle('claude:deleteSession', async (event, instanceId: string) => {
   const claudePty = claudeInstances.get(instanceId);
   if (claudePty) {
     try {
-      // Send EOF to let Claude save any state
-      claudePty.write('\x04');
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Try graceful shutdown first
+      // Send SIGINT for graceful shutdown
       claudePty.kill('SIGINT');
       await new Promise(resolve => setTimeout(resolve, 1000));
       

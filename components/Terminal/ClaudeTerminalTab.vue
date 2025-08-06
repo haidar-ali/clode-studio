@@ -517,6 +517,15 @@ const startClaude = async () => {
     if (result.restored) {
       terminal.writeln('\x1b[32m✓ Session restored successfully!\x1b[0m');
       terminal.writeln('Your previous conversation has been continued.');
+      
+      // Add "Continue" text that user can just press Enter on
+      // Wait a bit for Claude to show its prompt first
+      setTimeout(() => {
+        if (props.instance.status === 'connected') {
+          // Write "Continue" to the terminal so user can just press Enter
+          window.electronAPI.claude.send(props.instance.id, 'Continue');
+        }
+      }, 2000);
     } else if (result.restorationFailed) {
       terminal.writeln('\x1b[33m⚠ Previous session expired, starting fresh.\x1b[0m');
     } else {

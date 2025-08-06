@@ -208,8 +208,6 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
               }
             }
           }
-          
-          await this.saveToStorage();
         } catch (error) {
           console.error('Failed to restore preserved sessions:', error);
         }
