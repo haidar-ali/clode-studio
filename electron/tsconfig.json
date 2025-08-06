@@ -14,6 +14,6 @@
     "resolveJsonModule": true,
     "types": ["node", "electron"]
   },
-  "include": ["main.ts", "ast-parser.ts", "knowledge-service.ts", "knowledge-types.ts", "project-detector.ts", "universal-parser.ts", "claude-session-service.ts"],
+  "include": ["main.ts", "ast-parser.ts", "knowledge-service.ts", "knowledge-types.ts", "project-detector.ts", "universal-parser.ts", "claude-session-service.ts", "claude-instance-service.ts"],
   "exclude": ["node_modules", "**/*.js", "preload.ts"]
 }

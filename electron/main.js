@@ -24,6 +24,7 @@ import { SnapshotService } from './snapshot-service.js';
 import { setupGitTimelineHandlers } from './git-timeline-handlers.js';
 import { ghostTextService } from './ghost-text-service.js';
 import { ClaudeSessionService } from './claude-session-service.js';
+import { ClaudeInstanceService } from './claude-instance-service.js';
 // Load environment variables from .env file
 import { config } from 'dotenv';
 config();
@@ -32,10 +33,9 @@ const __dirname = dirname(__filename);
 let mainWindow = null;
 const store = new Store();
 const fileWatchers = new Map();
-// Multi-instance Claude support
-const claudeInstances = new Map();
-// Initialize Claude session service
+// Initialize Claude services
 const sessionService = new ClaudeSessionService(store);
+const instanceService = new ClaudeInstanceService(sessionService);
 // Helper function to start Claude with a specific session ID (used for retries)
 async function startClaudeWithSessionId(instanceId, workingDirectory, instanceName, runConfig, sessionId, attemptNumber = 0, totalAttempts = 1) {
     try {
@@ -85,7 +85,7 @@ async function startClaudeWithSessionId(instanceId, workingDirectory, instanceNa
             useConpty: false
         });
         // Store the instance
-        claudeInstances.set(instanceId, claudePty);
+        instanceService.setInstance(instanceId, claudePty);
         // Get remaining fallback session IDs for further retries
         const sessionOptions = sessionService.getSessionWithFallbacks(instanceId);
         let localAttemptIndex = attemptNumber;
@@ -128,7 +128,7 @@ async function startClaudeWithSessionId(instanceId, workingDirectory, instanceNa
                         console.error('Error killing Claude process for retry:', error);
                     }
                     // Remove from instances
-                    claudeInstances.delete(instanceId);
+                    instanceService.deleteInstance(instanceId);
                     // Retry with next session ID
                     setTimeout(async () => {
                         const retryResult = await startClaudeWithSessionId(instanceId, workingDirectory, instanceName, runConfig, nextSessionId, localAttemptIndex, totalAttempts);
@@ -175,7 +175,7 @@ async function startClaudeWithSessionId(instanceId, workingDirectory, instanceNa
             // Only send exit event if not killing for retry
             if (!isKillingForRetry) {
                 mainWindow?.webContents.send(`claude:exit:${instanceId}`, event.exitCode);
-                claudeInstances.delete(instanceId);
+                instanceService.deleteInstance(instanceId);
             }
         });
         return { success: true, pid: claudePty.pid };
@@ -206,10 +206,10 @@ function cleanupResourcesOnReload() {
     console.log('Cleaning up resources on reload...');
     // Don't kill Claude instances immediately - just clear the map
     // The sessions will be restored after reload
-    if (claudeInstances.size > 0) {
-        console.log(`Preserving ${claudeInstances.size} Claude sessions for restoration...`);
+    if (instanceService.getInstanceCount() > 0) {
+        console.log(`Preserving ${instanceService.getInstanceCount()} Claude sessions for restoration...`);
         // Mark all active sessions for auto-start
-        claudeInstances.forEach((pty, instanceId) => {
+        instanceService.getAllInstances().forEach((pty, instanceId) => {
             const session = sessionService.get(instanceId);
             if (session) {
                 session.shouldAutoStart = true;
@@ -219,7 +219,7 @@ function cleanupResourcesOnReload() {
         // Save sessions to disk before clearing
         sessionService.saveSessionsToDisk();
         // Clear the instances map without killing processes
-        claudeInstances.clear();
+        instanceService.clearInstances();
     }
     // Clean up terminal instances (these can't be restored easily)
     if (terminals.size > 0) {
@@ -258,6 +258,8 @@ function createWindow() {
         show: false
     });
     mainWindow.loadURL(nuxtURL);
+    // Set mainWindow in services that need it
+    instanceService.setMainWindow(mainWindow);
     mainWindow.once('ready-to-show', () => {
         mainWindow?.show();
         if (isDev) {
@@ -278,10 +280,10 @@ function createWindow() {
     mainWindow.on('closed', () => {
         mainWindow = null;
         // Clean up all Claude instances
-        claudeInstances.forEach((pty, instanceId) => {
+        instanceService.getAllInstances().forEach((pty, instanceId) => {
             pty.kill();
         });
-        claudeInstances.clear();
+        instanceService.clearInstances();
     });
 }
 app.whenReady().then(async () => {
@@ -309,7 +311,7 @@ app.on('window-all-closed', () => {
 });
 // Claude Process Management using PTY with multi-instance support
 ipcMain.handle('claude:start', async (event, instanceId, workingDirectory, instanceName, runConfig) => {
-    if (claudeInstances.has(instanceId)) {
+    if (instanceService.hasInstance(instanceId)) {
         return { success: false, error: 'Claude instance already running' };
     }
     // Check if we have a preserved session for this instance
@@ -412,7 +414,7 @@ ipcMain.handle('claude:start', async (event, instanceId, workingDirectory, insta
             }
         });
         // Store this instance
-        claudeInstances.set(instanceId, claudePty);
+        instanceService.setInstance(instanceId, claudePty);
         // Store session data for potential restoration
         // Store the initial session ID (either the one we're trying to resume or new UUID)
         const initialSessionId = sessionToRestore || sessionUuid;
@@ -522,7 +524,7 @@ ipcMain.handle('claude:start', async (event, instanceId, workingDirectory, insta
                         console.error('Error killing Claude process for retry:', error);
                     }
                     // Remove from instances map
-                    claudeInstances.delete(instanceId);
+                    instanceService.deleteInstance(instanceId);
                     // Wait a bit before retrying
                     setTimeout(async () => {
                         // Restart Claude with the fallback session ID
@@ -621,7 +623,7 @@ ipcMain.handle('claude:start', async (event, instanceId, workingDirectory, insta
             // Don't send exit event if we're killing for retry
             if (!isKillingForRetry) {
                 mainWindow?.webContents.send(`claude:exit:${instanceId}`, exitCode);
-                claudeInstances.delete(instanceId);
+                instanceService.deleteInstance(instanceId);
                 // Clear auto-start flag when session exits normally
                 const session = sessionService.get(instanceId);
                 if (session) {
@@ -678,7 +680,7 @@ ipcMain.handle('claude:start', async (event, instanceId, workingDirectory, insta
                     }
                 });
                 // Store instance and session data
-                claudeInstances.set(instanceId, claudePty);
+                instanceService.setInstance(instanceId, claudePty);
                 sessionService.set(instanceId, {
                     instanceId,
                     workingDirectory,
@@ -696,7 +698,7 @@ ipcMain.handle('claude:start', async (event, instanceId, workingDirectory, insta
                 });
                 claudePty.onExit(({ exitCode }) => {
                     mainWindow?.webContents.send(`claude:exit:${instanceId}`, exitCode);
-                    claudeInstances.delete(instanceId);
+                    instanceService.deleteInstance(instanceId);
                 });
                 console.log(`Started fresh Claude session for ${instanceId} after restoration failed`);
                 return {
@@ -720,7 +722,7 @@ ipcMain.handle('claude:start', async (event, instanceId, workingDirectory, insta
     }
 });
 ipcMain.handle('claude:send', async (event, instanceId, command) => {
-    const claudePty = claudeInstances.get(instanceId);
+    const claudePty = instanceService.getInstance(instanceId);
     if (!claudePty) {
         return { success: false, error: `Claude instance is not running. Please start a Claude instance in the terminal first.` };
     }
@@ -752,7 +754,7 @@ ipcMain.handle('claude:clearAutoStart', async (event, instanceId) => {
 });
 // Pause Claude instance (keeps session data)
 ipcMain.handle('claude:stop', async (event, instanceId) => {
-    const claudePty = claudeInstances.get(instanceId);
+    const claudePty = instanceService.getInstance(instanceId);
     if (claudePty) {
         try {
             console.log(`Stopping Claude instance ${instanceId} (PID: ${claudePty.pid})...`);
@@ -787,7 +789,7 @@ ipcMain.handle('claude:stop', async (event, instanceId) => {
         catch (error) {
             console.error(`Error stopping Claude instance ${instanceId}:`, error);
         }
-        claudeInstances.delete(instanceId);
+        instanceService.deleteInstance(instanceId);
         // Ensure session data is saved
         const session = sessionService.get(instanceId);
         if (session) {
@@ -803,7 +805,7 @@ ipcMain.handle('claude:stop', async (event, instanceId) => {
 ipcMain.handle('claude:deleteSession', async (event, instanceId) => {
     console.log(`Deleting session for instance ${instanceId}...`);
     // Stop the process if running (with graceful shutdown)
-    const claudePty = claudeInstances.get(instanceId);
+    const claudePty = instanceService.getInstance(instanceId);
     if (claudePty) {
         try {
             // Send SIGINT for graceful shutdown
@@ -821,7 +823,7 @@ ipcMain.handle('claude:deleteSession', async (event, instanceId) => {
         catch (error) {
             console.error(`Error stopping Claude instance ${instanceId}:`, error);
         }
-        claudeInstances.delete(instanceId);
+        instanceService.deleteInstance(instanceId);
     }
     // Remove from session storage
     sessionService.delete(instanceId);
@@ -843,18 +845,7 @@ ipcMain.handle('claude:deleteSession', async (event, instanceId) => {
     }
 });
 ipcMain.handle('claude:resize', async (event, instanceId, cols, rows) => {
-    const claudePty = claudeInstances.get(instanceId);
-    if (claudePty) {
-        try {
-            claudePty.resize(cols, rows);
-            return { success: true };
-        }
-        catch (error) {
-            console.error(`Failed to resize PTY for ${instanceId}:`, error);
-            return { success: false, error: error instanceof Error ? error.message : String(error) };
-        }
-    }
-    return { success: false, error: `No Claude PTY running for instance ${instanceId}` };
+    return instanceService.resizeTerminal(instanceId, cols, rows);
 });
 // Get home directory
 ipcMain.handle('getHomeDir', () => {
@@ -2190,7 +2181,7 @@ app.on('before-quit', async () => {
         console.error('Failed to shutdown LSP servers:', error);
     }
     // Clean up Claude instances
-    for (const [instanceId, claudePty] of claudeInstances) {
+    for (const [instanceId, claudePty] of instanceService.getAllInstances()) {
         try {
             claudePty.kill();
         }
@@ -2198,7 +2189,7 @@ app.on('before-quit', async () => {
             console.error(`Failed to kill Claude instance ${instanceId}:`, error);
         }
     }
-    claudeInstances.clear();
+    instanceService.clearInstances();
 });
 // MCP (Model Context Protocol) Management - Using Claude CLI
 ipcMain.handle('mcp:list', async (event, workspacePath) => {
