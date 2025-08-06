@@ -5,6 +5,8 @@ const electronAPI = {
     claude: {
         start: (instanceId, workingDirectory, instanceName, runConfig) => electron_1.ipcRenderer.invoke('claude:start', instanceId, workingDirectory, instanceName, runConfig),
         detectInstallation: () => electron_1.ipcRenderer.invoke('claude:detectInstallation'),
+        getPreservedSessions: () => electron_1.ipcRenderer.invoke('claude:getPreservedSessions'),
+        clearAutoStart: (instanceId) => electron_1.ipcRenderer.invoke('claude:clearAutoStart', instanceId),
         send: (instanceId, command) => electron_1.ipcRenderer.invoke('claude:send', instanceId, command),
         stop: (instanceId) => electron_1.ipcRenderer.invoke('claude:stop', instanceId),
         resize: (instanceId, cols, rows) => electron_1.ipcRenderer.invoke('claude:resize', instanceId, cols, rows),

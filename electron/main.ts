@@ -43,12 +43,13 @@ const claudeInstances: Map<string, pty.IPty> = new Map();
 
 // Map to store Claude session data for restoration after refresh
 interface ClaudeSessionData {
-  sessionId?: string;
+  claudeSessionId?: string;  // Claude's internal session ID (captured from output)
   instanceId: string;
   workingDirectory: string;
   instanceName?: string;
   runConfig?: { command?: string; args?: string[] };
   lastActive: number;
+  shouldAutoStart?: boolean;  // Flag to auto-start on app load
 }
 const claudeSessions: Map<string, ClaudeSessionData> = new Map();
 
@@ -79,8 +80,15 @@ function cleanupResourcesOnReload() {
   // The sessions will be restored after reload
   if (claudeInstances.size > 0) {
     console.log(`Preserving ${claudeInstances.size} Claude sessions for restoration...`);
-    // Sessions data is already stored in claudeSessions map
-    // Just clear the instances map without killing processes
+    // Mark all active sessions for auto-start
+    claudeInstances.forEach((pty, instanceId) => {
+      const session = claudeSessions.get(instanceId);
+      if (session) {
+        session.shouldAutoStart = true;
+        console.log(`Marked session ${instanceId} for auto-start`);
+      }
+    });
+    // Clear the instances map without killing processes
     claudeInstances.clear();
   }
   
@@ -214,8 +222,24 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
     // Get the command configuration
     const debugArgs = process.env.CLAUDE_DEBUG === 'true' ? ['--debug'] : [];
     
-    // Add --continue flag if we're restoring a session
-    const baseArgs = shouldRestore ? ['--continue', ...debugArgs] : debugArgs;
+    // Generate or use a UUID for this instance to ensure session isolation
+    // Each instance gets its own unique session ID to prevent mixing
+    let sessionUuid: string;
+    if (shouldRestore && preservedSession?.claudeSessionId) {
+      // Use the preserved session UUID
+      sessionUuid = preservedSession.claudeSessionId;
+    } else {
+      // Generate a new UUID for this instance
+      // Simple UUID v4 generation
+      sessionUuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+    }
+    
+    // Use --session-id to ensure each instance has its own isolated session
+    const baseArgs = ['--session-id', sessionUuid, ...debugArgs];
 
     let { command, args: commandArgs, useShell } = ClaudeDetector.getClaudeCommand(claudeInfo, baseArgs);
 
@@ -227,10 +251,8 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
       }
       if (runConfig.args && runConfig.args.length > 0) {
         // When we have custom args, we need to rebuild the command
-        // Include --continue if restoring
-        const allArgs = shouldRestore ? 
-          ['--continue', ...runConfig.args, ...debugArgs] : 
-          [...runConfig.args, ...debugArgs];
+        // Always include session-id to ensure isolation
+        const allArgs = ['--session-id', sessionUuid, ...runConfig.args, ...debugArgs];
         const result = ClaudeDetector.getClaudeCommand(claudeInfo, allArgs);
         command = result.command;
         commandArgs = result.args;
@@ -277,6 +299,7 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
     
     // Store session data for potential restoration
     claudeSessions.set(instanceId, {
+      claudeSessionId: sessionUuid,  // Store the UUID we're using
       instanceId,
       workingDirectory,
       instanceName,
@@ -422,6 +445,27 @@ ipcMain.handle('claude:send', async (event, instanceId: string, command: string)
     console.error(`Failed to send command to Claude PTY ${instanceId}:`, error);
     return { success: false, error: error instanceof Error ? error.message : String(error) };
   }
+});
+
+// Get preserved sessions that should auto-start
+ipcMain.handle('claude:getPreservedSessions', async () => {
+  const preserved: ClaudeSessionData[] = [];
+  claudeSessions.forEach((session) => {
+    if (session.shouldAutoStart && 
+        (Date.now() - session.lastActive < 24 * 60 * 60 * 1000)) {
+      preserved.push({...session});
+    }
+  });
+  return preserved;
+});
+
+// Clear auto-start flag after session is restored
+ipcMain.handle('claude:clearAutoStart', async (event, instanceId: string) => {
+  const session = claudeSessions.get(instanceId);
+  if (session) {
+    session.shouldAutoStart = false;
+  }
+  return { success: true };
 });
 
 ipcMain.handle('claude:stop', async (event, instanceId: string) => {

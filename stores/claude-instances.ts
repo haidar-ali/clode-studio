@@ -156,9 +156,67 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
         }
       }
 
+      // Check for preserved sessions that should auto-start
+      if (typeof window !== 'undefined' && window.electronAPI?.claude?.getPreservedSessions) {
+        try {
+          const preservedSessions = await window.electronAPI.claude.getPreservedSessions();
+          console.log(`Found ${preservedSessions.length} preserved sessions to restore`);
+          
+          // Auto-start preserved sessions
+          for (const session of preservedSessions) {
+            // Check if instance already exists
+            if (!this.instances.has(session.instanceId)) {
+              // Recreate the instance with preserved data
+              const instance: ClaudeInstance = {
+                id: session.instanceId,
+                name: session.instanceName || `Claude ${this.instances.size + 1}`,
+                personalityId: session.personalityId,
+                workingDirectory: session.workingDirectory,
+                status: 'disconnected', // Will be updated when started
+                createdAt: new Date().toISOString(),
+                lastActiveAt: new Date(session.lastActive).toISOString()
+              };
+              this.instances.set(session.instanceId, instance);
+              console.log(`Recreated instance ${session.instanceId} for auto-start`);
+            }
+            
+            // Auto-start the instance
+            console.log(`Auto-starting preserved session: ${session.instanceId}`);
+            const instance = this.instances.get(session.instanceId);
+            if (instance) {
+              instance.status = 'connecting';
+              
+              // Start the Claude process with restoration
+              const result = await window.electronAPI.claude.start(
+                session.instanceId,
+                session.workingDirectory,
+                session.instanceName,
+                session.runConfig
+              );
+              
+              if (result.success) {
+                instance.status = 'connected';
+                instance.pid = result.pid;
+                instance.lastActiveAt = new Date().toISOString();
+                console.log(`Successfully auto-started session ${session.instanceId}`);
+                
+                // Clear the auto-start flag
+                await window.electronAPI.claude.clearAutoStart(session.instanceId);
+              } else {
+                instance.status = 'disconnected';
+                console.error(`Failed to auto-start session ${session.instanceId}:`, result.error);
+              }
+            }
+          }
+          
+          await this.saveToStorage();
+        } catch (error) {
+          console.error('Failed to restore preserved sessions:', error);
+        }
+      }
+      
       // Create default instance if none exist
       if (this.instances.size === 0) {
-      
         await this.createInstance('Claude 1');
       }
     },
