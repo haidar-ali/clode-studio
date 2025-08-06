@@ -16,7 +16,15 @@ const electronAPI = {
             'snapshots-update-response',
             'snapshots-content-response',
             'snapshots-getDiff-response',
-            'snapshots-scanProjectFiles-response'
+            'snapshots-scanProjectFiles-response',
+            'worktree-list-response',
+            'worktree-sessions-response',
+            'worktree-switch-response',
+            'worktree-remove-response',
+            'worktree-lock-response',
+            'worktree-compare-response',
+            'worktree-createSession-response',
+            'worktree-deleteSession-response'
         ];
         if (allowedChannels.includes(channel)) {
             electron_1.ipcRenderer.send(channel, data);
@@ -33,7 +41,15 @@ const electronAPI = {
                 'remote-snapshot-update',
                 'remote-snapshot-content',
                 'remote-snapshot-getDiff',
-                'remote-snapshot-scanProjectFiles'
+                'remote-snapshot-scanProjectFiles',
+                'remote-worktree-list',
+                'remote-worktree-sessions',
+                'remote-worktree-switch',
+                'remote-worktree-remove',
+                'remote-worktree-lock',
+                'remote-worktree-compare',
+                'remote-worktree-createSession',
+                'remote-worktree-deleteSession'
             ];
             if (allowedChannels.includes(channel)) {
                 electron_1.ipcRenderer.on(channel, listener);

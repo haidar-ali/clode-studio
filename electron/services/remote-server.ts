@@ -14,6 +14,7 @@ import { RemoteSyncHandler } from './remote-handlers/RemoteSyncHandler.js';
 import { RemoteWorkspaceHandler } from './remote-handlers/RemoteWorkspaceHandler.js';
 import { RemoteDesktopFeaturesHandler } from './remote-handlers/RemoteDesktopFeaturesHandler.js';
 import { RemoteSnapshotsHandler } from './remote-handlers/RemoteSnapshotsHandler.js';
+import { RemoteWorktreeHandler } from './remote-handlers/RemoteWorktreeHandler.js';
 import { RemoteEvent } from './remote-protocol.js';
 
 export interface RemoteServerOptions {
@@ -34,6 +35,7 @@ export class RemoteServer {
   private workspaceHandler: RemoteWorkspaceHandler;
   private desktopFeaturesHandler: RemoteDesktopFeaturesHandler;
   private snapshotsHandler: RemoteSnapshotsHandler;
+  private worktreeHandler: RemoteWorktreeHandler;
   
   constructor(options: RemoteServerOptions) {
     this.config = options.config;
@@ -76,6 +78,8 @@ export class RemoteServer {
     );
     
     this.snapshotsHandler = new RemoteSnapshotsHandler();
+    
+    this.worktreeHandler = new RemoteWorktreeHandler();
   }
   
   async start(): Promise<void> {
@@ -156,6 +160,7 @@ export class RemoteServer {
       this.workspaceHandler.registerHandlers(socket);
       this.desktopFeaturesHandler.registerHandlers(socket);
       this.snapshotsHandler.registerHandlers(socket);
+      this.worktreeHandler.registerHandlers(socket);
       
       // Register LSP proxy for remote editor
       this.setupLSPProxy(socket);

@@ -255,6 +255,102 @@ onMounted(() => {
         });
       }
     });
+    
+    // Handle remote worktree requests
+    window.electronAPI.ipcRenderer.on('remote-worktree-list', async (event: any) => {
+      try {
+        const result = await window.electronAPI.worktree.list();
+        window.electronAPI.send('worktree-list-response', result);
+      } catch (error) {
+        console.error('Failed to handle remote worktree list:', error);
+        window.electronAPI.send('worktree-list-response', { success: false, error: error.message });
+      }
+    });
+    
+    window.electronAPI.ipcRenderer.on('remote-worktree-sessions', async (event: any) => {
+      try {
+        const result = await window.electronAPI.worktree.sessions();
+        window.electronAPI.send('worktree-sessions-response', result);
+      } catch (error) {
+        console.error('Failed to handle remote worktree sessions:', error);
+        window.electronAPI.send('worktree-sessions-response', { success: false, error: error.message });
+      }
+    });
+    
+    window.electronAPI.ipcRenderer.on('remote-worktree-switch', async (event: any, data: any) => {
+      try {
+        const { worktreePath } = data;
+        
+        // First switch the worktree
+        const result = await window.electronAPI.worktree.switch(worktreePath);
+        
+        if (result.success) {
+          // Then handle workspace switching
+          await workspaceManager.switchWorktreeWithinWorkspace(worktreePath);
+          await workspaceManager.refreshWorktreeStatus();
+        }
+        
+        window.electronAPI.send('worktree-switch-response', result);
+      } catch (error) {
+        console.error('Failed to handle remote worktree switch:', error);
+        window.electronAPI.send('worktree-switch-response', { success: false, error: error.message });
+      }
+    });
+    
+    window.electronAPI.ipcRenderer.on('remote-worktree-remove', async (event: any, data: any) => {
+      try {
+        const { worktreePath, force } = data;
+        const result = await window.electronAPI.worktree.remove(worktreePath, force);
+        window.electronAPI.send('worktree-remove-response', result);
+      } catch (error) {
+        console.error('Failed to handle remote worktree remove:', error);
+        window.electronAPI.send('worktree-remove-response', { success: false, error: error.message });
+      }
+    });
+    
+    window.electronAPI.ipcRenderer.on('remote-worktree-lock', async (event: any, data: any) => {
+      try {
+        const { worktreePath, lock } = data;
+        const result = await window.electronAPI.worktree.lock(worktreePath, lock);
+        window.electronAPI.send('worktree-lock-response', result);
+      } catch (error) {
+        console.error('Failed to handle remote worktree lock:', error);
+        window.electronAPI.send('worktree-lock-response', { success: false, error: error.message });
+      }
+    });
+    
+    window.electronAPI.ipcRenderer.on('remote-worktree-compare', async (event: any, data: any) => {
+      try {
+        const { path1, path2 } = data;
+        const result = await window.electronAPI.worktree.compare(path1, path2);
+        window.electronAPI.send('worktree-compare-response', result);
+      } catch (error) {
+        console.error('Failed to handle remote worktree compare:', error);
+        window.electronAPI.send('worktree-compare-response', { success: false, error: error.message });
+      }
+    });
+    
+    window.electronAPI.ipcRenderer.on('remote-worktree-createSession', async (event: any, data: any) => {
+      try {
+        const { sessionData } = data;
+        const result = await window.electronAPI.worktree.createSession(sessionData);
+        window.electronAPI.send('worktree-createSession-response', result);
+      } catch (error) {
+        console.error('Failed to handle remote worktree createSession:', error);
+        window.electronAPI.send('worktree-createSession-response', { success: false, error: error.message });
+      }
+    });
+    
+    window.electronAPI.ipcRenderer.on('remote-worktree-deleteSession', async (event: any, data: any) => {
+      try {
+        const { sessionId } = data;
+        const result = await window.electronAPI.worktree.deleteSession(sessionId);
+        window.electronAPI.send('worktree-deleteSession-response', result);
+      } catch (error) {
+        console.error('Failed to handle remote worktree deleteSession:', error);
+        window.electronAPI.send('worktree-deleteSession-response', { success: false, error: error.message });
+      }
+    });
   }
 });
 

@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
+import { useWorktreeService } from '~/composables/useWorktreeService';
 
 export interface Worktree {
   path: string;
@@ -29,6 +30,9 @@ export interface WorktreeSession {
 }
 
 export const useWorktreeStore = defineStore('worktree', () => {
+  // Service
+  const worktreeService = useWorktreeService();
+  
   // State
   const worktrees = ref<Worktree[]>([]);
   const sessions = ref<WorktreeSession[]>([]);
@@ -60,7 +64,7 @@ export const useWorktreeStore = defineStore('worktree', () => {
 
     try {
       // Get worktrees
-      const worktreeResult = await window.electronAPI.worktree.list();
+      const worktreeResult = await worktreeService.list();
     
       if (worktreeResult.success && worktreeResult.worktrees) {
         worktrees.value = worktreeResult.worktrees.map(w => ({
@@ -70,7 +74,7 @@ export const useWorktreeStore = defineStore('worktree', () => {
       }
 
       // Get sessions
-      const sessionResult = await window.electronAPI.worktree.sessions();
+      const sessionResult = await worktreeService.sessions();
     
       if (sessionResult.success && sessionResult.sessions) {
         sessions.value = sessionResult.sessions.map(s => ({
@@ -104,6 +108,8 @@ export const useWorktreeStore = defineStore('worktree', () => {
     error.value = null;
 
     try {
+      // Note: createWorktree is not implemented in the service yet
+      // This would need to be added to the service and handlers
       const result = await window.electronAPI.worktree.create(
         branchName,
         sessionName,
@@ -165,7 +171,7 @@ export const useWorktreeStore = defineStore('worktree', () => {
     error.value = null;
 
     try {
-      const result = await window.electronAPI.worktree.switch(worktreePath);
+      const result = await worktreeService.switch(worktreePath);
       
       if (result.success) {
         await refreshWorktrees();
@@ -187,7 +193,7 @@ export const useWorktreeStore = defineStore('worktree', () => {
     error.value = null;
 
     try {
-      const result = await window.electronAPI.worktree.remove(worktreePath, force);
+      const result = await worktreeService.remove(worktreePath, force);
       
       if (result.success) {
         await refreshWorktrees();
@@ -206,7 +212,7 @@ export const useWorktreeStore = defineStore('worktree', () => {
 
   async function lockWorktree(worktreePath: string, lock: boolean) {
     try {
-      const result = await window.electronAPI.worktree.lock(worktreePath, lock);
+      const result = await worktreeService.lock(worktreePath, lock);
       
       if (result.success) {
         await refreshWorktrees();
@@ -226,6 +232,8 @@ export const useWorktreeStore = defineStore('worktree', () => {
     error.value = null;
 
     try {
+      // Note: prune is not implemented in the service yet
+      // This would need to be added to the service and handlers
       const result = await window.electronAPI.worktree.prune();
       
       if (result.success) {
