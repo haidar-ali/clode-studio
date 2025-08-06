@@ -449,17 +449,56 @@ Output Format: ${agent.outputFormat}
     executions.value.push(execution);
 
     try {
-      // Send the prompt to the Claude instance
-      // First send the prompt tex
-      let result = await window.electronAPI.claude.send(targetInstanceId, prompt);
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to send prompt to Claude');
-      }
+      if (window.electronAPI) {
+        // Desktop mode - use direct Electron API
+        let result = await window.electronAPI.claude.send(targetInstanceId, prompt);
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to send prompt to Claude');
+        }
 
-      // Then send a carriage return to submit it (like pressing Enter)
-      result = await window.electronAPI.claude.send(targetInstanceId, '\r');
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to submit prompt to Claude');
+        // Then send a carriage return to submit it (like pressing Enter)
+        result = await window.electronAPI.claude.send(targetInstanceId, '\r');
+        if (!result.success) {
+          throw new Error(result.error || 'Failed to submit prompt to Claude');
+        }
+      } else {
+        // Remote mode - use Socket.IO to delegate to desktop
+        const { remoteConnection } = await import('~/services/remote-client/RemoteConnectionSingleton');
+        
+        const socket = remoteConnection.getSocket();
+        if (!socket?.connected) {
+          throw new Error('Not connected to desktop. Please check your connection.');
+        }
+
+        // Helper function to make socket requests
+        const makeRequest = <T, R>(event: string, payload: T): Promise<R> => {
+          return new Promise((resolve, reject) => {
+            const request = {
+              id: `req-${Date.now()}-${Math.random()}`,
+              payload
+            };
+            
+            socket.emit(event, request, (response: any) => {
+              if (response.success) {
+                resolve(response.data);
+              } else {
+                reject(new Error(response.error?.message || 'Request failed'));
+              }
+            });
+          });
+        };
+
+        // Send the prompt via Socket.IO
+        await makeRequest('claude:send', {
+          instanceId: targetInstanceId,
+          data: prompt
+        });
+
+        // Submit the prompt with carriage return
+        await makeRequest('claude:send', {
+          instanceId: targetInstanceId,
+          data: '\r'
+        });
       }
 
       execution.success = true;
@@ -479,17 +518,55 @@ Output Format: ${agent.outputFormat}
 
   async function loadTemplatesFromFiles() {
     const tasksStore = useTasksStore();
-    if (!tasksStore.projectPath) return;
+    
+    // In desktop mode, we need projectPath
+    if (window.electronAPI && !tasksStore.projectPath) {
+      console.log('[PromptEngineering] Skipping template load - no projectPath in desktop mode');
+      return;
+    }
+
+    console.log('[PromptEngineering] Loading templates, remote mode:', !window.electronAPI);
 
     try {
-      const templatesPath = `${tasksStore.projectPath}/.claude/prompts`;
-      const result = await window.electronAPI.fs.readDir(templatesPath);
+      const templatesPath = '.claude/prompts';
+      let result;
+
+      if (window.electronAPI) {
+        // Desktop mode
+        const fullPath = `${tasksStore.projectPath}/${templatesPath}`;
+        result = await window.electronAPI.fs.readDir(fullPath);
+      } else {
+        // Remote mode - use API (server will use global.__currentWorkspace)
+        console.log('[PromptEngineering] Loading templates from API:', templatesPath);
+        result = await $fetch('/api/files/readdir', {
+          query: { path: templatesPath }
+        });
+        console.log('[PromptEngineering] API result:', result);
+      }
 
       if (result.success && result.files) {
         const jsonFiles = result.files.filter((f: any) => f.name.endsWith('.json'));
 
         for (const file of jsonFiles) {
-          const content = await window.electronAPI.fs.readFile(`${templatesPath}/${file.name}`);
+          let content;
+          
+          if (window.electronAPI) {
+            // Desktop mode
+            const fullPath = `${tasksStore.projectPath}/${templatesPath}`;
+            content = await window.electronAPI.fs.readFile(`${fullPath}/${file.name}`);
+          } else {
+            // Remote mode - use API
+            const filePath = `${templatesPath}/${file.name}`;
+            try {
+              const response = await $fetch('/api/files/read', {
+                query: { path: filePath }
+              });
+              content = { success: true, content: response.content };
+            } catch (error) {
+              content = { success: false };
+            }
+          }
+          
           if (content.success && content.content) {
             try {
               const template = JSON.parse(content.content);
@@ -510,18 +587,45 @@ Output Format: ${agent.outputFormat}
 
   async function saveTemplateToFile(template: PromptTemplate) {
     const tasksStore = useTasksStore();
-    if (!tasksStore.projectPath) return;
+    
+    // In desktop mode, we need projectPath
+    if (window.electronAPI && !tasksStore.projectPath) {
+      console.log('[PromptEngineering] Skipping template save - no projectPath in desktop mode');
+      return;
+    }
+
+    console.log('[PromptEngineering] Saving template:', template.id, 'remote mode:', !window.electronAPI);
 
     try {
-      const templatesPath = `${tasksStore.projectPath}/.claude/prompts`;
+      const templatesPath = '.claude/prompts';
 
-      // Ensure directory exists
-      await window.electronAPI.fs.ensureDir(templatesPath);
+      if (window.electronAPI) {
+        // Desktop mode
+        const fullPath = `${tasksStore.projectPath}/${templatesPath}`;
+        await window.electronAPI.fs.ensureDir(fullPath);
+        
+        const filePath = `${fullPath}/${template.id}.json`;
+        const content = JSON.stringify(template, null, 2);
+        await window.electronAPI.fs.writeFile(filePath, content);
+      } else {
+        // Remote mode - use API (server will use global.__currentWorkspace)
+        console.log('[PromptEngineering] Ensuring directory:', templatesPath);
+        // Ensure directory exists
+        await $fetch('/api/files/ensuredir', {
+          method: 'POST',
+          body: { path: templatesPath }
+        });
 
-      const filePath = `${templatesPath}/${template.id}.json`;
-      const content = JSON.stringify(template, null, 2);
+        const filePath = `${templatesPath}/${template.id}.json`;
+        const content = JSON.stringify(template, null, 2);
 
-      await window.electronAPI.fs.writeFile(filePath, content);
+        console.log('[PromptEngineering] Writing file:', filePath);
+        await $fetch('/api/files/write', {
+          method: 'POST',
+          body: { path: filePath, content }
+        });
+        console.log('[PromptEngineering] Template saved successfully');
+      }
     } catch (error) {
       console.error('Failed to save template:', error);
     }
@@ -549,12 +653,24 @@ Output Format: ${agent.outputFormat}
 
       // Remove from file system
       const tasksStore = useTasksStore();
-      if (tasksStore.projectPath) {
-        const templatesPath = `${tasksStore.projectPath}/.claude/prompts`;
+      
+      // In desktop mode, we need projectPath
+      if (!window.electronAPI || tasksStore.projectPath) {
+        const templatesPath = '.claude/prompts';
         const filePath = `${templatesPath}/${templateId}.json`;
 
         try {
-          await window.electronAPI.fs.delete(filePath);
+          if (window.electronAPI) {
+            // Desktop mode
+            const fullPath = `${tasksStore.projectPath}/${filePath}`;
+            await window.electronAPI.fs.delete(fullPath);
+          } else {
+            // Remote mode - use API (server will use global.__currentWorkspace)
+            await $fetch('/api/files/delete', {
+              method: 'DELETE',
+              query: { path: filePath }
+            });
+          }
         } catch (error) {
           console.error('Failed to delete template file:', error);
           // Continue with removing from store even if file deletion fails
