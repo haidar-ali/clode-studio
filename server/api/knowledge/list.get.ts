@@ -29,6 +29,7 @@ export default defineEventHandler(async (event) => {
         
         const entry = {
           id: data.id || file.name.replace('.md', ''),
+          filename: file.name, // Add the actual filename
           title: data.title || file.name.replace('.md', ''),
           content: markdownContent,
           markdown: content,

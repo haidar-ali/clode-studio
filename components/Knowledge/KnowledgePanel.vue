@@ -340,28 +340,75 @@ const selectEntry = async (entry: KnowledgeEntry) => {
 };
 
 const openInMainEditor = async (entry: KnowledgeEntry) => {
-  // In Full IDE mode, open the knowledge file in the main editor
-  const workspacePath = tasksStore.projectPath || knowledgeStore.workspacePath;
-  if (!workspacePath) {
-    console.error('No workspace path available');
-    return;
-  }
+  const isRemoteMode = !window.electronAPI;
   
-  const filePath = `${workspacePath}/.claude/knowledge/${entry.id}.md`;
-  try {
-    await editorStore.openFile(filePath);
-    selectedEntry.value = entry;
-    knowledgeStore.selectEntry(entry.id);
-  } catch (error) {
-    console.error('Failed to open knowledge file in editor:', error);
-    // If there's an error, try again after a short delay
-    await new Promise(resolve => setTimeout(resolve, 200));
+  // Use the filename if available, otherwise construct from ID
+  const filename = entry.filename || `${entry.id}.md`;
+  
+  // First, switch to explorer-editor module in the left dock
+  layoutStore.setActiveLeftModule('explorer-editor');
+  
+  // Give a small delay for the layout to update
+  await nextTick();
+  await new Promise(resolve => setTimeout(resolve, 50));
+  
+  if (isRemoteMode) {
+    // In remote mode, handle file opening like RemoteExplorerEditorPro
+    const filePath = `.claude/knowledge/${filename}`;
+    
+    try {
+      // Check if file is already open
+      const existingTab = editorStore.tabs.find(tab => tab.path === filePath);
+      if (existingTab) {
+        editorStore.setActiveTab(existingTab.id);
+        selectedEntry.value = entry;
+        knowledgeStore.selectEntry(entry.id);
+        return;
+      }
+      
+      // Load file content from server
+      const response = await $fetch('/api/files/read', {
+        query: { path: filePath }
+      });
+      
+      const content = response.content || '';
+      
+      // Manually create a tab since we're in remote mode
+      const tabId = `tab-${Date.now()}`;
+      const newTab = {
+        id: tabId,
+        path: filePath,
+        name: filename,
+        content: content,
+        language: 'markdown', // Knowledge entries are markdown
+        isDirty: false,
+        isTemporary: false
+      };
+      
+      // Add tab directly to the store's state
+      editorStore.tabs.push(newTab);
+      editorStore.setActiveTab(tabId);
+      
+      selectedEntry.value = entry;
+      knowledgeStore.selectEntry(entry.id);
+    } catch (error) {
+      console.error('Failed to open knowledge file in remote editor:', error);
+    }
+  } else {
+    // Desktop mode - use absolute path and normal openFile
+    const workspacePath = tasksStore.projectPath || knowledgeStore.workspacePath;
+    if (!workspacePath) {
+      console.error('No workspace path available');
+      return;
+    }
+    const filePath = `${workspacePath}/.claude/knowledge/${filename}`;
+    
     try {
       await editorStore.openFile(filePath);
       selectedEntry.value = entry;
       knowledgeStore.selectEntry(entry.id);
-    } catch (retryError) {
-      console.error('Retry also failed:', retryError);
+    } catch (error) {
+      console.error('Failed to open knowledge file in editor:', error);
     }
   }
 };
@@ -425,9 +472,18 @@ const saveTitle = async (entry: KnowledgeEntry) => {
 
 // Initialize
 onMounted(async () => {
-  const workspacePath = tasksStore.projectPath;
-  if (workspacePath) {
-    await knowledgeStore.initialize(workspacePath);
+  // In remote mode, we don't need workspace path for loading via API
+  const isRemoteMode = !window.electronAPI;
+  
+  if (isRemoteMode) {
+    // Just load entries via API
+    await knowledgeStore.loadEntries();
+  } else {
+    // Desktop mode - needs workspace path
+    const workspacePath = tasksStore.projectPath;
+    if (workspacePath) {
+      await knowledgeStore.initialize(workspacePath);
+    }
   }
   
   // Listen for knowledge events
