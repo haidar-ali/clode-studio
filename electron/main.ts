@@ -41,6 +41,17 @@ const fileWatchers: Map<string, any> = new Map();
 // Multi-instance Claude support
 const claudeInstances: Map<string, pty.IPty> = new Map();
 
+// Map to store Claude session data for restoration after refresh
+interface ClaudeSessionData {
+  sessionId?: string;
+  instanceId: string;
+  workingDirectory: string;
+  instanceName?: string;
+  runConfig?: { command?: string; args?: string[] };
+  lastActive: number;
+}
+const claudeSessions: Map<string, ClaudeSessionData> = new Map();
+
 // Knowledge cache instances per workspace
 const knowledgeCaches: Map<string, any> = new Map();
 
@@ -64,21 +75,16 @@ const nuxtURL = isDev ? 'http://localhost:3000' : `file://${join(__dirname, '../
 function cleanupResourcesOnReload() {
   console.log('Cleaning up resources on reload...');
   
-  // Clean up Claude instances
+  // Don't kill Claude instances immediately - just clear the map
+  // The sessions will be restored after reload
   if (claudeInstances.size > 0) {
-    console.log(`Cleaning up ${claudeInstances.size} Claude instances...`);
-    claudeInstances.forEach((pty, instanceId) => {
-      console.log(`Killing Claude instance: ${instanceId}`);
-      try {
-        pty.kill();
-      } catch (error) {
-        console.error(`Error killing Claude instance ${instanceId}:`, error);
-      }
-    });
+    console.log(`Preserving ${claudeInstances.size} Claude sessions for restoration...`);
+    // Sessions data is already stored in claudeSessions map
+    // Just clear the instances map without killing processes
     claudeInstances.clear();
   }
   
-  // Clean up terminal instances
+  // Clean up terminal instances (these can't be restored easily)
   if (terminals.size > 0) {
     console.log(`Cleaning up ${terminals.size} terminal instances...`);
     terminals.forEach((terminal, id) => {
@@ -92,6 +98,21 @@ function cleanupResourcesOnReload() {
     terminals.clear();
   }
   
+  // Clean up very old sessions (older than 24 hours)
+  // We keep sessions for a full day to handle overnight sleep, long breaks, etc.
+  const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+  const oldSessions: string[] = [];
+  claudeSessions.forEach((session, id) => {
+    if (session.lastActive < oneDayAgo) {
+      oldSessions.push(id);
+    }
+  });
+  oldSessions.forEach(id => {
+    console.log(`Removing old session (>24h): ${id}`);
+    claudeSessions.delete(id);
+  });
+  
+  console.log(`Preserved ${claudeSessions.size} recent Claude sessions for restoration`);
   console.log('Resource cleanup completed');
 }
 
@@ -179,14 +200,24 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
     return { success: false, error: 'Claude instance already running' };
   }
 
+  // Check if we have a preserved session for this instance
+  const preservedSession = claudeSessions.get(instanceId);
+  // Try to restore sessions up to 24 hours old
+  // Claude CLI should handle expired sessions gracefully and create new ones if needed
+  const shouldRestore = preservedSession && 
+                       (Date.now() - preservedSession.lastActive < 24 * 60 * 60 * 1000); // Within 24 hours
+
   try {
     // Detect Claude installation
     const claudeInfo = await ClaudeDetector.detectClaude(workingDirectory);
 
     // Get the command configuration
     const debugArgs = process.env.CLAUDE_DEBUG === 'true' ? ['--debug'] : [];
+    
+    // Add --continue flag if we're restoring a session
+    const baseArgs = shouldRestore ? ['--continue', ...debugArgs] : debugArgs;
 
-    let { command, args: commandArgs, useShell } = ClaudeDetector.getClaudeCommand(claudeInfo, debugArgs);
+    let { command, args: commandArgs, useShell } = ClaudeDetector.getClaudeCommand(claudeInfo, baseArgs);
 
     // Override with run config if provided
     if (runConfig) {
@@ -196,12 +227,19 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
       }
       if (runConfig.args && runConfig.args.length > 0) {
         // When we have custom args, we need to rebuild the command
-        const allArgs = [...runConfig.args, ...debugArgs];
+        // Include --continue if restoring
+        const allArgs = shouldRestore ? 
+          ['--continue', ...runConfig.args, ...debugArgs] : 
+          [...runConfig.args, ...debugArgs];
         const result = ClaudeDetector.getClaudeCommand(claudeInfo, allArgs);
         command = result.command;
         commandArgs = result.args;
         useShell = result.useShell;
       }
+    }
+    
+    if (shouldRestore) {
+      console.log(`Attempting to restore Claude session for instance ${instanceId}`);
     }
 
 
@@ -236,9 +274,28 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
 
     // Store this instance
     claudeInstances.set(instanceId, claudePty);
+    
+    // Store session data for potential restoration
+    claudeSessions.set(instanceId, {
+      instanceId,
+      workingDirectory,
+      instanceName,
+      runConfig,
+      lastActive: Date.now()
+    });
+    
+    if (shouldRestore) {
+      console.log(`Successfully restored Claude session for instance ${instanceId}`);
+    }
 
     // Handle output from Claude
     claudePty.onData((data: string) => {
+      // Update last active time on any output
+      const session = claudeSessions.get(instanceId);
+      if (session) {
+        session.lastActive = Date.now();
+      }
+      
       // Send data with instance ID
       mainWindow?.webContents.send(`claude:output:${instanceId}`, data);
     });
@@ -247,6 +304,8 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
     claudePty.onExit(({ exitCode, signal }) => {
       mainWindow?.webContents.send(`claude:exit:${instanceId}`, exitCode);
       claudeInstances.delete(instanceId);
+      // Keep session data for potential restoration
+      // It will be cleaned up after 24 hours
     });
 
     return {
@@ -256,10 +315,94 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
         path: claudeInfo.path,
         version: claudeInfo.version,
         source: claudeInfo.source
-      }
+      },
+      restored: shouldRestore
     };
   } catch (error) {
     console.error(`Failed to start Claude for ${instanceId}:`, error);
+    
+    // If restoration failed, try again without --continue
+    if (shouldRestore) {
+      console.log(`Session restoration failed for ${instanceId}, starting fresh session...`);
+      
+      try {
+        // Re-detect Claude installation for fallback
+        const claudeInfo = await ClaudeDetector.detectClaude(workingDirectory);
+        
+        // Get fresh command without --continue
+        const debugArgs = process.env.CLAUDE_DEBUG === 'true' ? ['--debug'] : [];
+        let { command, args: commandArgs } = ClaudeDetector.getClaudeCommand(claudeInfo, debugArgs);
+        
+        // Apply run config if provided
+        if (runConfig && runConfig.args && runConfig.args.length > 0) {
+          const allArgs = [...runConfig.args, ...debugArgs];
+          const result = ClaudeDetector.getClaudeCommand(claudeInfo, allArgs);
+          command = result.command;
+          commandArgs = result.args;
+        }
+        
+        // Start fresh Claude instance
+        const claudePty = pty.spawn(command, commandArgs, {
+          name: 'xterm-color',
+          cols: 80,
+          rows: 30,
+          cwd: workingDirectory,
+          env: {
+            ...process.env,
+            FORCE_COLOR: '1',
+            TERM: 'xterm-256color',
+            HOME: process.env.HOME,
+            USER: process.env.USER,
+            SHELL: process.env.SHELL || '/bin/bash',
+            CLAUDE_INSTANCE_ID: instanceId,
+            CLAUDE_INSTANCE_NAME: instanceName || `Claude-${instanceId.slice(7, 15)}`,
+            CLAUDE_IDE_INSTANCE: 'true'
+          }
+        });
+        
+        // Store instance and session data
+        claudeInstances.set(instanceId, claudePty);
+        claudeSessions.set(instanceId, {
+          instanceId,
+          workingDirectory,
+          instanceName,
+          runConfig,
+          lastActive: Date.now()
+        });
+        
+        // Set up handlers
+        claudePty.onData((data: string) => {
+          const session = claudeSessions.get(instanceId);
+          if (session) {
+            session.lastActive = Date.now();
+          }
+          mainWindow?.webContents.send(`claude:output:${instanceId}`, data);
+        });
+        
+        claudePty.onExit(({ exitCode }) => {
+          mainWindow?.webContents.send(`claude:exit:${instanceId}`, exitCode);
+          claudeInstances.delete(instanceId);
+        });
+        
+        console.log(`Started fresh Claude session for ${instanceId} after restoration failed`);
+        
+        return {
+          success: true,
+          pid: claudePty.pid,
+          claudeInfo: {
+            path: claudeInfo.path,
+            version: claudeInfo.version,
+            source: claudeInfo.source
+          },
+          restored: false,
+          restorationFailed: true
+        };
+      } catch (fallbackError) {
+        console.error(`Fallback to fresh session also failed for ${instanceId}:`, fallbackError);
+        return { success: false, error: fallbackError instanceof Error ? fallbackError.message : String(fallbackError) };
+      }
+    }
+    
     return { success: false, error: error instanceof Error ? error.message : String(error) };
   }
 });

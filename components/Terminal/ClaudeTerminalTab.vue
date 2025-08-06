@@ -485,7 +485,17 @@ const startClaude = async () => {
 
   if (result.success) {
     emit('status-change', 'connected', result.pid);
-    terminal.writeln('Claude CLI started successfully!');
+    
+    // Show restoration status
+    if (result.restored) {
+      terminal.writeln('\x1b[32m✓ Session restored successfully!\x1b[0m');
+      terminal.writeln('Your previous conversation has been continued.');
+    } else if (result.restorationFailed) {
+      terminal.writeln('\x1b[33m⚠ Previous session expired, starting fresh.\x1b[0m');
+    } else {
+      terminal.writeln('Claude CLI started successfully!');
+    }
+    
     if (result.claudeInfo) {
       terminal.writeln(`\x1b[90mUsing: ${result.claudeInfo.path} (${result.claudeInfo.source})\x1b[0m`);
       terminal.writeln(`\x1b[90mVersion: ${result.claudeInfo.version}\x1b[0m`);
