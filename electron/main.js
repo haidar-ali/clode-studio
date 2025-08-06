@@ -46,10 +46,12 @@ const worktreeManagers = new Map();
 const snapshotServices = new Map();
 const isDev = process.env.NODE_ENV !== 'production';
 const nuxtURL = isDev ? 'http://localhost:3000' : `file://${join(__dirname, '../.output/public/index.html')}`;
-// Helper function to save sessions to .claude/sessions/
+// Helper function to save sessions to project-level .claude/sessions/
 function saveSessionsToDisk() {
     try {
-        const sessionsDir = join(homedir(), '.claude', 'sessions');
+        // Get current workspace path
+        const workspacePath = store.get('workspacePath') || process.cwd();
+        const sessionsDir = join(workspacePath, '.claude', 'sessions');
         // Ensure directory exists
         if (!existsSync(sessionsDir)) {
             mkdirSync(sessionsDir, { recursive: true });
@@ -71,10 +73,12 @@ function saveSessionsToDisk() {
         console.error('Failed to save sessions to disk:', error);
     }
 }
-// Helper function to load sessions from .claude/sessions/
+// Helper function to load sessions from project-level .claude/sessions/
 function loadSessionsFromDisk() {
     try {
-        const sessionsDir = join(homedir(), '.claude', 'sessions');
+        // Get current workspace path
+        const workspacePath = store.get('workspacePath') || process.cwd();
+        const sessionsDir = join(workspacePath, '.claude', 'sessions');
         if (!existsSync(sessionsDir)) {
             return;
         }
@@ -218,6 +222,11 @@ ipcMain.handle('claude:start', async (event, instanceId, workingDirectory, insta
     const preservedSession = claudeSessions.get(instanceId);
     // Always try to restore if session exists
     const shouldRestore = !!preservedSession;
+    // If restoring, add a delay to ensure any locks are released
+    if (shouldRestore) {
+        console.log(`Waiting for session lock to be released for ${instanceId}...`);
+        await new Promise(resolve => setTimeout(resolve, 2000));
+    }
     try {
         // Detect Claude installation
         const claudeInfo = await ClaudeDetector.detectClaude(workingDirectory);
@@ -453,25 +462,84 @@ ipcMain.handle('claude:clearAutoStart', async (event, instanceId) => {
 ipcMain.handle('claude:stop', async (event, instanceId) => {
     const claudePty = claudeInstances.get(instanceId);
     if (claudePty) {
-        claudePty.kill();
+        try {
+            console.log(`Stopping Claude instance ${instanceId} (PID: ${claudePty.pid})...`);
+            // First send EOF (Ctrl+D) to allow Claude to save session properly
+            claudePty.write('\x04');
+            await new Promise(resolve => setTimeout(resolve, 500));
+            // Then try graceful shutdown with SIGINT (Ctrl+C)
+            claudePty.kill('SIGINT');
+            // Wait for graceful shutdown
+            await new Promise(resolve => setTimeout(resolve, 1500));
+            // Check if process is still alive and send SIGTERM if needed
+            try {
+                process.kill(claudePty.pid, 0); // Check if process exists
+                console.log(`Process ${claudePty.pid} still alive, sending SIGTERM...`);
+                claudePty.kill('SIGTERM');
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
+            catch (e) {
+                // Process already dead, which is good
+                console.log(`Process ${claudePty.pid} terminated gracefully`);
+            }
+            // Final force kill if still running
+            try {
+                process.kill(claudePty.pid, 0); // Check if process exists
+                console.log(`Process ${claudePty.pid} still alive, forcing SIGKILL...`);
+                claudePty.kill('SIGKILL');
+            }
+            catch (e) {
+                // Process already dead
+            }
+        }
+        catch (error) {
+            console.error(`Error stopping Claude instance ${instanceId}:`, error);
+        }
         claudeInstances.delete(instanceId);
+        // Ensure session data is saved
+        const session = claudeSessions.get(instanceId);
+        if (session) {
+            session.lastActive = Date.now();
+            saveSessionsToDisk();
+            console.log(`Session data saved for instance ${instanceId}`);
+        }
         return { success: true };
     }
     return { success: false, error: `No Claude PTY running for instance ${instanceId}` };
 });
 // Stop and delete Claude session permanently
 ipcMain.handle('claude:deleteSession', async (event, instanceId) => {
-    // Stop the process if running
+    console.log(`Deleting session for instance ${instanceId}...`);
+    // Stop the process if running (with graceful shutdown)
     const claudePty = claudeInstances.get(instanceId);
     if (claudePty) {
-        claudePty.kill();
+        try {
+            // Send EOF to let Claude save any state
+            claudePty.write('\x04');
+            await new Promise(resolve => setTimeout(resolve, 500));
+            // Try graceful shutdown first
+            claudePty.kill('SIGINT');
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            // Force kill if needed
+            try {
+                process.kill(claudePty.pid, 0);
+                claudePty.kill('SIGKILL');
+            }
+            catch (e) {
+                // Process already dead
+            }
+        }
+        catch (error) {
+            console.error(`Error stopping Claude instance ${instanceId}:`, error);
+        }
         claudeInstances.delete(instanceId);
     }
     // Remove from session storage
     claudeSessions.delete(instanceId);
     // Delete session file from disk
     try {
-        const sessionsDir = join(homedir(), '.claude', 'sessions');
+        const workspacePath = store.get('workspacePath') || process.cwd();
+        const sessionsDir = join(workspacePath, '.claude', 'sessions');
         const sessionFile = join(sessionsDir, `${instanceId}.json`);
         if (existsSync(sessionFile)) {
             unlinkSync(sessionFile);
