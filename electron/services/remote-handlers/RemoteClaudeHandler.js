@@ -73,7 +73,6 @@ export class RemoteClaudeHandler {
                 if (translator) {
                     translator.terminal.dispose();
                     this.terminalTranslators.delete(translatorKey);
-                    console.log(`[RemoteClaudeHandler] Cleaned up terminal translator for ${translatorKey}`);
                 }
             });
             this.instancesBySocket.delete(socketId);
@@ -113,7 +112,6 @@ export class RemoteClaudeHandler {
             const claudeInfo = await ClaudeDetector.detectClaude();
             if (claudeInfo) {
                 this.claudePath = claudeInfo.path;
-                console.log(`Claude detected at: ${this.claudePath}`);
             }
         }
         catch (error) {
@@ -178,12 +176,10 @@ export class RemoteClaudeHandler {
                     }
                 }
                 catch (e) {
-                    console.log('[RemoteClaudeHandler] Could not check desktop instance:', e);
                 }
             }
             if (isDesktopInstance || this.desktopClaudeForwarding?.get(socket.id)?.has(request.payload.instanceId)) {
                 // This is a desktop Claude instance - we need to forward communication
-                console.log(`[RemoteClaudeHandler] Forwarding desktop Claude instance ${request.payload.instanceId}`);
                 // Set up forwarding from desktop Claude to socket FIRST
                 this.setupDesktopClaudeForwarding(socket, request.payload.instanceId);
                 // Check if the desktop instance needs to be started
@@ -196,7 +192,7 @@ export class RemoteClaudeHandler {
               if (claudeStore) {
                 const instance = claudeStore.instances.get('${request.payload.instanceId}');
                 if (instance) {
-                  console.log('[RemoteClaudeHandler] Desktop instance status:', instance.status);
+                 
                   return instance.status === 'connected';
                 }
               }
@@ -205,7 +201,6 @@ export class RemoteClaudeHandler {
             })()
           `);
                     if (!isConnected) {
-                        console.log(`[RemoteClaudeHandler] Desktop Claude instance ${request.payload.instanceId} is not connected, starting it`);
                         // Start the desktop Claude instance
                         const startResult = await this.mainWindow.webContents.executeJavaScript(`
               (async () => {
@@ -267,7 +262,6 @@ export class RemoteClaudeHandler {
       `);
             if (instanceExists.exists && instanceExists.status === 'disconnected') {
                 // This is a desktop instance that needs to be started
-                console.log(`[RemoteClaudeHandler] Starting disconnected desktop instance ${request.payload.instanceId}`);
                 const startResult = await this.mainWindow.webContents.executeJavaScript(`
           (async () => {
             if (window.electronAPI?.claude?.start) {
@@ -426,7 +420,6 @@ export class RemoteClaudeHandler {
                 // Clean up
                 this.stopInstance(request.payload.instanceId);
             });
-            console.log(`Spawned Claude instance ${request.payload.instanceId} for session ${session.id}`);
             callback({
                 id: request.id,
                 success: true,
@@ -474,7 +467,6 @@ export class RemoteClaudeHandler {
             const isDesktopInstance = this.desktopClaudeForwarding?.get(socket.id)?.has(request.payload.instanceId) || false;
             if (isDesktopInstance) {
                 // Forward to desktop Claude
-                console.log(`[RemoteClaudeHandler] Forwarding send to desktop Claude ${request.payload.instanceId}`);
                 try {
                     // Properly escape the data for JavaScript execution
                     const escapedData = JSON.stringify(request.payload.data);
@@ -557,7 +549,6 @@ export class RemoteClaudeHandler {
             const isDesktopInstance = this.desktopClaudeForwarding?.get(socket.id)?.has(request.payload.instanceId) || false;
             if (isDesktopInstance) {
                 // Stop desktop Claude
-                console.log(`[RemoteClaudeHandler] Stopping desktop Claude ${request.payload.instanceId}`);
                 try {
                     await this.mainWindow.webContents.executeJavaScript(`
             (async () => {
@@ -692,7 +683,6 @@ export class RemoteClaudeHandler {
                 cols,
                 rows
             });
-            console.log(`[RemoteClaudeHandler] Created terminal translator for ${translatorKey} with dimensions ${cols}x${rows}`);
             // Get current buffer content from the Claude instance to populate the translator
             const instance = this.instances.get(instanceId);
             if (instance) {
@@ -796,7 +786,6 @@ export class RemoteClaudeHandler {
         }
         // Unregister from user isolation service
         userIsolation.unregisterInstance(instanceId);
-        console.log(`Stopped Claude instance ${instanceId}`);
     }
     async handleListDesktopInstances(socket, request, callback) {
         try {
@@ -824,7 +813,7 @@ export class RemoteClaudeHandler {
                   try {
                     workspacePath = await window.electronAPI.store.get('workspacePath');
                   } catch (e) {
-                    console.log('Could not get workspace path from store');
+                   
                   }
                 }
                 
@@ -847,10 +836,10 @@ export class RemoteClaudeHandler {
                   isDesktop: true
                 }));
                 
-                console.log('Found desktop Claude instances:', formattedInstances.length, 'for workspace:', workspacePath);
+               
                 return formattedInstances;
               } else {
-                console.log('Claude instances function not found');
+               
                 return [];
               }
             } catch (e) {
@@ -861,7 +850,6 @@ export class RemoteClaudeHandler {
         `);
                 if (result && Array.isArray(result)) {
                     desktopInstances = result;
-                    console.log(`[RemoteClaudeHandler] Found ${desktopInstances.length} desktop Claude instances`);
                 }
             }
             catch (e) {
@@ -885,7 +873,6 @@ export class RemoteClaudeHandler {
             }).filter(inst => inst !== null);
             // Combine desktop and remote instances
             const allInstances = [...desktopInstances, ...remoteInstances];
-            console.log(`[RemoteClaudeHandler] Returning ${allInstances.length} instances (${desktopInstances.length} desktop, ${remoteInstances.length} remote)`);
             callback({
                 id: request.id,
                 success: true,
@@ -916,7 +903,6 @@ export class RemoteClaudeHandler {
             // For now, always return the desktop buffer to ensure we have full history
             // The translator might not have the complete history if it was created mid-session
             // TODO: Improve translator to maintain full history from desktop
-            console.log(`[RemoteClaudeHandler] Getting desktop buffer for ${request.payload.instanceId}`);
             /* Disabled translator buffer for now - it may not have full history
             const translatorKey = `${socket.id}-${request.payload.instanceId}`;
             const translator = this.terminalTranslators.get(translatorKey);
@@ -993,7 +979,6 @@ export class RemoteClaudeHandler {
         const existingHandlerKey = `${socket.id}-${instanceId}`;
         const existingHandler = this.claudeForwardHandlers?.get(existingHandlerKey);
         if (existingHandler && this.mainWindow && !this.mainWindow.isDestroyed() && this.mainWindow.webContents) {
-            console.log(`[RemoteClaudeHandler] Cleaning up existing handler for ${existingHandlerKey}`);
             try {
                 this.mainWindow.webContents.ipc.removeListener('forward-claude-output', existingHandler);
             }
@@ -1020,7 +1005,6 @@ export class RemoteClaudeHandler {
             this.desktopClaudeForwarding.set(socket.id, socketForwarding);
         }
         socketForwarding.add(instanceId);
-        console.log(`[RemoteClaudeHandler] Set up forwarding for desktop Claude ${instanceId} to socket ${socket.id}`);
         // Set up listeners for Claude output from desktop
         this.mainWindow.webContents.executeJavaScript(`
       (async () => {
@@ -1037,17 +1021,17 @@ export class RemoteClaudeHandler {
           if (window.__remoteClaudeForwarding.has(instanceId)) {
             const existingSocketId = window.__remoteClaudeForwarding.get(instanceId);
             if (existingSocketId === socketId) {
-              console.log('[RemoteClaudeForwarding] Already forwarding to same socket:', instanceId);
+             
               return true;
             } else {
-              console.log('[RemoteClaudeForwarding] Updating forwarding to new socket:', instanceId, 'from', existingSocketId, 'to', socketId);
+             
               // Update to new socket ID
               window.__remoteClaudeForwarding.set(instanceId, socketId);
               
               // Clean up old listener if it exists
               const existingListener = window.__remoteClaudeListeners.get(instanceId);
               if (existingListener && existingListener.cleanup) {
-                console.log('[RemoteClaudeForwarding] Cleaning up old listener for:', instanceId);
+               
                 existingListener.cleanup();
                 window.__remoteClaudeListeners.delete(instanceId);
               }
@@ -1077,7 +1061,7 @@ export class RemoteClaudeHandler {
             // Clean up any existing listener first
             const existingListener = window.__remoteClaudeListeners.get(instanceId);
             if (existingListener && existingListener.cleanup) {
-              console.log('[RemoteClaudeForwarding] Cleaning up existing listener before creating new one for:', instanceId);
+             
               existingListener.cleanup();
               window.__remoteClaudeListeners.delete(instanceId);
             }
@@ -1097,23 +1081,23 @@ export class RemoteClaudeHandler {
             
             // Also listen for Claude response complete events
             const responseCompleteHandler = () => {
-              console.log('[RemoteClaudeForwarding] Response complete event fired for:', instanceId);
+             
               const currentSocketId = window.__remoteClaudeForwarding.get(instanceId);
               if (currentSocketId) {
-                console.log('[RemoteClaudeForwarding] Forwarding to socket:', currentSocketId);
+               
                 window.electronAPI.send('forward-claude-response-complete', {
                   instanceId,
                   socketId: currentSocketId
                 });
               } else {
-                console.log('[RemoteClaudeForwarding] No socket ID found for instance:', instanceId);
+               
               }
             };
             
             window.addEventListener('claude-response-complete-' + instanceId, responseCompleteHandler);
             window.__remoteClaudeListeners.get(instanceId).responseCompleteHandler = responseCompleteHandler;
             
-            console.log('[RemoteClaudeForwarding] Set up output forwarding for:', instanceId);
+           
             return true;
           } else {
             console.error('[RemoteClaudeForwarding] Claude API not available');
@@ -1126,7 +1110,6 @@ export class RemoteClaudeHandler {
       })()
     `).then(result => {
             if (result) {
-                console.log(`[RemoteClaudeHandler] Successfully set up forwarding for ${instanceId}`);
                 // Set up IPC listener to forward Claude output
                 const forwardHandler = (event, data) => {
                     if (data.instanceId === instanceId && data.socketId === socket.id) {
@@ -1146,7 +1129,6 @@ export class RemoteClaudeHandler {
                 // Set up IPC listener for response complete events
                 const responseCompleteHandler = (event, data) => {
                     if (data.instanceId === instanceId && data.socketId === socket.id) {
-                        console.log(`[RemoteClaudeHandler] Forwarding response complete for ${instanceId}`);
                         socket.emit(RemoteEvent.CLAUDE_RESPONSE_COMPLETE, {
                             instanceId: data.instanceId
                         });

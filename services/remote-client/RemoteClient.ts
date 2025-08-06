@@ -47,11 +47,11 @@ export class RemoteClient {
       
       // Connection events
       this.socket.on('connect', () => {
-        console.log('Connected to remote server');
+       
       });
       
       this.socket.on('connection:ready', (data) => {
-        console.log('Session ready:', data);
+       
         resolve();
       });
       
@@ -61,7 +61,7 @@ export class RemoteClient {
       });
       
       this.socket.on('disconnect', (reason) => {
-        console.log('Disconnected:', reason);
+       
       });
       
       // Error events

@@ -41,16 +41,55 @@ export const useHooksStore = defineStore('hooks', {
       this.error = null;
       
       try {
-        const result = await window.electronAPI.claude.getHooks();
-        
-        
-        // Handle both direct array response and wrapped response
-        if (Array.isArray(result)) {
-          this.hooks = result;
-        } else if (result && result.success && Array.isArray(result.hooks)) {
-          this.hooks = result.hooks;
+        if (window.electronAPI?.claude?.getHooks) {
+          // Desktop mode - direct access
+          const result = await window.electronAPI.claude.getHooks();
+          
+          // Handle both direct array response and wrapped response
+          if (Array.isArray(result)) {
+            this.hooks = result;
+          } else if (result && result.success && Array.isArray(result.hooks)) {
+            this.hooks = result.hooks;
+          } else {
+            this.hooks = [];
+          }
         } else {
-          this.hooks = [];
+          // Remote mode - get from desktop via Socket.IO
+          const { remoteConnection } = await import('~/services/remote-client/RemoteConnectionSingleton');
+          const socket = remoteConnection.getSocket();
+          
+          if (socket?.connected) {
+            try {
+              const features = await new Promise<any>((resolve, reject) => {
+                const request = {
+                  id: `hooks-store-${Date.now()}`,
+                  payload: {}
+                };
+                
+                const timeout = setTimeout(() => {
+                  reject(new Error('Request timeout'));
+                }, 5000);
+                
+                socket.emit('desktop:features:get', request, (response: any) => {
+                  clearTimeout(timeout);
+                  if (response.success) {
+                    resolve(response.data);
+                  } else {
+                    reject(new Error(response.error?.message || 'Request failed'));
+                  }
+                });
+              });
+              
+              // Extract hooks from features
+              this.hooks = features?.hooks || [];
+            } catch (error) {
+              console.error('Failed to load hooks from remote:', error);
+              this.hooks = [];
+            }
+          } else {
+            console.debug('No remote connection available');
+            this.hooks = [];
+          }
         }
       } catch (error) {
         console.error('Failed to load hooks:', error);

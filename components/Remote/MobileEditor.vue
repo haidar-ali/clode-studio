@@ -35,12 +35,19 @@
         <p class="hint">Select a file from the explorer</p>
       </div>
     </div>
+    
+    <!-- Code Generation Modal -->
+    <CodeGenerationModal 
+      ref="codeGenerationModal"
+      @accept="handleAcceptGeneratedCode"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import RemoteCodeEditor from './RemoteCodeEditor.vue';
+import CodeGenerationModal from '~/components/Editor/CodeGenerationModal.vue';
 
 interface FileData {
   path: string;
@@ -58,23 +65,26 @@ const props = defineProps<Props>();
 const openFiles = ref<FileData[]>([]);
 const currentFilePath = ref<string | null>(null);
 
+// Code generation modal ref
+const codeGenerationModal = ref();
+
 const currentFile = computed(() => 
   openFiles.value.find(f => f.path === currentFilePath.value) || null
 );
 
 // Watch for new files from explorer
 watch(() => props.fileData, (newFile) => {
-  console.log('MobileEditor: fileData changed:', newFile);
+ 
   if (newFile) {
     // Check if file is already open
     const existing = openFiles.value.find(f => f.path === newFile.path);
     if (!existing) {
       openFiles.value.push({ ...newFile });
-      console.log('MobileEditor: Added new file to openFiles:', newFile.path);
+     
     }
     currentFilePath.value = newFile.path;
-    console.log('MobileEditor: Set current file to:', newFile.path);
-    console.log('MobileEditor: openFiles now:', openFiles.value.length);
+   
+   
   }
 }, { immediate: true });
 
@@ -119,6 +129,31 @@ function getFileIcon(filename: string): string {
   };
   return iconMap[ext || ''] || 'mdi:file-document-outline';
 }
+
+// Handle generated code acceptance
+const handleAcceptGeneratedCode = (generatedCode: string) => {
+  if (!currentFile.value) return;
+  
+  // Update the file content
+  handleContentChange(generatedCode);
+};
+
+// Event handler for opening code generation
+const handleOpenCodeGeneration = () => {
+  if (!currentFile.value) return;
+  
+  const content = currentFile.value.content || '';
+  codeGenerationModal.value?.open(content);
+};
+
+// Set up event listeners
+onMounted(() => {
+  window.addEventListener('editor:open-code-generation', handleOpenCodeGeneration);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('editor:open-code-generation', handleOpenCodeGeneration);
+});
 </script>
 
 <style scoped>

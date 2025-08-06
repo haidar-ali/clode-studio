@@ -25,7 +25,7 @@ function getClaudeConfigPath() {
 }
 
 async function setup() {
-  console.log('🚀 Clode Studio Remote MCP Server Setup\n');
+ 
   
   // Check if running from the correct directory
   const packagePath = path.join(__dirname, 'package.json');
@@ -37,11 +37,11 @@ async function setup() {
   }
   
   // Install dependencies
-  console.log('📦 Installing dependencies...');
+ 
   const { execSync } = await import('child_process');
   try {
     execSync('npm install', { stdio: 'inherit', cwd: __dirname });
-    console.log('✅ Dependencies installed\n');
+   
   } catch (error) {
     console.error('❌ Failed to install dependencies:', error.message);
     process.exit(1);
@@ -59,7 +59,7 @@ async function setup() {
   const remoteConfigPath = path.join(configDir, 'remote-config.json');
   try {
     await fs.access(remoteConfigPath);
-    console.log('📄 Remote config already exists at:', remoteConfigPath);
+   
   } catch {
     const defaultConfig = {
       serverUrl: 'http://localhost:3789',
@@ -67,7 +67,7 @@ async function setup() {
       connectionTimeout: 30000
     };
     await fs.writeFile(remoteConfigPath, JSON.stringify(defaultConfig, null, 2));
-    console.log('✅ Created remote config at:', remoteConfigPath);
+   
   }
   
   // Generate Claude Desktop config snippet
@@ -79,13 +79,13 @@ async function setup() {
     }
   };
   
-  console.log('\n📋 Add this to your Claude Desktop config:\n');
-  console.log(JSON.stringify({ mcpServers: mcpConfig }, null, 2));
+ 
+ 
   
   // Try to find Claude config
   try {
     const claudeConfigPath = getClaudeConfigPath();
-    console.log('\n📍 Your Claude Desktop config is likely at:', claudeConfigPath);
+   
     
     // Check if config exists
     try {
@@ -93,16 +93,16 @@ async function setup() {
       const config = JSON.parse(configData);
       
       if (config.mcpServers && config.mcpServers['clode-remote']) {
-        console.log('\n⚠️  Warning: clode-remote MCP server is already configured');
+       
       } else {
-        console.log('\n💡 Tip: You can automatically add this config by running:');
-        console.log(`   node setup.js --auto-config`);
+       
+       
       }
     } catch {
-      console.log('\n💡 Tip: Claude Desktop config doesn\'t exist yet. It will be created when you first run Claude Desktop.');
+     
     }
   } catch (error) {
-    console.log('\n⚠️  Could not detect Claude Desktop config location for your platform');
+   
   }
   
   // Handle auto-config flag
@@ -110,8 +110,8 @@ async function setup() {
     await autoConfig();
   }
   
-  console.log('\n✅ Setup complete! You can now use the clode-remote MCP server in Claude Desktop.');
-  console.log('\n📚 See README.md for usage instructions');
+ 
+ 
 }
 
 async function autoConfig() {
@@ -124,7 +124,7 @@ async function autoConfig() {
       const configData = await fs.readFile(claudeConfigPath, 'utf-8');
       config = JSON.parse(configData);
     } catch {
-      console.log('Creating new Claude Desktop config...');
+     
     }
     
     // Ensure mcpServers exists
@@ -145,10 +145,10 @@ async function autoConfig() {
     
     // Write config
     await fs.writeFile(claudeConfigPath, JSON.stringify(config, null, 2));
-    console.log('\n✅ Automatically added clode-remote to Claude Desktop config!');
+   
   } catch (error) {
     console.error('\n❌ Failed to auto-configure:', error.message);
-    console.log('Please add the configuration manually.');
+   
   }
 }
 

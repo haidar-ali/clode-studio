@@ -235,13 +235,13 @@ echo "✅ Hook test completed"
   
   async configureClodeIntegration(instanceId: string, workingDirectory: string): Promise<void> {
     // Configure Claude to work with Clode Studio
-    console.log('Configuring Claude integration for instance:', instanceId, 'in', workingDirectory);
+   
     // Implementation would go here if needed
   }
   
   async cleanupClodeIntegration(): Promise<void> {
     // Clean up Claude integration
-    console.log('Cleaning up Claude integration');
+   
     // Implementation would go here if needed
   }
 }

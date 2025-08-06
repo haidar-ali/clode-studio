@@ -163,7 +163,7 @@ let lastWorkspace = (window as any).__remoteWorkspace?.path;
 const workspaceCheckInterval = setInterval(async () => {
   const currentWorkspace = (window as any).__remoteWorkspace?.path;
   if (currentWorkspace && currentWorkspace !== lastWorkspace) {
-    console.log('[MobileTerminal] Workspace changed from', lastWorkspace, 'to', currentWorkspace);
+   
     lastWorkspace = currentWorkspace;
     
     // Clear existing sessions
@@ -185,11 +185,11 @@ async function loadTerminals() {
   
   try {
     isInitializing.value = true;
-    console.log('[MobileTerminal] Loading terminals...');
+   
     
     // Get all active terminals from desktop
     const activeTerminals = await services.value.terminal.listActiveTerminals();
-    console.log('[MobileTerminal] Active terminals:', activeTerminals);
+   
     
     if (activeTerminals && activeTerminals.length > 0) {
       // Filter terminals for current workspace
@@ -200,7 +200,7 @@ async function loadTerminals() {
         (!t.workingDirectory && activeTerminals.length === 1)
       );
       
-      console.log('[MobileTerminal] Workspace terminals:', workspaceTerminals);
+     
       terminals.value = workspaceTerminals;
       
       // Initialize sessions for each terminal
@@ -229,7 +229,7 @@ async function loadTerminals() {
 async function initializeTerminalSession(terminal: any) {
   if (terminalSessions.value.has(terminal.id)) return;
   
-  console.log('[MobileTerminal] Initializing session for terminal:', terminal.id);
+ 
   
   // Create session object
   const session: TerminalSession = {
@@ -245,11 +245,11 @@ async function initializeTerminalSession(terminal: any) {
   
   try {
     // Skip saveTerminalState since it's not implemented on desktop yet
-    console.log('[MobileTerminal] Skipping terminal state sync (not implemented)');
+   
     
     // First set up data handler before storing session
     session.dataHandler = services.value!.terminal.onTerminalData(terminal.id, (data: string) => {
-      console.log(`[MobileTerminal] Received data for terminal ${terminal.id}:`, data);
+     
       if (data) {
         // Handle carriage returns by processing line overwrites
         const lines = data.split('\n');
@@ -318,7 +318,7 @@ async function createNewTerminal() {
       name: terminalName
     });
     
-    console.log('[MobileTerminal] Created new terminal:', terminalId);
+   
     
     // Create terminal info object matching desktop format
     const newTerminal = {

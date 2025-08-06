@@ -12,6 +12,7 @@ import { RemoteTerminalHandler } from './remote-handlers/RemoteTerminalHandler.j
 import { RemoteClaudeHandler } from './remote-handlers/RemoteClaudeHandler.js';
 import { RemoteSyncHandler } from './remote-handlers/RemoteSyncHandler.js';
 import { RemoteWorkspaceHandler } from './remote-handlers/RemoteWorkspaceHandler.js';
+import { RemoteDesktopFeaturesHandler } from './remote-handlers/RemoteDesktopFeaturesHandler.js';
 import { RemoteEvent } from './remote-protocol.js';
 
 export interface RemoteServerOptions {
@@ -30,6 +31,7 @@ export class RemoteServer {
   private claudeHandler: RemoteClaudeHandler;
   private syncHandler: RemoteSyncHandler;
   private workspaceHandler: RemoteWorkspaceHandler;
+  private desktopFeaturesHandler: RemoteDesktopFeaturesHandler;
   
   constructor(options: RemoteServerOptions) {
     this.config = options.config;
@@ -65,15 +67,20 @@ export class RemoteServer {
       this.mainWindow,
       this.sessionManager
     );
+    
+    this.desktopFeaturesHandler = new RemoteDesktopFeaturesHandler(
+      this.mainWindow,
+      this.sessionManager
+    );
   }
   
   async start(): Promise<void> {
     if (!this.config.enableRemoteAccess) {
-      console.log('Remote access not enabled');
+     
       return;
     }
     
-    console.log(`Starting remote server on ${this.config.serverHost}:${this.config.serverPort}`);
+   
     
     // Create HTTP server
     this.httpServer = createServer();
@@ -96,7 +103,7 @@ export class RemoteServer {
     // Start listening
     return new Promise((resolve, reject) => {
       this.httpServer.listen(this.config.serverPort, this.config.serverHost, () => {
-        console.log(`Remote server listening on ${this.config.serverHost}:${this.config.serverPort}`);
+       
         resolve();
       });
       
@@ -135,7 +142,7 @@ export class RemoteServer {
     // Connection handler
     this.io.on('connection', (socket) => {
       const session = this.sessionManager.getSessionBySocket(socket.id);
-      console.log(`Remote client connected: ${socket.id}, session: ${session?.id}`);
+     
       
       // Register handlers
       this.fileHandler.registerHandlers(socket);
@@ -143,6 +150,13 @@ export class RemoteServer {
       this.claudeHandler.registerHandlers(socket);
       this.syncHandler.registerHandlers(socket);
       this.workspaceHandler.registerHandlers(socket);
+      this.desktopFeaturesHandler.registerHandlers(socket);
+      
+      // Register LSP proxy for remote editor
+      this.setupLSPProxy(socket);
+      
+      // Register Ghost Text and Code Generation proxy
+      this.setupAIProxy(socket);
       
       // Set up desktop terminal data forwarding
       this.setupDesktopTerminalForwarding(socket);
@@ -155,7 +169,7 @@ export class RemoteServer {
       
       // Handle disconnection
       socket.on('disconnect', () => {
-        console.log(`Remote client disconnected: ${socket.id}`);
+       
         
         // Clean up terminals and Claude instances for this socket
         this.terminalHandler.cleanupSocketTerminals(socket.id);
@@ -196,7 +210,7 @@ export class RemoteServer {
       this.httpServer = null;
     }
     
-    console.log('Remote server stopped');
+   
   }
   
   getActiveConnectionCount(): number {
@@ -251,10 +265,10 @@ export class RemoteServer {
   }
   
   forwardClaudeResponseComplete(socketId: string, instanceId: string): void {
-    console.log('[RemoteServer] ✅ forwardClaudeResponseComplete called for:', instanceId, 'to socket:', socketId);
+   
     
     if (!this.io) {
-      console.log('[RemoteServer] ❌ No Socket.IO server available');
+     
       return;
     }
     
@@ -262,13 +276,13 @@ export class RemoteServer {
     const socket = this.io.sockets.sockets.get(socketId);
     
     if (socket && socket.connected) {
-      console.log('[RemoteServer] 📡 Forwarding response complete to mobile for:', instanceId);
+     
       // Forward the response complete event to this specific socket
       socket.emit(RemoteEvent.CLAUDE_RESPONSE_COMPLETE, {
         instanceId
       });
     } else {
-      console.log('[RemoteServer] ❌ Socket not found, broadcasting to all sockets');
+     
       // Try broadcasting to all sockets as fallback
       this.io.emit(RemoteEvent.CLAUDE_RESPONSE_COMPLETE, {
         instanceId
@@ -279,7 +293,7 @@ export class RemoteServer {
   forwardDesktopTerminalData(ptyId: string, data: string): void {
     if (!this.io) return;
     
-    console.log(`[RemoteServer] Forwarding terminal data from PTY ${ptyId}, data length: ${data.length}`);
+   
     
     // Forward to all connected sockets
     let forwardedCount = 0;
@@ -288,8 +302,8 @@ export class RemoteServer {
       const ptyToInstanceMap = (socket as any).__ptyToInstanceMap;
       if (ptyToInstanceMap && ptyToInstanceMap.has(ptyId)) {
         const instanceId = ptyToInstanceMap.get(ptyId);
-        console.log(`[RemoteServer] Forwarding to socket ${socket.id} for terminal ${instanceId}`);
-        console.log(`[RemoteServer] Emitting event: ${RemoteEvent.TERMINAL_DATA}`);
+       
+       
         socket.emit(RemoteEvent.TERMINAL_DATA, {
           terminalId: instanceId,
           data: Buffer.from(data).toString('base64')
@@ -299,7 +313,7 @@ export class RemoteServer {
     });
     
     if (forwardedCount === 0) {
-      console.log(`[RemoteServer] No sockets found with mapping for PTY ${ptyId}`);
+     
     }
   }
   
@@ -314,13 +328,251 @@ export class RemoteServer {
     terminals.forEach(terminal => {
       if (terminal.ptyProcessId) {
         ptyToInstanceMap.set(terminal.ptyProcessId, terminal.id);
-        console.log(`[RemoteServer] Mapping PTY ${terminal.ptyProcessId} to terminal ${terminal.id}`);
+       
       }
     });
     
     // Store the mapping on the socket
     (socket as any).__ptyToInstanceMap = ptyToInstanceMap;
-    console.log(`[RemoteServer] Updated terminal mapping for socket ${socketId}: ${ptyToInstanceMap.size} terminals`);
+   
+  }
+  
+  private setupLSPProxy(socket: any): void {
+    // Handle LSP requests from remote clients
+    socket.on('lsp:request', async (request: any) => {
+      try {
+        // Forward LSP request to desktop's LSP service
+        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+          // Convert LSP params to desktop format
+          // The desktop LSP expects 'filepath' but remote sends 'uri'
+          const desktopParams = {
+            filepath: request.params.uri, // Map uri to filepath
+            content: request.params.content || '', // Include content for LSP
+            position: request.params.position,
+            context: request.params.context
+          };
+          
+          const result = await this.mainWindow.webContents.executeJavaScript(`
+            (async () => {
+              if (window.electronAPI?.lsp) {
+                // Forward the LSP request based on method
+                const method = '${request.method}';
+                const params = ${JSON.stringify(desktopParams)};
+                
+                switch(method) {
+                  case 'textDocument/completion':
+                    return await window.electronAPI.lsp.getCompletions(params);
+                  case 'textDocument/hover':
+                    return await window.electronAPI.lsp.getHover(params);
+                  case 'textDocument/definition':
+                    return await window.electronAPI.lsp.getDefinition(params);
+                  case 'textDocument/references':
+                    return await window.electronAPI.lsp.getReferences(params);
+                  case 'textDocument/documentSymbol':
+                    return await window.electronAPI.lsp.getDocumentSymbols(params);
+                  case 'textDocument/formatting':
+                    return await window.electronAPI.lsp.formatDocument(params);
+                  default:
+                    throw new Error('Unsupported LSP method: ' + method);
+                }
+              }
+              return null;
+            })()
+          `);
+          
+          // Send response back to client
+          socket.emit('lsp:response', {
+            requestId: request.requestId,
+            result: result
+          });
+        }
+      } catch (error) {
+        socket.emit('lsp:response', {
+          requestId: request.requestId,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+    });
+    
+    // Handle document lifecycle events
+    socket.on('lsp:didOpen', async (params: any) => {
+      // Forward to desktop LSP
+      console.log('[Server LSP] Document opened:', params.uri);
+      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+        try {
+          await this.mainWindow.webContents.executeJavaScript(`
+            (async () => {
+              if (window.electronAPI?.lsp) {
+                // The desktop LSP manager needs to be notified about document open
+                const { lspManager } = await import('./lsp-manager.js');
+                const language = lspManager.detectLanguage('${params.uri}');
+                if (language) {
+                  const connection = lspManager.connections.get(language);
+                  if (connection) {
+                    // Send didOpen notification
+                    connection.sendNotification('textDocument/didOpen', {
+                      textDocument: {
+                        uri: 'file://${params.uri}',
+                        languageId: '${params.languageId || 'typescript'}',
+                        version: 1,
+                        text: ${JSON.stringify(params.content || '')}
+                      }
+                    });
+                  }
+                }
+              }
+            })()
+          `);
+        } catch (error) {
+          console.error('[Server LSP] Failed to notify didOpen:', error);
+        }
+      }
+    });
+    
+    socket.on('lsp:didChange', async (params: any) => {
+      // Forward to desktop LSP
+      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+        try {
+          await this.mainWindow.webContents.executeJavaScript(`
+            (async () => {
+              if (window.electronAPI?.lsp) {
+                const { lspManager } = await import('./lsp-manager.js');
+                const language = lspManager.detectLanguage('${params.uri}');
+                if (language) {
+                  const connection = lspManager.connections.get(language);
+                  if (connection) {
+                    // Send didChange notification
+                    connection.sendNotification('textDocument/didChange', {
+                      textDocument: {
+                        uri: 'file://${params.uri}',
+                        version: Date.now()
+                      },
+                      contentChanges: [{
+                        text: ${JSON.stringify(params.content || '')}
+                      }]
+                    });
+                  }
+                }
+              }
+            })()
+          `);
+        } catch (error) {
+          console.error('[Server LSP] Failed to notify didChange:', error);
+        }
+      }
+    });
+    
+    socket.on('lsp:didClose', async (params: any) => {
+      // Forward to desktop LSP
+      console.log('[Server LSP] Document closed:', params.uri);
+      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+        try {
+          await this.mainWindow.webContents.executeJavaScript(`
+            (async () => {
+              if (window.electronAPI?.lsp) {
+                const { lspManager } = await import('./lsp-manager.js');
+                const language = lspManager.detectLanguage('${params.uri}');
+                if (language) {
+                  const connection = lspManager.connections.get(language);
+                  if (connection) {
+                    // Send didClose notification
+                    connection.sendNotification('textDocument/didClose', {
+                      textDocument: {
+                        uri: 'file://${params.uri}'
+                      }
+                    });
+                  }
+                }
+              }
+            })()
+          `);
+        } catch (error) {
+          console.error('[Server LSP] Failed to notify didClose:', error);
+        }
+      }
+    });
+  }
+  
+  private setupAIProxy(socket: any): void {
+    // Handle Ghost Text requests from remote clients
+    socket.on('ai:ghost-text', async (request: any) => {
+      try {
+        const { requestId, prefix, suffix, forceManual } = request;
+        
+        // Forward to desktop's autocomplete service
+        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+          const result = await this.mainWindow.webContents.executeJavaScript(`
+            (async () => {
+              if (window.electronAPI?.autocomplete?.getGhostText) {
+                return await window.electronAPI.autocomplete.getGhostText(${JSON.stringify({
+                  prefix: prefix || '',
+                  suffix: suffix || '',
+                  forceManual: forceManual || false
+                })});
+              }
+              return { success: false, error: 'Ghost text API not available' };
+            })()
+          `);
+          
+          // Send response back to client
+          socket.emit('ai:ghost-text-response', {
+            requestId,
+            result
+          });
+        } else {
+          socket.emit('ai:ghost-text-response', {
+            requestId,
+            result: { success: false, error: 'Desktop app not available' }
+          });
+        }
+      } catch (error) {
+        socket.emit('ai:ghost-text-response', {
+          requestId: request.requestId,
+          result: { success: false, error: error instanceof Error ? error.message : String(error) }
+        });
+      }
+    });
+    
+    // Handle Code Generation requests from remote clients
+    socket.on('ai:code-generation', async (request: any) => {
+      try {
+        const { requestId, prompt, fileContent, filePath, language, resources } = request;
+        
+        // Forward to desktop's code generation service
+        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+          const result = await this.mainWindow.webContents.executeJavaScript(`
+            (async () => {
+              if (window.electronAPI?.codeGeneration?.generate) {
+                return await window.electronAPI.codeGeneration.generate(${JSON.stringify({
+                  prompt: prompt || '',
+                  fileContent: fileContent || '',
+                  filePath: filePath || 'untitled',
+                  language: language || 'text',
+                  resources: resources || []
+                })});
+              }
+              return { success: false, error: 'Code generation API not available' };
+            })()
+          `);
+          
+          // Send response back to client
+          socket.emit('ai:code-generation-response', {
+            requestId,
+            result
+          });
+        } else {
+          socket.emit('ai:code-generation-response', {
+            requestId,
+            result: { success: false, error: 'Desktop app not available' }
+          });
+        }
+      } catch (error) {
+        socket.emit('ai:code-generation-response', {
+          requestId: request.requestId,
+          result: { success: false, error: error instanceof Error ? error.message : String(error) }
+        });
+      }
+    });
   }
   
   private setupDesktopTerminalForwarding(socket: any): void {

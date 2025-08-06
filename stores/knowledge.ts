@@ -114,6 +114,13 @@ export const useKnowledgeStore = defineStore('knowledge', {
 
         const knowledgePath = `${this.workspacePath}/.claude/knowledge`;
         
+        // Check if we have file system access
+        if (!window.electronAPI?.fs) {
+          // Knowledge entries are desktop-only for now
+          this.entries = [];
+          return;
+        }
+        
         // Check if knowledge directory exists
         const exists = await window.electronAPI.fs.exists(knowledgePath);
         if (!exists) {

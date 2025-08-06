@@ -21,7 +21,7 @@ class RemoteConnectionSingleton {
   setSocket(socket: Socket | null) {
     // Don't override if we already have a connected socket
     if (this.socketRef.value?.connected && socket !== this.socketRef.value) {
-      console.log('[RemoteConnectionSingleton] Already have connected socket, ignoring new one');
+     
       return;
     }
     this.socketRef.value = socket;

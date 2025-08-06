@@ -10,7 +10,7 @@
     @dragleave="handleDragLeave"
     @drop="handleDrop"
   >
-    <div class="dock-header" v-if="leftDockModules.length > 1">
+    <div class="dock-header" v-if="leftDockModules.length > 1 && !isMobile">
       <div class="dock-tabs">
         <button
           v-for="moduleId in leftDockModules"
@@ -47,11 +47,15 @@ import { useLayoutStore, type ModuleId } from '~/stores/layout';
 import { useTasksStore } from '~/stores/tasks';
 import { useModuleDragDrop } from '~/composables/useModuleDragDrop';
 import { useEditorStore } from '~/stores/editor';
+import { useAdaptiveUI } from '~/composables/useAdaptiveUI';
 import Icon from '~/components/Icon.vue';
 
 const layoutStore = useLayoutStore();
 const tasksStore = useTasksStore();
 const editorStore = useEditorStore();
+
+// Adaptive UI
+const { isMobile } = useAdaptiveUI();
 const { dragDropState, canDropInDock, handleDrop: handleDropModule, setDropTarget, startDrag, endDrag } = useModuleDragDrop();
 
 // Module configuration
@@ -71,10 +75,10 @@ const moduleConfig: Record<ModuleId, { label: string; icon: string }> = {
 
 // Module components mapping - Using remote-compatible components
 const moduleComponents = {
-  explorer: defineAsyncComponent(() => import('~/components/Remote/MobileExplorer.vue')),
-  'explorer-editor': defineAsyncComponent(() => import('~/components/Remote/RemoteExplorerEditor.vue')),
+  explorer: defineAsyncComponent(() => import('~/components/FileExplorer/SimpleFileExplorer.vue')),
+  'explorer-editor': defineAsyncComponent(() => import('~/components/Remote/RemoteExplorerEditorPro.vue')),
   terminal: defineAsyncComponent(() => import('~/components/Remote/MobileTerminalXterm.vue')),
-  tasks: defineAsyncComponent(() => import('~/components/Remote/RemoteKanbanBoard.vue')),
+  tasks: defineAsyncComponent(() => import('~/components/Kanban/KanbanBoard.vue')),
   'source-control': defineAsyncComponent(() => import('~/components/SourceControlV2/SourceControlV2.vue')),
   snapshots: defineAsyncComponent(() => import('~/components/Snapshots/SnapshotsPanel.vue')),
   worktrees: defineAsyncComponent(() => import('~/components/Worktree/WorktreePanel.vue')),
@@ -85,10 +89,22 @@ const moduleComponents = {
 };
 
 // Get modules in left dock
-const leftDockModules = computed(() => layoutStore.dockConfig.leftDock);
+const leftDockModules = computed(() => {
+  // On mobile, show the currently active dock
+  if (isMobile.value) {
+    return layoutStore.activeDock ? [layoutStore.activeDock] : ['explorer-editor'];
+  }
+  return layoutStore.dockConfig.leftDock;
+});
 
 // Active module from store
-const activeLeftModule = computed(() => layoutStore.activeLeftModule);
+const activeLeftModule = computed(() => {
+  // On mobile, always show the active dock
+  if (isMobile.value) {
+    return layoutStore.activeDock || 'explorer-editor';
+  }
+  return layoutStore.activeLeftModule;
+});
 
 // Module helpers
 const getModuleLabel = (moduleId: ModuleId) => moduleConfig[moduleId]?.label || moduleId;
@@ -132,7 +148,7 @@ const handleTabDragEnd = () => {
 
 const showTabMenu = (event: MouseEvent, moduleId: ModuleId) => {
   // TODO: Implement context menu for tabs
-  console.log('Tab menu for', moduleId);
+ 
 };
 
 // Handle file opened from explorer

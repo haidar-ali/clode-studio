@@ -66,8 +66,8 @@ const moduleComponents = {
   worktrees: defineAsyncComponent(() => import('~/components/Worktree/WorktreePanel.vue')),
   prompts: defineAsyncComponent(() => import('~/components/Prompts/PromptStudio.vue')),
   terminal: defineAsyncComponent(() => import('~/components/Remote/MobileTerminalXterm.vue')),
-  explorer: defineAsyncComponent(() => import('~/components/Remote/MobileExplorer.vue')),
-  'explorer-editor': defineAsyncComponent(() => import('~/components/Remote/RemoteExplorerEditor.vue'))
+  explorer: defineAsyncComponent(() => import('~/components/FileExplorer/SimpleFileExplorer.vue')),
+  'explorer-editor': defineAsyncComponent(() => import('~/components/Remote/RemoteExplorerEditorPro.vue'))
 };
 
 // Module configuration for labels and icons
@@ -140,7 +140,7 @@ const handleTabDragEnd = () => {
 const showTabMenu = (event: MouseEvent, moduleId: ModuleId) => {
   // Don't show menu for claude
   if (moduleId === 'claude') return;
-  console.log('Tab menu for', moduleId);
+ 
 };
 
 // Handle file opened from explorer

@@ -130,7 +130,7 @@ let lastWorkspace = (window as any).__remoteWorkspace?.path;
 const workspaceCheckInterval = setInterval(async () => {
   const currentWorkspace = (window as any).__remoteWorkspace?.path;
   if (currentWorkspace && currentWorkspace !== lastWorkspace) {
-    console.log('[MobileTerminal] Workspace changed from', lastWorkspace, 'to', currentWorkspace);
+   
     lastWorkspace = currentWorkspace;
     
     // Clear existing sessions
@@ -153,11 +153,11 @@ async function loadTerminals() {
   
   try {
     isInitializing.value = true;
-    console.log('[MobileTerminal] Loading terminals...');
+   
     
     // Get all active terminals from desktop
     const activeTerminals = await services.value.terminal.listActiveTerminals();
-    console.log('[MobileTerminal] Active terminals:', activeTerminals);
+   
     
     if (activeTerminals && activeTerminals.length > 0) {
       // Filter terminals for current workspace
@@ -168,7 +168,7 @@ async function loadTerminals() {
         (!t.workingDirectory && activeTerminals.length === 1)
       );
       
-      console.log('[MobileTerminal] Workspace terminals:', workspaceTerminals);
+     
       terminals.value = workspaceTerminals;
       
       // Initialize sessions for each terminal
@@ -197,7 +197,7 @@ async function loadTerminals() {
 async function initializeTerminalSession(terminalInfo: any) {
   if (terminalSessions.value.has(terminalInfo.id)) return;
   
-  console.log('[MobileTerminal] Initializing session for terminal:', terminalInfo.id);
+ 
   
   // Create xterm instance
   const terminal = new Terminal({
@@ -256,7 +256,7 @@ async function initializeTerminalSession(terminalInfo: any) {
   try {
     // Set up data handler from remote terminal
     session.dataHandler = services.value!.terminal.onTerminalData(terminalInfo.id, (data: string) => {
-      console.log(`[MobileTerminal] Received data for terminal ${terminalInfo.id}, length: ${data.length}`);
+     
       terminal.write(data);
     });
     
@@ -274,7 +274,7 @@ async function initializeTerminalSession(terminalInfo: any) {
     
     // Restore terminal buffer if available
     if (terminalInfo.currentBuffer) {
-      console.log(`[MobileTerminal] Restoring terminal buffer for ${terminalInfo.id}`);
+     
       // Wait a bit for terminal to be fully ready
       await new Promise(resolve => setTimeout(resolve, 50));
       
@@ -283,7 +283,7 @@ async function initializeTerminalSession(terminalInfo: any) {
         try {
           // Use deserialize to restore the terminal state
           serializeAddon.deserialize(terminalInfo.currentBuffer);
-          console.log('[MobileTerminal] Successfully restored terminal state');
+         
         } catch (e) {
           console.error('[MobileTerminal] Failed to deserialize terminal buffer:', e);
           // Fall back to writing raw content
@@ -291,7 +291,7 @@ async function initializeTerminalSession(terminalInfo: any) {
         }
       } else {
         // SerializeAddon might not support deserialize, just write the content
-        console.log('[MobileTerminal] SerializeAddon.deserialize not available, writing content directly');
+       
         try {
           terminal.write(terminalInfo.currentBuffer);
         } catch (e) {
@@ -353,7 +353,7 @@ async function createNewTerminal() {
       name: terminalName
     });
     
-    console.log('[MobileTerminal] Created new terminal:', terminalId);
+   
     
     // Create terminal info object matching desktop format
     const newTerminal = {

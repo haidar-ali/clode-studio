@@ -61,14 +61,56 @@ export const useClaudeCommandsStore = defineStore('claudeCommands', {
         this.isLoading = true;
         this.error = null;
 
-        // Load both project and personal commands in parallel
-        const [projectCmds, personalCmds] = await Promise.all([
-          this.loadProjectCommands(),
-          this.loadPersonalCommands()
-        ]);
+        if (window.electronAPI?.fs) {
+          // Desktop mode - load directly
+          const [projectCmds, personalCmds] = await Promise.all([
+            this.loadProjectCommands(),
+            this.loadPersonalCommands()
+          ]);
 
-        this.projectCommands = projectCmds;
-        this.personalCommands = personalCmds;
+          this.projectCommands = projectCmds;
+          this.personalCommands = personalCmds;
+        } else {
+          // Remote mode - get from desktop via Socket.IO
+          const { remoteConnection } = await import('~/services/remote-client/RemoteConnectionSingleton');
+          const socket = remoteConnection.getSocket();
+          
+          if (socket?.connected) {
+            try {
+              const features = await new Promise<any>((resolve, reject) => {
+                const request = {
+                  id: `commands-store-${Date.now()}`,
+                  payload: {}
+                };
+                
+                const timeout = setTimeout(() => {
+                  reject(new Error('Request timeout'));
+                }, 5000);
+                
+                socket.emit('desktop:features:get', request, (response: any) => {
+                  clearTimeout(timeout);
+                  if (response.success) {
+                    resolve(response.data);
+                  } else {
+                    reject(new Error(response.error?.message || 'Request failed'));
+                  }
+                });
+              });
+              
+              // Extract commands from features
+              this.projectCommands = features?.commands?.projectCommands || [];
+              this.personalCommands = features?.commands?.personalCommands || [];
+            } catch (error) {
+              console.error('Failed to load commands from remote:', error);
+              this.projectCommands = [];
+              this.personalCommands = [];
+            }
+          } else {
+            console.debug('No remote connection available');
+            this.projectCommands = [];
+            this.personalCommands = [];
+          }
+        }
       } catch (error) {
         console.error('Failed to load Claude commands:', error);
         this.error = error instanceof Error ? error.message : 'Failed to load commands';
@@ -78,7 +120,7 @@ export const useClaudeCommandsStore = defineStore('claudeCommands', {
     },
 
     async loadProjectCommands(): Promise<ClaudeSlashCommand[]> {
-      if (!this.projectPath) return [];
+      if (!this.projectPath || !window.electronAPI?.fs) return [];
 
       const commandsPath = `${this.projectPath}/.claude/commands`;
       
@@ -93,6 +135,9 @@ export const useClaudeCommandsStore = defineStore('claudeCommands', {
 
     async loadPersonalCommands(): Promise<ClaudeSlashCommand[]> {
       try {
+        // Check if we have access to Electron APIs
+        if (!window.electronAPI?.getHomeDir || !window.electronAPI?.fs) return [];
+        
         // Get user home directory
         const homeDir = await window.electronAPI.getHomeDir();
         if (!homeDir) return [];

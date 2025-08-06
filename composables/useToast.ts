@@ -15,7 +15,7 @@ class ToastManager {
   }
   
   success(message: string, options?: ToastOptions) {
-    console.log('[Toast Success]', message);
+   
   }
   
   error(message: string, options?: ToastOptions) {

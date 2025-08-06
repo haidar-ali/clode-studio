@@ -5,9 +5,14 @@ import { useTasksStore } from '~/stores/tasks';
 import { useClaudeInstancesStore } from '~/stores/claude-instances';
 import { useTerminalInstancesStore } from '~/stores/terminal-instances';
 import { useSourceControlStore } from '~/stores/source-control';
+import { DesktopFeatureSync } from '~/services/desktop-feature-sync';
+import { getServices } from '~/services';
 
 const currentWorkspacePath = ref<string>('');
 const isChangingWorkspace = ref(false);
+
+// Desktop feature sync instance
+let desktopFeatureSync: DesktopFeatureSync | null = null;
 
 // NEW: Worktree management within workspace
 const activeWorktreePath = ref<string>('');
@@ -48,6 +53,18 @@ export function useWorkspaceManager() {
       const savedPath = await window.electronAPI.store.get('workspacePath');
       if (savedPath && typeof savedPath === 'string') {
         currentWorkspacePath.value = savedPath;
+        
+        // Sync workspace path to server for remote file access
+        try {
+          await $fetch('/api/workspace/set', {
+            method: 'POST',
+            body: { workspacePath: savedPath }
+          });
+          console.log('Initial workspace synced to server:', savedPath);
+        } catch (error) {
+          console.error('Failed to sync initial workspace to server:', error);
+        }
+        
         return savedPath;
       }
     } catch (error) {
@@ -58,7 +75,7 @@ export function useWorkspaceManager() {
 
   const changeWorkspace = async (path: string) => {
     if (isChangingWorkspace.value) return;
-    
+    console.log('test')
     isChangingWorkspace.value = true;
     
     try {
@@ -68,6 +85,12 @@ export function useWorkspaceManager() {
         
         // Save current workspace configuration before switching
         await claudeInstancesStore.saveWorkspaceConfiguration(currentWorkspacePath.value);
+        
+        // Stop desktop feature sync
+        if (desktopFeatureSync) {
+          desktopFeatureSync.stopSync();
+          desktopFeatureSync = null;
+        }
       }
       
       // 1. Close all editor tabs and reset terminals to avoid confusion
@@ -85,6 +108,17 @@ export function useWorkspaceManager() {
       
       // 4. Update workspace path
       currentWorkspacePath.value = path;
+      
+      // 4.5. Sync workspace path to server for remote file access
+      try {
+        await $fetch('/api/workspace/set', {
+          method: 'POST',
+          body: { workspacePath: path }
+        });
+        console.log('Workspace synced to server:', path);
+      } catch (error) {
+        console.error('Failed to sync workspace to server:', error);
+      }
       
       // 5. Start watching the new workspace
       await window.electronAPI.fs.watchDirectory(path);
@@ -162,8 +196,24 @@ export function useWorkspaceManager() {
         await window.electronAPI.autocomplete.initializeProject(path);
       }
       
-      
-      
+      // Sync desktop features to cache for remote access
+      if (window.electronAPI) {
+        console.log('[WorkspaceManager] Starting desktop feature sync for workspace:', path);
+        try {
+          const services = await getServices();
+          if (services?.cache) {
+            if (!desktopFeatureSync) {
+              desktopFeatureSync = new DesktopFeatureSync(services.cache);
+            }
+            // Do an immediate sync
+            await desktopFeatureSync.syncAll();
+            // Start periodic sync
+            desktopFeatureSync.startSync();
+          }
+        } catch (error) {
+          console.error('[WorkspaceManager] Failed to start desktop feature sync:', error);
+        }
+      }
       
     } catch (error) {
       console.error('Failed to change workspace:', error);

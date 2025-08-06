@@ -539,7 +539,7 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
     },
 
     async reloadInstances() {
-      console.log('Reloading Claude instances after desktop update');
+     
       
       if (typeof window === 'undefined' || !window.electronAPI?.store) {
         return;
@@ -642,7 +642,7 @@ if (typeof window !== 'undefined') {
       if (terminalEl.__instanceId === instanceId && terminalEl.__serializeAddon && terminalEl.__terminal) {
         try {
           const buffer = terminalEl.__serializeAddon.serialize();
-          console.log(`Found Claude terminal buffer for ${instanceId}, length: ${buffer.length}`);
+         
           return buffer;
         } catch (e) {
           console.error('Failed to serialize Claude terminal:', e);
@@ -650,7 +650,7 @@ if (typeof window !== 'undefined') {
       }
     }
     
-    console.log(`No Claude terminal found for instance ${instanceId}`);
+   
     return null;
   };
 }

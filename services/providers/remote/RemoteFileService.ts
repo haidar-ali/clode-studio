@@ -11,11 +11,7 @@ export class RemoteFileService implements IFileService {
   
   private async request<T, R>(event: string, payload: T): Promise<R> {
     const socket = this.getSocket();
-    console.log('[RemoteFileService] Socket check:', {
-      hasSocket: !!socket,
-      connected: socket?.connected,
-      id: socket?.id
-    });
+    // Remove socket check logging to reduce noise
     if (!socket?.connected) {
       throw new Error('Not connected to remote server');
     }
@@ -26,7 +22,21 @@ export class RemoteFileService implements IFileService {
         payload
       };
       
+      // Add timeout for requests
+      const timeout = setTimeout(() => {
+        console.error(`[RemoteFileService] Request timeout for ${event}:`, payload);
+        reject(new Error(`Request timeout for ${event}`));
+      }, 30000); // 30 second timeout
+      
+      // Only log non-read requests to reduce noise
+      if (event !== 'file:read') {
+       
+      }
       socket.emit(event, request, (response: RemoteResponse<R>) => {
+        clearTimeout(timeout);
+        if (event !== 'file:read') {
+         
+        }
         if (response.success) {
           resolve(response.data!);
         } else {
@@ -56,6 +66,10 @@ export class RemoteFileService implements IFileService {
     return this.request('file:list', { path });
   }
   
+  async readDirectory(path: string): Promise<any[]> {
+    return this.listDirectory(path);
+  }
+  
   async exists(path: string): Promise<boolean> {
     try {
       await this.request('file:stat', { path });
@@ -63,6 +77,10 @@ export class RemoteFileService implements IFileService {
     } catch {
       return false;
     }
+  }
+  
+  async fileExists(path: string): Promise<boolean> {
+    return this.exists(path);
   }
   
   async getFileStats(path: string): Promise<any> {

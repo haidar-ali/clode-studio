@@ -20,7 +20,15 @@ async function initializeServices() {
       try {
         isLoading.value = true;
         error.value = null;
+        
+        // Always get services - the ServiceFactory will handle the mode detection
+        // and return the appropriate provider (Desktop or Remote)
         serviceProvider.value = await getServices();
+        
+        console.log('Services initialized:', {
+          mode: !window.electronAPI ? 'remote' : 'desktop',
+          provider: serviceProvider.value?.constructor?.name
+        });
       } catch (e) {
         error.value = e as Error;
         console.error('Failed to initialize services:', e);

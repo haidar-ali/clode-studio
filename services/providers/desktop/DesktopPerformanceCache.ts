@@ -415,7 +415,7 @@ export class DesktopPerformanceCache implements IPerformanceCache {
     `).all(...keys, Date.now()) as any[];
     
     // Re-fetch expired entries
-    console.log(`Cache warming: ${rows.length} expired entries to refresh`);
+   
   }
   
   async optimizeCache(): Promise<void> {
@@ -434,7 +434,7 @@ export class DesktopPerformanceCache implements IPerformanceCache {
         LIMIT 100
       `).run();
       
-      console.log(`Cache optimization: removed ${removed.changes} low-priority entries`);
+     
     }
     
     // Vacuum database

@@ -10,6 +10,7 @@ import type { IKnowledgeService } from './IKnowledgeService.js';
 import type { IMCPService } from './IMCPService.js';
 import type { IStorageService } from './IStorageService.js';
 import type { IPerformanceCache } from './IPerformanceCache.js';
+import type { ITasksService } from './ITasksService.js';
 
 export interface IServiceProvider {
   file: IFileService;
@@ -20,6 +21,7 @@ export interface IServiceProvider {
   mcp: IMCPService;
   storage: IStorageService;
   cache: IPerformanceCache;  // Changed from queue to performance cache
+  tasks: ITasksService;
   
   // App mode for provider-specific logic
   mode: AppMode;

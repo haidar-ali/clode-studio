@@ -159,7 +159,7 @@ export class RemoteSessionManager {
     });
     
     if (expired.length > 0) {
-      console.log(`Cleaned up ${expired.length} expired sessions`);
+     
     }
   }
   

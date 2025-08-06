@@ -49,8 +49,11 @@ export class RemoteTerminalHandler {
     async handleTerminalCreate(socket, request, callback) {
         try {
             // Check session and permissions
+            console.log('[RemoteTerminalHandler] Creating terminal, socket.id:', socket.id);
             const session = this.sessionManager.getSessionBySocket(socket.id);
+            console.log('[RemoteTerminalHandler] Session found:', !!session, session?.id);
             if (!session) {
+                console.error('[RemoteTerminalHandler] No session found for socket:', socket.id);
                 return callback({
                     id: request.id,
                     success: false,
@@ -114,7 +117,6 @@ export class RemoteTerminalHandler {
                 // Clean up
                 this.destroyTerminal(terminalId);
             });
-            console.log(`Created terminal ${terminalId} for session ${session.id}`);
             callback({
                 id: request.id,
                 success: true,
@@ -340,12 +342,14 @@ export class RemoteTerminalHandler {
                 this.terminalsBySocket.delete(terminal.socketId);
             }
         }
-        console.log(`Destroyed terminal ${terminalId}`);
     }
     async handleTerminalList(socket, request, callback) {
         try {
+            console.log('[RemoteTerminalHandler] Listing terminals, socket.id:', socket.id);
             const session = this.sessionManager.getSessionBySocket(socket.id);
+            console.log('[RemoteTerminalHandler] Session found for list:', !!session, session?.id);
             if (!session) {
+                console.error('[RemoteTerminalHandler] No session found for list, socket:', socket.id);
                 return callback({
                     id: request.id,
                     success: false,
@@ -381,13 +385,11 @@ export class RemoteTerminalHandler {
         `);
                 if (result && Array.isArray(result)) {
                     desktopTerminals = result;
-                    console.log(`Found ${desktopTerminals.length} desktop terminals`);
                     // Update the socket's terminal mapping for forwarding
                     this.updateSocketTerminalMapping(socket.id, desktopTerminals);
                 }
             }
             catch (e) {
-                console.log('Could not get desktop terminals:', e instanceof Error ? e.message : String(e));
             }
             // Get remote-created terminals for this session
             const remoteTerminals = Array.from(this.terminals.values())
@@ -401,7 +403,6 @@ export class RemoteTerminalHandler {
             }));
             // Combine desktop and remote terminals
             const allTerminals = [...desktopTerminals, ...remoteTerminals];
-            console.log(`Returning ${allTerminals.length} terminals (${desktopTerminals.length} desktop, ${remoteTerminals.length} remote) for session ${session.id}`);
             callback({
                 id: request.id,
                 success: true,

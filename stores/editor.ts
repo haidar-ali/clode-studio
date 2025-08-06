@@ -1,6 +1,40 @@
 import { defineStore } from 'pinia';
 import type { EditorTab } from '~/shared/types';
 
+// File service abstraction for desktop/remote compatibility
+const getFileService = () => {
+  if (typeof window !== 'undefined' && window.electronAPI?.fs) {
+    // Desktop mode - use Electron API
+    return {
+      readFile: (path: string) => window.electronAPI.fs.readFile(path),
+      writeFile: (path: string, content: string) => window.electronAPI.fs.writeFile(path, content)
+    };
+  } else {
+    // Remote mode - use server API
+    return {
+      readFile: async (path: string) => {
+        try {
+          const response = await $fetch('/api/files/read', { query: { path } });
+          return { success: true, content: response.content || '' };
+        } catch (error: any) {
+          return { success: false, error: error.message || 'Failed to read file' };
+        }
+      },
+      writeFile: async (path: string, content: string) => {
+        try {
+          await $fetch('/api/files/write', {
+            method: 'POST',
+            body: { path, content }
+          });
+          return { success: true };
+        } catch (error: any) {
+          return { success: false, error: error.message || 'Failed to write file' };
+        }
+      }
+    };
+  }
+};
+
 export const useEditorStore = defineStore('editor', {
   state: () => ({
     tabs: [] as EditorTab[],
@@ -26,7 +60,8 @@ export const useEditorStore = defineStore('editor', {
         return;
       }
 
-      const result = await window.electronAPI.fs.readFile(path);
+      const fileService = getFileService();
+      const result = await fileService.readFile(path);
       if (!result.success) {
         throw new Error(result.error);
       }
@@ -72,7 +107,8 @@ export const useEditorStore = defineStore('editor', {
       const tab = this.tabs.find(t => t.id === tabId);
       if (!tab || !tab.isDirty) return;
 
-      const result = await window.electronAPI.fs.writeFile(tab.path, tab.content);
+      const fileService = getFileService();
+      const result = await fileService.writeFile(tab.path, tab.content);
       if (result.success) {
         tab.isDirty = false;
 
@@ -95,12 +131,14 @@ export const useEditorStore = defineStore('editor', {
 
       const tab = this.tabs[index];
 
-      // Stop watching this file
-      window.electronAPI.fs.unwatchFile(tab.path);
+      // Stop watching this file (only in desktop mode)
+      if (window.electronAPI?.fs?.unwatchFile) {
+        window.electronAPI.fs.unwatchFile(tab.path);
+      }
       
-      // Notify LSP that document is closed
-      if (tab.path) {
-        window.electronAPI.lsp.closeDocument?.({
+      // Notify LSP that document is closed (only in desktop mode)
+      if (tab.path && window.electronAPI?.lsp?.closeDocument) {
+        window.electronAPI.lsp.closeDocument({
           uri: `file://${tab.path}`,
           filepath: tab.path
         }).catch((error: any) => {

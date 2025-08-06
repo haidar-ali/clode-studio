@@ -13,14 +13,18 @@ import DesktopApp from '~/components/DesktopApp.vue';
 // Check if we're in remote mode immediately
 const isRemoteClient = ref(false);
 if (typeof window !== 'undefined') {
-  const urlParams = new URLSearchParams(window.location.search);
-  const deviceToken = urlParams.get('token');
-  const deviceId = urlParams.get('deviceId');
+  // If we have electronAPI, we're in desktop mode
+  if (window.electronAPI) {
+    isRemoteClient.value = false;
+  } else {
+    // No electronAPI means we're in a browser (remote mode)
+    isRemoteClient.value = true;
+  }
   
-  isRemoteClient.value = !!(deviceToken && deviceId) || 
-                         window.location.pathname.includes('/remote');
-  
-  console.log('App component selection - isRemoteClient:', isRemoteClient.value);
+  console.log('App mode detection:', {
+    hasElectronAPI: !!window.electronAPI,
+    isRemoteClient: isRemoteClient.value
+  });
 }
 </script>
 

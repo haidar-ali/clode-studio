@@ -1,14 +1,27 @@
 <template>
-  <div class="ide-container">
+  <div class="ide-container" :class="{ 
+    'mobile-layout': isMobile, 
+    'tablet-layout': isTablet,
+    'desktop-layout': isDesktop 
+  }">
     <!-- Mode Selector -->
     <ModeSelector />
     
     <!-- Worktree Tab Bar -->
     <WorktreeTabBar />
     
-    <!-- New Three-Dock Layout System -->
-    <div class="ide-with-activity-bar">
-      <ActivityBar />
+    <!-- Mobile Layout: Single panel with bottom navigation -->
+    <div v-if="isMobile" class="mobile-layout-container">
+      <RemoteLeftDock />
+      <MobileBottomNav 
+        :active-tab="layoutStore.activeDock" 
+        @change="handleMobileNavChange"
+      />
+    </div>
+    
+    <!-- Tablet/Desktop Layout: Three-Dock System -->
+    <div v-else class="ide-with-activity-bar">
+      <ActivityBar v-if="!isTablet" />
       
       <div class="ide-main-content">
         <!-- Simplified Three-Dock System -->
@@ -143,6 +156,7 @@ import { useTasksStore } from '~/stores/tasks';
 import { useLayoutStore } from '~/stores/layout';
 import { useMCPStore } from '~/stores/mcp';
 import { useModuleDragDrop } from '~/composables/useModuleDragDrop';
+import { useAdaptiveUI } from '~/composables/useAdaptiveUI';
 // Remote-compatible services
 import { useServices } from '~/composables/useServices';
 // Import all the UI components
@@ -171,6 +185,7 @@ import RemoteBottomDock from '~/components/Remote/RemoteBottomDock.vue';
 import DragIndicator from '~/components/Layout/DragIndicator.vue';
 import GlobalSearch from '~/components/Search/GlobalSearch.vue';
 import ModeSelector from '~/components/Layout/ModeSelector.vue';
+import MobileBottomNav from '~/components/Layout/MobileBottomNav.vue';
 
 const editorStore = useEditorStore();
 const tasksStore = useTasksStore();
@@ -178,6 +193,9 @@ const layoutStore = useLayoutStore();
 const mcpStore = useMCPStore();
 const { dragDropState } = useModuleDragDrop();
 const { services, initialize } = useServices();
+
+// Adaptive UI
+const { isMobile, isTablet, isDesktop, layoutMode, sidebarBehavior } = useAdaptiveUI();
 
 const bottomTab = ref<'tasks' | 'terminal' | 'context' | 'knowledge' | 'prompts' | 'source-control' | 'worktrees'>('tasks');
 const showGlobalSearch = ref(false);
@@ -266,6 +284,11 @@ const handleSwitchTab = (event: CustomEvent) => {
   }
 };
 
+// Handle mobile navigation changes
+const handleMobileNavChange = (tab: string) => {
+  layoutStore.setActiveDock(tab);
+};
+
 </script>
 
 <style scoped>
@@ -349,5 +372,55 @@ const handleSwitchTab = (event: CustomEvent) => {
 .tab-content {
   flex: 1;
   overflow: hidden;
+}
+
+/* Mobile Layout Styles */
+.mobile-layout-container {
+  width: 100%;
+  height: calc(100vh - 56px); /* Account for bottom nav */
+  overflow: hidden;
+}
+
+.mobile-layout .ide-container {
+  padding-bottom: 56px; /* Space for bottom nav */
+}
+
+.mobile-layout .splitpanes__splitter {
+  display: none !important; /* Hide splitters on mobile */
+}
+
+.mobile-layout .activity-bar {
+  display: none; /* Hide activity bar on mobile */
+}
+
+/* Tablet Layout Styles */
+.tablet-layout .splitpanes__splitter {
+  width: 3px !important; /* Bigger touch targets */
+  height: 3px !important;
+}
+
+.tablet-layout .activity-bar {
+  width: 56px; /* Wider for touch */
+}
+
+/* Responsive pane sizes */
+@media (max-width: 768px) {
+  .splitpanes__pane {
+    min-width: 100% !important;
+  }
+  
+  .bottom-dock-minimized {
+    display: none;
+  }
+}
+
+@media (max-width: 1024px) {
+  .worktree-tab-bar {
+    display: none; /* Hide on tablet/mobile */
+  }
+  
+  .mode-selector {
+    display: none; /* Hide on tablet/mobile */
+  }
 }
 </style>

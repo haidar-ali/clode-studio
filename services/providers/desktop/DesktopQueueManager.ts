@@ -45,7 +45,7 @@ export class DesktopQueueManager implements IQueueManager {
         return;
       } catch (error) {
         // Fall through to queue it
-        console.log('Failed to execute immediately, queuing:', error);
+       
       }
     }
     
@@ -96,14 +96,14 @@ export class DesktopQueueManager implements IQueueManager {
   
   async processQueue(): Promise<void> {
     if (!this.online) {
-      console.log('Offline, skipping queue processing');
+     
       return;
     }
     
     const queueSize = await this.getQueueSize();
     if (queueSize === 0) return;
     
-    console.log(`Processing queue with ${queueSize} items`);
+   
     
     for (let i = 0; i < this.config.batchSize; i++) {
       const operation = await this.dequeue();
@@ -160,12 +160,12 @@ export class DesktopQueueManager implements IQueueManager {
     this.statusListeners.forEach(listener => listener(online));
     
     if (online) {
-      console.log('Back online, starting queue processing');
+     
       this.startProcessing();
       // Process immediately
       this.processQueue().catch(console.error);
     } else {
-      console.log('Going offline, stopping queue processing');
+     
       this.stopProcessing();
     }
   }
@@ -203,7 +203,7 @@ export class DesktopQueueManager implements IQueueManager {
   private async executeOperation(operation: QueuedOperation): Promise<void> {
     // This is where we'd execute the actual operation
     // For now, just log it
-    console.log('Executing operation:', operation.type, operation.payload);
+   
     
     // In the real implementation, this would:
     // 1. Route to the appropriate service based on operation type

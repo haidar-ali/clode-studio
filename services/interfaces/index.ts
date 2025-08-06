@@ -22,3 +22,4 @@ export type {
   CacheEntry,
   CacheQueryOptions 
 } from './IPerformanceCache.js';
+export type { ITasksService, SimpleTask, TasksData } from './ITasksService.js';

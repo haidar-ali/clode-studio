@@ -13,7 +13,8 @@ import type {
   IKnowledgeService,
   IMCPService,
   IStorageService,
-  IQueueManager
+  IPerformanceCache,
+  ITasksService
 } from '../interfaces/index.js';
 import { AppMode } from '../interfaces/index.js';
 import { RemoteFileService } from './remote/RemoteFileService.js';
@@ -23,7 +24,9 @@ import { RemoteTerminalService } from './remote/RemoteTerminalService.js';
 import { RemoteKnowledgeService } from './remote/RemoteKnowledgeService.js';
 import { RemoteMCPService } from './remote/RemoteMCPService.js';
 import { RemoteStorageService } from './remote/RemoteStorageService.js';
-import { RemoteQueueManager } from './remote/RemoteQueueManager.js';
+import { RemoteTasksService } from './remote/RemoteTasksService.js';
+import { RemoteMemoryCache } from './remote/RemoteMemoryCache.js';
+import { RemoteDesktopFeaturesService } from './remote/RemoteDesktopFeaturesService.js';
 import { connectionManager, ConnectionState } from '../connection-manager.js';
 import { SyncService } from '../sync/sync-service.js';
 
@@ -54,50 +57,20 @@ export class RemoteServiceProvider implements IServiceProvider {
   public readonly knowledge: IKnowledgeService;
   public readonly mcp: IMCPService;
   public readonly storage: IStorageService;
-  public readonly queue: IQueueManager;
-  
-  // Minimal cache implementation for remote mode
-  public readonly cache = {
-    saveSessionState: async (state: any) => {
-      // In remote mode, session state is managed by the server
-      console.log('Remote mode: Session state managed by server');
-    },
-    getSessionState: async () => {
-      // Return minimal state for remote mode
-      return {
-        openFiles: [],
-        terminalSessions: [],
-        claudeConversations: []
-      };
-    },
-    getCacheStats: async () => {
-      // Return minimal stats for remote mode
-      return {
-        totalSize: 0,
-        fileCount: 0,
-        oldestEntry: new Date(),
-        newestEntry: new Date()
-      };
-    },
-    getPerformanceMetrics: async () => {
-      // Return minimal metrics for remote mode
-      return {
-        cacheHitRate: 0,
-        averageResponseTime: 0,
-        totalRequests: 0,
-        cacheHits: 0,
-        cacheMisses: 0
-      };
-    }
-  };
+  public readonly tasks: ITasksService;
+  public readonly cache: IPerformanceCache;
   
   private socket: Socket | null = null;
   private config: RemoteServiceConfig;
   private sessionId: string | null = null;
   private syncService: SyncService;
+  private desktopFeaturesService: RemoteDesktopFeaturesService;
   
   constructor(config: RemoteServiceConfig) {
     this.config = config;
+    
+    // Initialize cache service
+    this.cache = new RemoteMemoryCache();
     
     // Initialize services with null socket (will be set on connect)
     this.file = new RemoteFileService(() => this.socket);
@@ -107,18 +80,56 @@ export class RemoteServiceProvider implements IServiceProvider {
     this.knowledge = new RemoteKnowledgeService(() => this.socket);
     this.mcp = new RemoteMCPService(() => this.socket);
     this.storage = new RemoteStorageService(() => this.socket);
-    this.queue = new RemoteQueueManager(() => this.socket, connectionManager);
+    this.tasks = new RemoteTasksService(this.file);
     
     // Initialize sync service
     this.syncService = new SyncService(() => this.socket, config.syncOptions);
+    
+    // Initialize desktop features service
+    this.desktopFeaturesService = new RemoteDesktopFeaturesService(() => this.socket);
     
     // Set up connection state listeners
     this.setupConnectionListeners();
   }
   
   async initialize(): Promise<void> {
+    // Check if we already have a connection from remoteConnection singleton
+    const existingSocket = remoteConnection.getSocket();
+    if (existingSocket && existingSocket.connected) {
+      console.log('[RemoteServiceProvider] Using existing socket connection');
+      this.socket = existingSocket;
+      this.setupSocketHandlers();
+      // Mark connectionManager as connected since we're reusing an existing connection
+      (connectionManager as any).currentState = ConnectionState.CONNECTED;
+      (connectionManager as any).socket = existingSocket;
+      return;
+    }
+    
+    // If no existing connection and autoConnect is enabled, try to connect
     if (this.config.autoConnect !== false) {
-      await this.connect();
+      // For remote mode, we should wait for the connection to be established
+      // by the RemoteApp component instead of trying to connect ourselves
+      console.log('[RemoteServiceProvider] Waiting for connection from RemoteApp...');
+      
+      // Wait a bit for the connection to be established
+      let attempts = 0;
+      while (attempts < 10) {
+        const socket = remoteConnection.getSocket();
+        if (socket && socket.connected) {
+          console.log('[RemoteServiceProvider] Connection established via RemoteApp');
+          this.socket = socket;
+          this.setupSocketHandlers();
+          // Mark connectionManager as connected
+          (connectionManager as any).currentState = ConnectionState.CONNECTED;
+          (connectionManager as any).socket = socket;
+          return;
+        }
+        await new Promise(resolve => setTimeout(resolve, 500));
+        attempts++;
+      }
+      
+      // If still no connection, we can work without it (API fallback mode)
+      console.warn('[RemoteServiceProvider] No Socket.IO connection available - services will use API fallback');
     }
   }
   
@@ -135,7 +146,7 @@ export class RemoteServiceProvider implements IServiceProvider {
     // Check if we have a shared connection from useRemoteConnection or mobile
     const sharedSocket = remoteConnection.getSocket();
     if (sharedSocket && sharedSocket.connected) {
-      console.log('Using shared Socket.IO connection');
+     
       this.socket = sharedSocket;
       
       // Set up socket event handlers
@@ -151,22 +162,22 @@ export class RemoteServiceProvider implements IServiceProvider {
     
     // For mobile, wait for the mobile connection to be established
     if (typeof window !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
-      console.log('[RemoteServiceProvider] Mobile device detected, waiting for mobile connection...');
+     
       
       // Try multiple times to get the mobile socket with longer timeout
       for (let i = 0; i < 20; i++) {
         const mobileSocket = remoteConnection.getSocket();
         if (mobileSocket && mobileSocket.connected) {
-          console.log('[RemoteServiceProvider] Using mobile Socket.IO connection');
-          console.log('[RemoteServiceProvider] Mobile socket connected:', mobileSocket.connected);
-          console.log('[RemoteServiceProvider] Mobile socket ID:', mobileSocket.id);
+         
+         
+         
           this.socket = mobileSocket;
           
           // Set up socket event handlers
           this.setupSocketHandlers();
           
           // Skip connection manager for already-connected mobile socket
-          console.log('[RemoteServiceProvider] Mobile socket already connected, skipping connection manager');
+         
           
           // Just mark as connected in connection manager without waiting
           (connectionManager as any).transitionTo(ConnectionState.CONNECTED, 'Mobile connection reused');
@@ -174,18 +185,18 @@ export class RemoteServiceProvider implements IServiceProvider {
           // Check if session ID is already available
           const storedSessionId = (window as any).__remoteSessionId;
           if (storedSessionId) {
-            console.log('[RemoteServiceProvider] Using stored session ID:', storedSessionId);
+           
             this.sessionId = storedSessionId;
           }
           
           // Wait for session ready (should be immediate if we have stored session)
           await this.waitForSession();
-          console.log('[RemoteServiceProvider] Mobile connection established successfully');
+         
           return;
         }
         
         // Wait before trying again
-        console.log(`[RemoteServiceProvider] Attempt ${i + 1}/20 - waiting for mobile socket...`);
+       
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
       
@@ -193,7 +204,7 @@ export class RemoteServiceProvider implements IServiceProvider {
     }
     
     if (this.socket?.connected) {
-      console.log('Already connected to remote server');
+     
       return;
     }
     
@@ -260,9 +271,6 @@ export class RemoteServiceProvider implements IServiceProvider {
       // Perform sync via sync service
       await this.syncService.sync();
       
-      // Flush queue
-      await this.queue.flush();
-      
       connectionManager.completeSync(true);
     } catch (error) {
       connectionManager.completeSync(false);
@@ -283,7 +291,7 @@ export class RemoteServiceProvider implements IServiceProvider {
   private setupConnectionListeners(): void {
     // Listen for state changes
     connectionManager.on('state:change', (change) => {
-      console.log(`Connection state changed: ${change.from} -> ${change.to}`, change.reason);
+     
     });
     
     // Auto-sync when needed
@@ -295,7 +303,7 @@ export class RemoteServiceProvider implements IServiceProvider {
     
     // Handle reconnect attempts
     connectionManager.on('reconnect:attempt', (attempt) => {
-      console.log(`Reconnect attempt ${attempt}`);
+     
     });
     
     connectionManager.on('reconnect:failed', (reason) => {
@@ -312,7 +320,7 @@ export class RemoteServiceProvider implements IServiceProvider {
     // Handle session ready
     this.socket.on('connection:ready', (data) => {
       this.sessionId = data.sessionId;
-      console.log('Remote session ready:', this.sessionId);
+     
     });
     
     // Track data transfer
@@ -336,7 +344,7 @@ export class RemoteServiceProvider implements IServiceProvider {
   private waitForSession(): Promise<void> {
     return new Promise((resolve, reject) => {
       if (this.sessionId) {
-        console.log('[RemoteServiceProvider] Session already ready:', this.sessionId);
+       
         resolve();
         return;
       }
@@ -348,7 +356,7 @@ export class RemoteServiceProvider implements IServiceProvider {
       
       const checkSession = () => {
         if (this.sessionId) {
-          console.log('[RemoteServiceProvider] Session ready:', this.sessionId);
+         
           clearTimeout(timeout);
           clearInterval(interval);
           resolve();

@@ -33,11 +33,11 @@ export class RemoteTerminalService implements ITerminalService {
         payload: payload || {}
       };
       
-      console.log(`[RemoteTerminalService] Sending ${event}:`, request);
+     
       
       socket.emit(event, request, (response: any) => {
         clearTimeout(timeout);
-        console.log(`[RemoteTerminalService] Response for ${event}:`, response);
+       
         
         if (!response) {
           console.error(`[RemoteTerminalService] No response for ${event}`);
@@ -61,15 +61,15 @@ export class RemoteTerminalService implements ITerminalService {
   
   // Terminal lifecycle
   async createTerminal(options: TerminalOptions): Promise<string> {
-    console.log('[RemoteTerminalService] Creating terminal with options:', options);
+   
     const response = await this.emit('terminal:create', options);
     const terminalId = response.terminalId;
-    console.log('[RemoteTerminalService] Created terminal:', terminalId);
+   
     return terminalId;
   }
   
   async destroyTerminal(terminalId: string): Promise<void> {
-    console.log('[RemoteTerminalService] Destroying terminal:', terminalId);
+   
     await this.emit('terminal:destroy', { terminalId });
     // Clean up any event handlers for this terminal
     this.eventHandlers.delete(`terminal:data:${terminalId}`);
@@ -91,10 +91,10 @@ export class RemoteTerminalService implements ITerminalService {
   }
   
   async listActiveTerminals(): Promise<TerminalInfo[]> {
-    console.log('[RemoteTerminalService] Listing active terminals');
+   
     try {
       const terminals = await this.emit('terminal:list');
-      console.log('[RemoteTerminalService] Active terminals:', terminals);
+     
       return terminals || [];
     } catch (error) {
       console.error('[RemoteTerminalService] Failed to list terminals:', error);
@@ -111,14 +111,14 @@ export class RemoteTerminalService implements ITerminalService {
       return () => {};
     }
     
-    console.log(`[RemoteTerminalService] Setting up data handler for terminal ${terminalId}`);
-    console.log(`[RemoteTerminalService] Socket connected:`, socket.connected);
-    console.log(`[RemoteTerminalService] Socket ID:`, socket.id);
+   
+   
+   
     
     // Desktop sends data as terminal:data event
     const eventName = 'terminal:data';
     const handler = (event: { terminalId: string; data: Buffer | string }) => {
-      console.log(`[RemoteTerminalService] Received TERMINAL_DATA event for ${event.terminalId}, listening for ${terminalId}`);
+     
       if (event.terminalId === terminalId) {
         // Convert data to string
         let dataStr: string;
@@ -137,7 +137,7 @@ export class RemoteTerminalService implements ITerminalService {
           console.error('[RemoteTerminalService] Unknown data type:', typeof event.data);
           return;
         }
-        console.log(`[RemoteTerminalService] Forwarding data to callback, length: ${dataStr.length}`);
+       
         callback(dataStr);
       }
     };
@@ -150,11 +150,11 @@ export class RemoteTerminalService implements ITerminalService {
     
     // Listen for data events
     socket.on(eventName, handler);
-    console.log(`[RemoteTerminalService] Registered handler for ${eventName} events on terminal ${terminalId}`);
+   
     
     // Check current listeners
     const listeners = socket.listeners(eventName);
-    console.log(`[RemoteTerminalService] Total ${eventName} listeners: ${listeners.length}`);
+   
     
     // Return cleanup function
     return () => {

@@ -21,16 +21,18 @@ export function useRemoteConnection() {
   });
   
   async function connect(options: ConnectionOptions) {
-    console.log('[useRemoteConnection] Connect called with:', options);
-    
-    // Skip if mobile device - let mobile connection handle it
-    if (typeof window !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
-      console.log('[useRemoteConnection] Mobile device detected, skipping regular connection');
+    // Check if we already have a connection in the singleton
+    const existingSocket = remoteConnection.getSocket();
+    if (existingSocket && existingSocket.connected) {
+      console.log('[useRemoteConnection] Reusing existing socket connection');
+      socket.value = existingSocket;
+      connected.value = true;
+      connecting.value = false;
       return;
     }
     
     if (connecting.value || connected.value) {
-      console.log('[useRemoteConnection] Already connecting or connected, returning');
+      console.log('[useRemoteConnection] Already connecting or connected');
       return;
     }
     
@@ -48,7 +50,7 @@ export function useRemoteConnection() {
         serverUrl = `${protocol}//${hostname}:3789`;
       }
       
-      console.log('Connecting to Socket.IO server at:', serverUrl);
+     
       debugInfo.value.serverUrl = serverUrl;
       
       socket.value = io(serverUrl, {
@@ -61,8 +63,8 @@ export function useRemoteConnection() {
         reconnectionDelay: 1000,
         reconnectionAttempts: 5,
         timeout: 20000, // Increase timeout for mobile networks
-        // Force new connection
-        forceNew: true,
+        // Don't force new connection - reuse if available
+        forceNew: false,
         // Better compatibility with mobile
         upgrade: true,
         rememberUpgrade: true
@@ -75,16 +77,22 @@ export function useRemoteConnection() {
       socket.value.on('connect', () => {
         connected.value = true;
         connecting.value = false;
-        console.log('Connected to remote server');
+       
       });
       
       socket.value.on('connection:ready', async (data) => {
-        console.log('Session ready:', data);
+       
+        
+        // Check if socket still exists before making request
+        if (!socket.value || !connected.value) {
+          console.warn('Socket disconnected before workspace request');
+          return;
+        }
         
         // Request workspace information from desktop
         try {
           const workspace = await request('workspace:get', {});
-          console.log('Workspace info:', workspace);
+         
           
           // Store workspace info in a way components can access
           // Since we can't emit to ourselves, we'll use a different approach
@@ -99,7 +107,7 @@ export function useRemoteConnection() {
       
       socket.value.on('disconnect', () => {
         connected.value = false;
-        console.log('Disconnected from remote server');
+       
       });
       
       socket.value.on('connect_error', (err) => {
@@ -152,7 +160,12 @@ export function useRemoteConnection() {
         payload
       };
       
-      socket.value!.emit(event, request, (response: any) => {
+      if (!socket.value) {
+        reject(new Error('Socket has been destroyed'));
+        return;
+      }
+      
+      socket.value.emit(event, request, (response: any) => {
         if (response.success) {
           resolve(response.data);
         } else {
@@ -164,6 +177,8 @@ export function useRemoteConnection() {
   
   function disconnect() {
     if (socket.value) {
+      // Remove all listeners before disconnecting
+      socket.value.removeAllListeners();
       socket.value.disconnect();
       socket.value = null;
       connected.value = false;

@@ -1,12 +1,21 @@
 import { hoverTooltip } from '@codemirror/view';
 import type { EditorView } from '@codemirror/view';
 import { useEditorStore } from '~/stores/editor';
+import { useRemoteLSP } from '~/composables/useRemoteLSP';
 
 export function useLSPHover() {
   const editorStore = useEditorStore();
+  const isRemoteMode = !window.electronAPI;
 
   // Create hover tooltip extension
   const createLSPHoverTooltip = () => {
+    // Use remote LSP if in browser mode
+    if (isRemoteMode) {
+      const { createRemoteLSPHover } = useRemoteLSP();
+      return hoverTooltip(createRemoteLSPHover());
+    }
+    
+    // Original desktop implementation
     return hoverTooltip(async (view: EditorView, pos: number, side: number) => {
       try {
         // Get the active tab to determine file path
@@ -20,6 +29,12 @@ export function useLSPHover() {
         const line = doc.lineAt(pos);
         const lineNumber = line.number; // 1-based
         const character = pos - line.from; // 0-based
+
+        // Check if we're in remote mode (no electronAPI)
+        if (!window.electronAPI?.lsp) {
+          // In remote mode, skip LSP hover
+          return null;
+        }
 
         // Call LSP hover through IPC
         const response = await window.electronAPI.lsp.getHover({

@@ -45,6 +45,7 @@ export function useCodeGeneration() {
     error.value = null;
     
     try {
+      // Check for desktop mode first
       if (window.electronAPI?.codeGeneration?.generate) {
         const result = await window.electronAPI.codeGeneration.generate(request);
         
@@ -57,10 +58,24 @@ export function useCodeGeneration() {
         return result;
       }
       
-      return {
-        success: false,
-        error: 'Code generation API not available'
-      };
+      // Remote mode - use Socket.IO
+      const { useRemoteAI } = await import('~/composables/useRemoteAI');
+      const { generateCode } = useRemoteAI();
+      const result = await generateCode({
+        prompt: request.prompt,
+        fileContent: request.fileContent,
+        filePath: request.filePath,
+        language: request.language,
+        resources: request.resources
+      });
+      
+      if (result.success && result.generatedCode) {
+        generatedCode.value = result.generatedCode;
+      } else {
+        error.value = result.error || 'Failed to generate code';
+      }
+      
+      return result;
     } catch (err) {
       error.value = err instanceof Error ? err.message : 'Generation failed';
       return {

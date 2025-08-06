@@ -90,17 +90,17 @@ async function loadFileTree(path?: string) {
     error.value = null;
     serviceStatus.value = 'Getting services...';
     
-    console.log('[MobileExplorer] Starting service initialization...');
+   
     
     // Get services synchronously
     const { services, error: serviceError, initialize } = useServices();
     
-    console.log('[MobileExplorer] Got useServices hook, calling initialize...');
+   
     
     // Wait for initialization
     await initialize();
     
-    console.log('[MobileExplorer] Initialize completed, checking for errors...');
+   
     
     if (serviceError.value) {
       serviceStatus.value = `Service error: ${serviceError.value.message}`;
@@ -116,9 +116,9 @@ async function loadFileTree(path?: string) {
       return;
     }
     
-    console.log('[MobileExplorer] Services ready, checking connection...');
-    console.log('[MobileExplorer] Service provider mode:', services.value.mode);
-    console.log('[MobileExplorer] Service provider connected:', services.value.isConnected());
+   
+   
+   
     
     serviceStatus.value = 'Services ready';
     
@@ -132,7 +132,7 @@ async function loadFileTree(path?: string) {
     }
     
     currentPath.value = rootPath;
-    console.log('Loading files from:', rootPath);
+   
     
     // Add to navigation history if it's a new path
     if (!navigationHistory.value.includes(rootPath)) {
@@ -140,7 +140,7 @@ async function loadFileTree(path?: string) {
     }
     
     const files = await services.value.file.listDirectory(rootPath);
-    console.log('Files loaded:', files);
+   
     
     // Transform to simpler format for RemoteFileTree
     fileTree.value = files.map(file => ({
@@ -164,17 +164,17 @@ async function refreshFiles() {
 }
 
 async function handleDirectoryClick(path: string) {
-  console.log('Directory clicked:', path);
+ 
   await loadFileTree(path);
 }
 
 function handleFileClick(path: string) {
-  console.log('File clicked:', path);
+ 
   // File opening is handled by RemoteFileTree component
 }
 
 function handleFileOpen(fileData: { path: string; content: string; name: string }) {
-  console.log('File opened:', fileData.path);
+ 
   // Emit event to parent to switch to editor tab with file content
   emit('file-opened', fileData);
 }
@@ -194,7 +194,7 @@ async function goToRoot() {
 
 // Handle workspace sync events
 function handleWorkspaceSync(workspace: any) {
-  console.log('MobileExplorer: Received workspace sync:', workspace);
+ 
   if (workspace?.path) {
     workspacePath.value = workspace.path;
     // Reload file tree with new workspace
@@ -206,7 +206,7 @@ onMounted(() => {
   // Check if workspace info is already available
   const remoteWorkspace = (window as any).__remoteWorkspace;
   if (remoteWorkspace?.path) {
-    console.log('MobileExplorer: Found stored workspace:', remoteWorkspace);
+   
     workspacePath.value = remoteWorkspace.path;
   }
   
@@ -219,7 +219,7 @@ onMounted(() => {
   const checkInterval = setInterval(() => {
     const workspace = (window as any).__remoteWorkspace;
     if (workspace?.path && workspace.path !== workspacePath.value) {
-      console.log('MobileExplorer: Workspace updated:', workspace);
+     
       workspacePath.value = workspace.path;
       loadFileTree();
       clearInterval(checkInterval);

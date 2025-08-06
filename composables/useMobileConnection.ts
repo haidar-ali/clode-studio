@@ -40,11 +40,11 @@ export function useMobileConnection() {
   }
   
   async function connect(options: ConnectionOptions): Promise<boolean> {
-    console.log('[MobileConnection] Starting connection attempt');
+   
     
     // Clean up any existing connection
     if (mobileSocket) {
-      console.log('[MobileConnection] Cleaning up existing socket');
+     
       mobileSocket.disconnect();
       mobileSocket = null;
     }
@@ -52,13 +52,13 @@ export function useMobileConnection() {
     return new Promise((resolve) => {
       try {
         const serverUrl = `http://${window.location.hostname}:3789`;
-        console.log('[MobileConnection] Connecting to:', serverUrl);
+       
         
         connecting.value = true;
         connectionState.value = 'connecting';
         
         // Create socket with mobile-optimized settings
-        console.log('[MobileConnection] Creating socket with options...');
+       
         mobileSocket = io(serverUrl, {
           // Try websocket first, fall back to polling
           transports: ['websocket', 'polling'],
@@ -87,12 +87,12 @@ export function useMobileConnection() {
           autoUnref: false  // Prevent iOS from killing the connection
         });
         
-        console.log('[MobileConnection] Socket created, setting up handlers...');
+       
         
         // Connection success handler
         mobileSocket.on('connect', () => {
-          console.log('[MobileConnection] Connected successfully');
-          console.log('[MobileConnection] Transport:', mobileSocket?.io?.engine?.transport?.name);
+         
+         
           connected.value = true;
           connecting.value = false;
           connectionState.value = 'connected';
@@ -101,17 +101,17 @@ export function useMobileConnection() {
           
           // Store in singleton so services can use it
           remoteConnection.setSocket(mobileSocket);
-          console.log('[MobileConnection] Socket stored in singleton');
+         
           
           // Debug: Listen for terminal:data events globally
           mobileSocket.on('terminal:data', (event: any) => {
-            console.log('[MobileConnection] DEBUG - Received terminal:data event:', event);
+           
           });
           
           // Debug: Check all events
           mobileSocket.onAny((eventName: string, ...args: any[]) => {
             if (eventName === 'terminal:data') {
-              console.log('[MobileConnection] DEBUG - onAny caught terminal:data:', args);
+             
             }
           });
           
@@ -120,7 +120,7 @@ export function useMobileConnection() {
         
         // Connection ready handler
         mobileSocket.on('connection:ready', async (data) => {
-          console.log('[MobileConnection] Session ready:', data.sessionId);
+         
           
           // Store session ID for service provider
           (window as any).__remoteSessionId = data.sessionId;
@@ -128,7 +128,7 @@ export function useMobileConnection() {
           // Request workspace information from desktop
           try {
             const workspace = await request('workspace:get', {});
-            console.log('[MobileConnection] Workspace info:', workspace);
+           
             
             // Store workspace info for components to access
             if (workspace?.path) {
@@ -155,13 +155,13 @@ export function useMobileConnection() {
           
           // Don't resolve false immediately - let it retry
           if (err.type === 'TransportError') {
-            console.log('[MobileConnection] Transport error, will retry');
+           
           }
         });
         
         // Disconnect handler
         mobileSocket.on('disconnect', (reason) => {
-          console.log('[MobileConnection] Disconnected:', reason);
+         
           connected.value = false;
           connectionState.value = 'disconnected';
           

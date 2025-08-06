@@ -9,6 +9,9 @@ export default defineNuxtConfig({
     host: '0.0.0.0', // Listen on all network interfaces
     port: 3000
   },
+  experimental: {
+    componentIslands: true // Enable server components
+  },
   app: {
     head: {
       title: 'Clode Studio',

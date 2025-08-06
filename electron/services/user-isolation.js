@@ -44,7 +44,6 @@ export class UserIsolationService {
             this.userInstances.set(userId, new Set());
         }
         this.userInstances.get(userId).add(instanceId);
-        console.log(`Registered Claude instance ${instanceId} for user ${userId}`);
         return instance;
     }
     /**
@@ -64,7 +63,6 @@ export class UserIsolationService {
         }
         // Remove from registry
         this.instanceRegistry.delete(instanceId);
-        console.log(`Unregistered Claude instance ${instanceId} for user ${instance.userId}`);
     }
     /**
      * Get all instances for a user
@@ -152,7 +150,6 @@ export class UserIsolationService {
             }
         });
         if (expired.length > 0) {
-            console.log(`Cleaning up ${expired.length} expired Claude instances`);
             expired.forEach(id => this.unregisterInstance(id));
         }
     }
@@ -192,7 +189,6 @@ export class UserIsolationService {
         // Update session
         instance.sessionId = newSession.id;
         instance.lastActiveAt = new Date();
-        console.log(`Migrated Claude instance ${instanceId} to new session ${newSession.id}`);
     }
     /**
      * Get workspace isolation info

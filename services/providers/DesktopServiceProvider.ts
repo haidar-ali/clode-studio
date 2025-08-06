@@ -11,7 +11,8 @@ import type {
   IKnowledgeService,
   IMCPService,
   IStorageService,
-  IPerformanceCache
+  IPerformanceCache,
+  ITasksService
 } from '../interfaces/index.js';
 import { AppMode } from '../interfaces/index.js';
 
@@ -24,6 +25,7 @@ import { DesktopMCPService } from './desktop/DesktopMCPService.js';
 import { DesktopStorageService } from './desktop/DesktopStorageService.js';
 // Use browser-safe cache in renderer process, full SQLite cache in main process
 import { BrowserSafePerformanceCache } from './desktop/BrowserSafePerformanceCache.js';
+import { DesktopTasksService } from './desktop/DesktopTasksService.js';
 
 export class DesktopServiceProvider implements IServiceProvider {
   public readonly mode = AppMode.DESKTOP;
@@ -36,6 +38,7 @@ export class DesktopServiceProvider implements IServiceProvider {
   public readonly mcp: IMCPService;
   public readonly storage: IStorageService;
   public readonly cache: IPerformanceCache;
+  public readonly tasks: ITasksService;
   
   constructor() {
     // Initialize all services wrapping existing Electron APIs
@@ -46,6 +49,7 @@ export class DesktopServiceProvider implements IServiceProvider {
     this.knowledge = new DesktopKnowledgeService();
     this.mcp = new DesktopMCPService();
     this.storage = new DesktopStorageService();
+    this.tasks = new DesktopTasksService();
     
     // Initialize performance cache
     // In renderer process, use browser-safe implementation

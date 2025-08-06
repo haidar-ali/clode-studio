@@ -273,7 +273,7 @@ export class DeviceSwitchingService {
     // Restore buffer if available
     if (state.buffer && terminal.terminalId) {
       // This would need special handling to restore buffer
-      console.log('Terminal buffer restoration not yet implemented');
+     
     }
   }
   
@@ -292,7 +292,7 @@ export class DeviceSwitchingService {
     
     // Restore conversation history if available
     if (state.conversationHistory) {
-      console.log('Claude conversation restoration not yet implemented');
+     
     }
   }
 }

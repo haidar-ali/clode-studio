@@ -111,7 +111,7 @@ function createWindow() {
 
 app.whenReady().then(async () => {
   // Log the current mode
-  console.log(`Starting Clode Studio in ${modeManager.getMode()} mode`);
+ 
   
   // Initialize all service managers (singletons)
   GitServiceManager.getInstance();
@@ -140,7 +140,7 @@ app.whenReady().then(async () => {
     
     try {
       await remoteServer.start();
-      console.log('Remote server started successfully');
+     
       
       // Make remote server globally accessible for handlers
       (global as any).__remoteServer = remoteServer;
@@ -161,11 +161,11 @@ app.whenReady().then(async () => {
       
       // Set up IPC handler for Claude response complete forwarding
       ipcMain.on('forward-claude-response-complete', (event, data) => {
-        console.log('[Main] ✅ Received IPC forward-claude-response-complete for:', data.instanceId, 'to socket:', data.socketId);
+       
         if (remoteServer && data.socketId && data.instanceId) {
-          console.log('[Main] 🔄 Forwarding to remote server...');
+         
           remoteServer.forwardClaudeResponseComplete(data.socketId, data.instanceId);
-          console.log('[Main] ✨ Forward complete!');
+         
         } else {
           console.log('[Main] ❌ Missing requirements for forwarding:', {
             remoteServer: !!remoteServer,
@@ -209,7 +209,7 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
     // Instance already running - return success with existing PID
     const existingPty = claudeInstances.get(instanceId);
     const pid = existingPty?.pid || -1;
-    console.log(`Claude instance ${instanceId} already running with PID ${pid}`);
+   
     
     // Get Claude info for response
     const claudeInfo = await ClaudeDetector.detectClaude(workingDirectory);
@@ -1477,7 +1477,7 @@ ipcMain.handle('lsp:getCompletions', async (event, params) => {
       params.filepath,
       params.content,
       params.position,
-      params.context?.triggerCharacter
+      params.context  // Pass the full context object
     );
     
     // Return in LSP format expected by codemirror-languageservice
@@ -2725,7 +2725,7 @@ ipcMain.handle('db:getStats', async (event) => {
 app.on('before-quit', async () => {
   // Stop remote server if running
   if (remoteServer && remoteServer.isRunning()) {
-    console.log('Stopping remote server...');
+   
     await remoteServer.stop();
   }
   

@@ -90,7 +90,7 @@ const moduleConfig: Record<ModuleId, { label: string; icon: string }> = {
 // Module components mapping - Using remote-compatible components
 const moduleComponents = {
   terminal: defineAsyncComponent(() => import('~/components/Remote/MobileTerminalXterm.vue')),
-  tasks: defineAsyncComponent(() => import('~/components/Remote/RemoteKanbanBoard.vue')),
+  tasks: defineAsyncComponent(() => import('~/components/Kanban/KanbanBoard.vue')),
   'source-control': defineAsyncComponent(() => import('~/components/SourceControlV2/SourceControlV2.vue')),
   snapshots: defineAsyncComponent(() => import('~/components/Snapshots/SnapshotsPanel.vue')),
   worktrees: defineAsyncComponent(() => import('~/components/Worktree/WorktreePanel.vue')),
@@ -98,8 +98,8 @@ const moduleComponents = {
   knowledge: defineAsyncComponent(() => import('~/components/Knowledge/KnowledgePanel.vue')),
   prompts: defineAsyncComponent(() => import('~/components/Prompts/PromptStudio.vue')),
   claude: defineAsyncComponent(() => import('~/components/Remote/MobileClaudeXterm.vue')),
-  explorer: defineAsyncComponent(() => import('~/components/Remote/MobileExplorer.vue')),
-  'explorer-editor': defineAsyncComponent(() => import('~/components/Modules/ExplorerEditor.vue'))
+  explorer: defineAsyncComponent(() => import('~/components/FileExplorer/SimpleFileExplorer.vue')),
+  'explorer-editor': defineAsyncComponent(() => import('~/components/Remote/RemoteExplorerEditorPro.vue'))
 };
 
 // Get modules in bottom dock
@@ -166,7 +166,7 @@ const handleTabDragEnd = () => {
 
 const showTabMenu = (event: MouseEvent, moduleId: ModuleId) => {
   // TODO: Implement context menu for tabs
-  console.log('Tab menu for', moduleId);
+ 
 };
 
 // Handle file opened from explorer

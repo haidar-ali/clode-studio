@@ -52,7 +52,7 @@ const testMessages = [
 ];
 
 async function runTest() {
-  console.log('🧪 Testing Clode Studio Remote MCP Server\n');
+ 
   
   // Spawn the MCP server
   const mcpServer = spawn('node', [path.join(__dirname, 'index.js')], {
@@ -77,7 +77,7 @@ async function runTest() {
       if (line.trim()) {
         try {
           const response = JSON.parse(line);
-          console.log('📥 Response:', JSON.stringify(response, null, 2));
+         
           
           // Check for errors
           if (response.error) {
@@ -97,12 +97,12 @@ async function runTest() {
   
   // Handle exit
   mcpServer.on('exit', (code) => {
-    console.log(`\n🏁 MCP server exited with code ${code}`);
+   
   });
   
   // Send test messages
   for (const message of testMessages) {
-    console.log(`\n📤 Sending: ${message.method}`);
+   
     mcpServer.stdin.write(JSON.stringify(message) + '\n');
     
     // Wait a bit between messages
@@ -113,7 +113,7 @@ async function runTest() {
   await new Promise(resolve => setTimeout(resolve, 2000));
   
   // Clean shutdown
-  console.log('\n🛑 Shutting down...');
+ 
   mcpServer.kill('SIGTERM');
 }
 

@@ -227,7 +227,7 @@ onMounted(async () => {
   const socket = (services.value as any)?.getSocket?.() || (services.value as any)?.__socket;
   if (socket) {
     socket.on('claude:instances:updated', async () => {
-      console.log('[MobileClaude] Received instances update notification');
+     
       setTimeout(async () => {
         await claudeStore.reloadInstances();
         await loadClaudeInstances();
@@ -239,7 +239,7 @@ onMounted(async () => {
     // Optional: Monitor all Claude events for debugging (uncomment if needed)
     // socket.onAny((eventName: string, ...args: any[]) => {
     //   if (eventName.startsWith('claude:')) {
-    //     console.log('[MobileClaude] 🎯 Received event:', eventName, 'with data:', args);
+    //    
     //   }
     // });
   }
@@ -251,7 +251,7 @@ async function loadClaudeInstances() {
   
   try {
     const desktopInstances = await services.value.claude.listDesktopInstances();
-    console.log('[MobileClaude] Desktop instances:', desktopInstances);
+   
     
     for (const info of desktopInstances) {
       if (!info.isDesktop) continue;
@@ -281,7 +281,7 @@ async function loadClaudeInstances() {
       } else if (instance.status === 'connected') {
         const session = claudeSessions.value.get(instance.id);
         if (session && services.value) {
-          console.log('[MobileClaude] Instance already connected with existing session:', instance.id);
+         
           try {
             // Don't set up output handler again - it's already set up in initializeClaudeSession
             // Just ensure spawning if needed
@@ -291,7 +291,7 @@ async function loadClaudeInstances() {
                 instance.workingDirectory,
                 instance.name
               );
-              console.log('[MobileClaude] Spawn result:', result);
+             
               session.spawned = true;
             }
           } catch (error) {
@@ -312,7 +312,7 @@ async function loadClaudeInstances() {
 // Initialize Claude session with xterm
 async function initializeClaudeSession(instance: any) {
   if (claudeSessions.value.has(instance.id)) {
-    console.log('[MobileClaude] Session already exists for:', instance.id);
+   
     // Make sure we're not setting up duplicate handlers
     const existingSession = claudeSessions.value.get(instance.id);
     if (existingSession && instance.status === 'connected' && !existingSession.spawned && services.value) {
@@ -323,7 +323,7 @@ async function initializeClaudeSession(instance: any) {
           instance.workingDirectory,
           instance.name
         );
-        console.log('[MobileClaude] Spawn result for existing session:', result);
+       
         existingSession.spawned = true;
       } catch (error) {
         console.error('[MobileClaude] Failed to spawn for existing session:', error);
@@ -332,7 +332,7 @@ async function initializeClaudeSession(instance: any) {
     return;
   }
   
-  console.log('[MobileClaude] Initializing session for:', instance.id);
+ 
   
   // Create terminal matching desktop configuration
   const terminal = new Terminal({
@@ -419,7 +419,7 @@ async function initializeClaudeSession(instance: any) {
   try {
     // Clean up any existing output handler first
     if (session.outputHandler) {
-      console.log(`[MobileClaude] Cleaning up existing output handler for ${instance.id}`);
+     
       session.outputHandler();
       session.outputHandler = undefined;
     }
@@ -477,7 +477,7 @@ async function initializeClaudeSession(instance: any) {
     
     // Set up exit handler
     session.exitHandler = services.value!.claude.onExit(instance.id, (code: number | null) => {
-      console.log(`[MobileClaude] Exit for ${instance.id}, code:`, code);
+     
       terminal.write(`\r\n\x1b[33mClaude exited${code !== null ? ` with code ${code}` : ''}\x1b[0m\r\n`);
       const inst = claudeStore.instances.get(instance.id);
       if (inst) {
@@ -496,7 +496,7 @@ async function initializeClaudeSession(instance: any) {
     }
     
     if (instance.status === 'connected') {
-      console.log('[MobileClaude] Instance already connected:', instance.id);
+     
       terminal.write(`\x1b[32mConnected to ${instance.name}\x1b[0m\r\n`);
       terminal.write(`\x1b[90mInstance ID: ${instance.id}\x1b[0m\r\n\r\n`);
       
@@ -507,7 +507,7 @@ async function initializeClaudeSession(instance: any) {
             instance.workingDirectory,
             instance.name
           );
-          console.log('[MobileClaude] Spawn result:', result);
+         
           session.spawned = true;
         }
         
@@ -515,7 +515,7 @@ async function initializeClaudeSession(instance: any) {
         setTimeout(async () => {
           try {
             // await services.value!.claude.send(instance.id, '\n');
-            console.log('[MobileClaude] Sent newline to trigger prompt');
+           
           } catch (e) {
             console.error('[MobileClaude] Failed to send newline:', e);
           }
@@ -559,7 +559,7 @@ function attachTerminal(instanceId: string) {
       if (services.value && session.terminal.cols && session.terminal.rows) {
         const cols = session.terminal.cols;
         const rows = session.terminal.rows;
-        console.log(`[MobileClaude] Configuring terminal ${instanceId} dimensions on attach: ${cols}x${rows}`);
+       
         
         services.value.claude.configureTerminal?.(instanceId, cols, rows).catch(err => {
           console.error('[MobileClaude] Failed to configure terminal dimensions:', err);
@@ -580,7 +580,7 @@ function attachTerminal(instanceId: string) {
                 
                 session.bufferRestored = true;
                 session.terminal.scrollToBottom();
-                console.log('[MobileClaude] Restored buffer with chat history');
+               
               } catch (e) {
                 console.error('[MobileClaude] Failed to restore buffer:', e);
               }
@@ -653,7 +653,7 @@ async function startClaude(instanceId: string) {
       instance.name
     );
     
-    console.log('[MobileClaude] Started Claude:', result);
+   
     
     instance.status = 'connected';
     instance.pid = result.pid || -1;
@@ -673,7 +673,7 @@ async function startClaude(instanceId: string) {
             restoreSerializedBuffer(terminal, buffer);
             
             terminal.scrollToBottom();
-            console.log('[MobileClaude] Loaded existing buffer with chat history');
+           
           }, 100);
         }
       } catch (e) {
@@ -684,7 +684,7 @@ async function startClaude(instanceId: string) {
       setTimeout(async () => {
         try {
           await services.value.claude.send(instance.id, '\n');
-          console.log('[MobileClaude] Sent newline to trigger prompt');
+         
         } catch (e) {
           console.error('[MobileClaude] Failed to send newline:', e);
         }
@@ -807,7 +807,7 @@ function scheduleAutoRefresh(instanceId: string) {
   
   // Set new timeout -
   const timeout = setTimeout(async () => {
-    console.log(`[MobileClaude] 🔄 Auto-refreshing terminal ${instanceId} (quiet for 3s)`);
+   
     
     const session = claudeSessions.value.get(instanceId);
     if (!session || !session.terminal || !services.value) {
@@ -849,7 +849,7 @@ function scheduleAutoRefresh(instanceId: string) {
             session.terminal.scrollToBottom();
           
           
-          console.log(`[MobileClaude] Terminal synced - buffer changed`);
+         
         }
       }
     } catch (error) {
@@ -893,7 +893,7 @@ const resizeObserver = new ResizeObserver(() => {
         if (services.value && session.terminal.cols && session.terminal.rows) {
           const cols = session.terminal.cols;
           const rows = session.terminal.rows;
-          console.log(`[MobileClaude] Configuring terminal ${activeInstanceId.value} dimensions: ${cols}x${rows}`);
+         
           
           services.value.claude.configureTerminal?.(activeInstanceId.value, cols, rows).catch(err => {
             console.error('[MobileClaude] Failed to configure terminal dimensions:', err);

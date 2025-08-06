@@ -4,7 +4,16 @@
  */
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useServices } from './useServices';
-import type { CacheStats, PerformanceMetrics } from '~/services/interfaces/IPerformanceCache';
+import type { CacheStats } from '~/services/interfaces/IPerformanceCache';
+
+// Define aggregate performance metrics type
+interface AggregatePerformanceMetrics {
+  cacheHitRate: number;
+  averageLatency: number;
+  bandwidthSaved: number;
+  totalRequests: number;
+  activeConnections: number;
+}
 
 export function usePerformanceCache() {
   const { services, isLoading } = useServices();
@@ -12,18 +21,16 @@ export function usePerformanceCache() {
   // State
   const cacheStats = ref<CacheStats>({
     totalEntries: 0,
-    totalSize: 0,
+    totalHits: 0,
+    totalMisses: 0,
     hitRate: 0,
-    averageResponseTime: 0,
-    oldestEntry: Date.now(),
-    entriesByPriority: {
-      high: 0,
-      normal: 0,
-      low: 0
-    }
+    memoryUsage: 0,
+    avgResponseTime: 0,
+    bandwidthSaved: 0,
+    topKeys: []
   });
   
-  const performanceMetrics = ref<PerformanceMetrics>({
+  const performanceMetrics = ref<AggregatePerformanceMetrics>({
     cacheHitRate: 0,
     averageLatency: 0,
     bandwidthSaved: 0,
@@ -52,15 +59,30 @@ export function usePerformanceCache() {
     }
   }
   
-  async function getPerformanceMetrics(): Promise<PerformanceMetrics> {
+  async function getPerformanceMetrics(): Promise<AggregatePerformanceMetrics> {
     if (!services.value?.cache) {
       return performanceMetrics.value;
     }
     
     try {
-      const metrics = await services.value.cache.getPerformanceMetrics();
-      performanceMetrics.value = metrics;
-      return metrics;
+      // Check if the cache implementation has the custom getPerformanceMetrics method
+      if ('getPerformanceMetrics' in services.value.cache && 
+          typeof (services.value.cache as any).getPerformanceMetrics === 'function') {
+        const metrics = await (services.value.cache as any).getPerformanceMetrics();
+        performanceMetrics.value = metrics;
+        return metrics;
+      } else {
+        // Fallback: derive metrics from cache stats
+        const stats = await services.value.cache.getCacheStats();
+        performanceMetrics.value = {
+          cacheHitRate: stats.hitRate,
+          averageLatency: stats.avgResponseTime || 0,
+          bandwidthSaved: stats.bandwidthSaved || 0,
+          totalRequests: (stats.totalHits || 0) + (stats.totalMisses || 0),
+          activeConnections: 0 // Not available from cache stats
+        };
+        return performanceMetrics.value;
+      }
     } catch (error) {
       console.error('Failed to get performance metrics:', error);
       return performanceMetrics.value;

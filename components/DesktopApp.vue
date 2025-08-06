@@ -26,7 +26,6 @@ async function onWorkspaceReady(workspace: string) {
   try {
     // Clear all Claude instance PIDs and status from storage on app startup
     // This needs to happen before any store loads the data
-    
     // Clear from general claudeInstances storage
     const savedInstances = await window.electronAPI.store.get('claudeInstances');
     if (savedInstances && Array.isArray(savedInstances)) {

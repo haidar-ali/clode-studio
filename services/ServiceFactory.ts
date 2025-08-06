@@ -73,7 +73,7 @@ export class ServiceFactory {
         
         // For mobile, let the mobile connection establish first, then connect services
         if (typeof window !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
-          console.log('[ServiceFactory] Mobile device - will connect after mobile socket is ready');
+         
           remoteConfig.autoConnect = true; // Keep auto-connect enabled
         }
         
