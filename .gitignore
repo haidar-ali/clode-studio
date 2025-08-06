@@ -30,10 +30,12 @@ logs
 !.env.example
 
 # Compiled Electron files
+electron/*.js
 electron/*.js.map
+# TypeScript config files
 !electron/tsconfig.json
 !electron/tsconfig.preload.json
-# Pure JavaScript files (not compiled from TypeScript)
+# Pure JavaScript files (not compiled from TypeScript) - these should be kept
 !electron/claude-sdk-service.js
 !electron/ghost-text-service.js
 !electron/agent-executor.js
@@ -41,7 +43,6 @@ electron/*.js.map
 !electron/autocomplete-service.js
 !electron/checkpoint-metadata-manager.js
 !electron/checkpoint-v3-handlers.js
-!electron/claude-analyzer.js
 !electron/lsp-manager.js
 !electron/worktree-checkpoint-manager.js
 ./node_modules/minipass-sized/package-lock.json
