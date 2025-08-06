@@ -45,6 +45,39 @@ const worktreeManagers = new Map();
 const snapshotServices = new Map();
 const isDev = process.env.NODE_ENV !== 'production';
 const nuxtURL = isDev ? 'http://localhost:3000' : `file://${join(__dirname, '../.output/public/index.html')}`;
+// Helper function to clean up all resources on reload/refresh
+function cleanupResourcesOnReload() {
+    console.log('Cleaning up resources on reload...');
+    // Clean up Claude instances
+    if (claudeInstances.size > 0) {
+        console.log(`Cleaning up ${claudeInstances.size} Claude instances...`);
+        claudeInstances.forEach((pty, instanceId) => {
+            console.log(`Killing Claude instance: ${instanceId}`);
+            try {
+                pty.kill();
+            }
+            catch (error) {
+                console.error(`Error killing Claude instance ${instanceId}:`, error);
+            }
+        });
+        claudeInstances.clear();
+    }
+    // Clean up terminal instances
+    if (terminals.size > 0) {
+        console.log(`Cleaning up ${terminals.size} terminal instances...`);
+        terminals.forEach((terminal, id) => {
+            console.log(`Killing terminal: ${id}`);
+            try {
+                terminal.kill();
+            }
+            catch (error) {
+                console.error(`Error killing terminal ${id}:`, error);
+            }
+        });
+        terminals.clear();
+    }
+    console.log('Resource cleanup completed');
+}
 function createWindow() {
     mainWindow = new BrowserWindow({
         width: 1600,
@@ -68,6 +101,17 @@ function createWindow() {
         mainWindow?.show();
         if (isDev) {
             mainWindow?.webContents.openDevTools();
+        }
+    });
+    // Clean up resources when the renderer process navigates/reloads
+    mainWindow.webContents.on('will-navigate', () => {
+        cleanupResourcesOnReload();
+    });
+    // Also handle reload specifically
+    mainWindow.webContents.on('before-input-event', (event, input) => {
+        // Detect Cmd+R or Ctrl+R for reload
+        if ((input.control || input.meta) && input.key === 'r' && input.type === 'keyDown') {
+            cleanupResourcesOnReload();
         }
     });
     mainWindow.on('closed', () => {
