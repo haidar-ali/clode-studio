@@ -120,10 +120,7 @@ export class ClaudeInstanceService {
     const claudePty = this.claudeInstances.get(instanceId);
     if (claudePty) {
       try {
-        console.log(`Stopping Claude instance ${instanceId} (PID: ${claudePty.pid})...`);
-        
         // First try SIGINT for graceful shutdown
-        console.log(`Sent SIGINT to process ${claudePty.pid}`);
         claudePty.kill('SIGINT');
         
         // Wait a bit for graceful shutdown
@@ -131,7 +128,6 @@ export class ClaudeInstanceService {
           // Check if process is still running and force kill if needed
           try {
             if (this.claudeInstances.has(instanceId)) {
-              console.log(`Force killing Claude instance ${instanceId}...`);
               claudePty.kill();
               this.claudeInstances.delete(instanceId);
             }
@@ -143,15 +139,11 @@ export class ClaudeInstanceService {
         // Wait a bit before declaring success
         await new Promise(resolve => setTimeout(resolve, 100));
         
-        // Process should terminate and trigger the onExit handler
-        console.log(`Process ${claudePty.pid} terminated gracefully`);
-        
         // Mark session for preservation but not auto-start
         const session = this.sessionService.get(instanceId);
         if (session) {
           session.shouldAutoStart = false;
           this.sessionService.saveSessionsToDisk();
-          console.log(`Session data saved for instance ${instanceId}`);
         }
         
         return { success: true };
@@ -187,7 +179,6 @@ export class ClaudeInstanceService {
 
     // If restoring, add a small delay to ensure clean state
     if (shouldRestore) {
-      console.log(`Preparing to restore session for ${instanceId}...`);
       await new Promise(resolve => setTimeout(resolve, 1000));
     }
 
@@ -254,7 +245,6 @@ export class ClaudeInstanceService {
       let baseArgs: string[];
       if (sessionId) {
         baseArgs = ['--resume', sessionId, ...debugArgs];
-        console.log(`[Retry ${attemptNumber}/${totalAttempts}] Attempting to resume with session ID: ${sessionId}`);
       } else {
         // Generate new session ID
         const newSessionId = this.generateSessionId();
@@ -373,8 +363,6 @@ export class ClaudeInstanceService {
       
       // Check for session restoration failure
       if (!isRetrying && data.includes('No conversation found with session ID:')) {
-        console.log(`[Retry] Session ${sessionId} not found, checking for more fallbacks...`);
-        
         // Send failure status
         this.mainWindow?.webContents.send(`claude:restoration-status:${instanceId}`, {
           status: 'failed',
@@ -387,7 +375,6 @@ export class ClaudeInstanceService {
         localAttemptIndex++;
         if (localAttemptIndex < sessionOptions.fallbacks.length) {
           const nextSessionId = sessionOptions.fallbacks[localAttemptIndex];
-          console.log(`[Retry] Attempting next fallback session ID: ${nextSessionId}`);
           
           // Send retry status
           this.mainWindow?.webContents.send(`claude:restoration-status:${instanceId}`, {
@@ -433,7 +420,6 @@ export class ClaudeInstanceService {
           }, 1000);
         } else {
           // No more fallbacks
-          console.log(`[Retry] All ${totalAttempts} session restoration attempts failed`);
           this.mainWindow?.webContents.send(`claude:restoration-status:${instanceId}`, {
             status: 'all-failed',
             totalAttempts: totalAttempts
@@ -444,8 +430,6 @@ export class ClaudeInstanceService {
       // Check for successful restoration
       const plainData = data.replace(/\x1b\[[0-9;]*m/g, '');
       if (!hasUpdatedSuccessfulSession && plainData.includes('Welcome to Claude Code')) {
-        console.log(`[Retry] Session successfully restored with ID: ${sessionId}`);
-        
         if (sessionId) {
           hasUpdatedSuccessfulSession = true;
           this.sessionService.updateSessionId(instanceId, sessionId);
@@ -493,7 +477,6 @@ export class ClaudeInstanceService {
       if (newSessionId) {
         const currentSession = this.sessionService.get(instanceId);
         if (currentSession && newSessionId !== currentSession.sessionId) {
-          console.log(`[Claude Session] Detected new session file after restoration for ${instanceId}: ${newSessionId}`);
           this.sessionService.updateSessionId(instanceId, newSessionId);
         }
       }
@@ -511,17 +494,12 @@ export class ClaudeInstanceService {
   
   // Clean up resources on reload/refresh
   cleanupResourcesOnReload(): void {
-    console.log('Cleaning up Claude instances on reload...');
-    
     if (this.getInstanceCount() > 0) {
-      console.log(`Preserving ${this.getInstanceCount()} Claude sessions for restoration...`);
-      
       // Mark all active sessions for auto-start
       this.getAllInstances().forEach((pty, instanceId) => {
         const session = this.sessionService.get(instanceId);
         if (session) {
           session.shouldAutoStart = true;
-          console.log(`Marked session ${instanceId} for auto-start`);
         }
       });
       
@@ -531,8 +509,6 @@ export class ClaudeInstanceService {
       // Clear the instances map without killing processes
       this.clearInstances();
     }
-    
-    console.log(`Preserved ${this.sessionService.size} Claude sessions for restoration`);
   }
   
   // Helper to detect new session files after restoration

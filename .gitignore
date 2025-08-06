@@ -33,7 +33,17 @@ logs
 electron/*.js.map
 !electron/tsconfig.json
 !electron/tsconfig.preload.json
+# Pure JavaScript files (not compiled from TypeScript)
 !electron/claude-sdk-service.js
+!electron/ghost-text-service.js
+!electron/agent-executor.js
+!electron/ai-review-monitor.js
+!electron/autocomplete-service.js
+!electron/checkpoint-metadata-manager.js
+!electron/checkpoint-v3-handlers.js
+!electron/claude-analyzer.js
+!electron/lsp-manager.js
+!electron/worktree-checkpoint-manager.js
 ./node_modules/minipass-sized/package-lock.json
 ./node_modules/@monaco-editor/loader/playground/package-lock.json
 package-lock.json

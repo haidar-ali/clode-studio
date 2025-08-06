@@ -70,6 +70,23 @@ class GhostTextService {
   async initializeProject(projectPath) {
     try {
       const packageJsonPath = path.join(projectPath, 'package.json');
+      
+      // Check if package.json exists
+      try {
+        await fs.access(packageJsonPath);
+      } catch {
+        // No package.json, set minimal project info
+        this.projectInfo = {
+          name: path.basename(projectPath),
+          description: '',
+          dependencies: [],
+          devDependencies: [],
+          type: 'unknown',
+          framework: 'none'
+        };
+        return;
+      }
+      
       const packageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf8'));
       
       this.projectInfo = {
@@ -87,6 +104,15 @@ class GhostTextService {
     
     } catch (error) {
       console.error('[GhostTextService] Failed to initialize project:', error);
+      // Set minimal project info on error
+      this.projectInfo = {
+        name: path.basename(projectPath),
+        description: '',
+        dependencies: [],
+        devDependencies: [],
+        type: 'unknown',
+        framework: 'none'
+      };
     }
   }
 

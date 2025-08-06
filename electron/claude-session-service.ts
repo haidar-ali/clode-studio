@@ -46,7 +46,7 @@ export class ClaudeSessionService {
       };
       writeFileSync(join(sessionsDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
       
-      console.log(`Saved ${this.claudeSessions.size} sessions to .claude/sessions/`);
+      // console.log(`Saved ${this.claudeSessions.size} sessions to .claude/sessions/`);
     } catch (error) {
       console.error('Failed to save sessions to disk:', error);
     }
@@ -81,7 +81,7 @@ export class ClaudeSessionService {
           }
         });
         
-        console.log(`Loaded ${this.claudeSessions.size} sessions from .claude/sessions/`);
+        // console.log(`Loaded ${this.claudeSessions.size} sessions from .claude/sessions/`);
       }
     } catch (error) {
       console.error('Failed to load sessions from disk:', error);
@@ -108,7 +108,6 @@ export class ClaudeSessionService {
         }
       });
       
-      console.log('Cleared all sessions from disk');
     } catch (error) {
       console.error('Failed to clear sessions from disk:', error);
     }
@@ -195,7 +194,6 @@ export class ClaudeSessionService {
       const session = this.claudeSessions.get(instanceId);
       if (session) {
         session.shouldAutoStart = true;
-        console.log(`Marked session ${instanceId} for auto-start`);
       }
     });
   }
@@ -223,7 +221,7 @@ export class ClaudeSessionService {
       session.sessionId = newSessionId;
       this.saveSessionsToDisk();
       
-      console.log(`Updated session ID for ${instanceId}: ${newSessionId} (history: ${session.previousSessionIds.length} previous IDs)`);
+      // console.log(`Updated session ID for ${instanceId}: ${newSessionId} (history: ${session.previousSessionIds.length} previous IDs)`);
     }
   }
 
