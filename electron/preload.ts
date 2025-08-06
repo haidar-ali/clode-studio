@@ -21,6 +21,10 @@ const electronAPI = {
         source: string;
       };
     }> => ipcRenderer.invoke('claude:detectInstallation'),
+    getPreservedSessions: () => ipcRenderer.invoke('claude:getPreservedSessions'),
+    clearAutoStart: (instanceId: string) => ipcRenderer.invoke('claude:clearAutoStart', instanceId),
+    hasSession: (instanceId: string) => ipcRenderer.invoke('claude:hasSession', instanceId),
+    deleteSession: (instanceId: string) => ipcRenderer.invoke('claude:deleteSession', instanceId),
     send: (instanceId: string, command: string) => 
       ipcRenderer.invoke('claude:send', instanceId, command),
     stop: (instanceId: string) => 
@@ -46,10 +50,17 @@ const electronAPI = {
       ipcRenderer.on(channel, handler);
       return () => ipcRenderer.removeListener(channel, handler);
     },
+    onRestorationStatus: (instanceId: string, callback: (status: any) => void) => {
+      const channel = `claude:restoration-status:${instanceId}`;
+      const handler = (_: any, status: any) => callback(status);
+      ipcRenderer.on(channel, handler);
+      return () => ipcRenderer.removeListener(channel, handler);
+    },
     removeAllListeners: (instanceId: string) => {
       ipcRenderer.removeAllListeners(`claude:output:${instanceId}`);
       ipcRenderer.removeAllListeners(`claude:error:${instanceId}`);
       ipcRenderer.removeAllListeners(`claude:exit:${instanceId}`);
+      ipcRenderer.removeAllListeners(`claude:restoration-status:${instanceId}`);
     },
     sdk: {
       getTodos: (projectPath: string) => ipcRenderer.invoke('claude:sdk:getTodos', projectPath),

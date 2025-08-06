@@ -26,6 +26,8 @@ import { GitHooksManager } from './git-hooks.js';
 import { SnapshotService } from './snapshot-service.js';
 import { setupGitTimelineHandlers } from './git-timeline-handlers.js';
 import { ghostTextService } from './ghost-text-service.js';
+import { ClaudeSessionService } from './claude-session-service.js';
+import { ClaudeInstanceService } from './claude-instance-service.js';
 
 // Load environment variables from .env file
 import { config } from 'dotenv';
@@ -38,8 +40,9 @@ let mainWindow: BrowserWindow | null = null;
 const store = new Store<Record<string, any>>();
 const fileWatchers: Map<string, any> = new Map();
 
-// Multi-instance Claude support
-const claudeInstances: Map<string, pty.IPty> = new Map();
+// Initialize Claude services
+const sessionService = new ClaudeSessionService(store as any);
+const instanceService = new ClaudeInstanceService(sessionService);
 
 // Knowledge cache instances per workspace
 const knowledgeCaches: Map<string, any> = new Map();
@@ -80,6 +83,9 @@ function createWindow() {
   });
 
   mainWindow.loadURL(nuxtURL);
+  
+  // Set mainWindow in services that need it
+  instanceService.setMainWindow(mainWindow);
 
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show();
@@ -88,17 +94,33 @@ function createWindow() {
     }
   });
 
+  // Clean up resources when the renderer process navigates/reloads
+  mainWindow.webContents.on('will-navigate', () => {
+    instanceService.cleanupResourcesOnReload();
+  });
+
+  // Also handle reload specifically
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    // Detect Cmd+R or Ctrl+R for reload
+    if ((input.control || input.meta) && input.key === 'r' && input.type === 'keyDown') {
+      instanceService.cleanupResourcesOnReload();
+    }
+  });
+
   mainWindow.on('closed', () => {
     mainWindow = null;
     // Clean up all Claude instances
-    claudeInstances.forEach((pty, instanceId) => {
+    instanceService.getAllInstances().forEach((pty, instanceId) => {
       pty.kill();
     });
-    claudeInstances.clear();
+    instanceService.clearInstances();
   });
 }
 
 app.whenReady().then(async () => {
+  // Load preserved sessions from .claude/sessions/
+  sessionService.loadSessionsFromDisk();
+  
   // Initialize all service managers (singletons)
   GitServiceManager.getInstance();
   WorktreeManagerGlobal.getInstance();
@@ -127,134 +149,51 @@ app.on('window-all-closed', () => {
 
 // Claude Process Management using PTY with multi-instance support
 ipcMain.handle('claude:start', async (event, instanceId: string, workingDirectory: string, instanceName?: string, runConfig?: { command?: string; args?: string[] }) => {
-  if (claudeInstances.has(instanceId)) {
-    return { success: false, error: 'Claude instance already running' };
-  }
-
-  try {
-    // Detect Claude installation
-    const claudeInfo = await ClaudeDetector.detectClaude(workingDirectory);
-
-    // Get the command configuration
-    const debugArgs = process.env.CLAUDE_DEBUG === 'true' ? ['--debug'] : [];
-
-    let { command, args: commandArgs, useShell } = ClaudeDetector.getClaudeCommand(claudeInfo, debugArgs);
-
-    // Override with run config if provided
-    if (runConfig) {
-      if (runConfig.command) {
-        // If the command is just 'claude', use the detected path
-        command = runConfig.command === 'claude' ? command : runConfig.command;
-      }
-      if (runConfig.args && runConfig.args.length > 0) {
-        // When we have custom args, we need to rebuild the command
-        const allArgs = [...runConfig.args, ...debugArgs];
-        const result = ClaudeDetector.getClaudeCommand(claudeInfo, allArgs);
-        command = result.command;
-        commandArgs = result.args;
-        useShell = result.useShell;
-      }
-    }
-
-
-    // Log settings file to verify it exists
-    const settingsPath = join(homedir(), '.claude', 'settings.json');
-    if (!existsSync(settingsPath)) {
-      console.warn('Claude settings file not found!');
-    }
-
-    // Get the user's default shell
-    const userShell = process.env.SHELL || '/bin/bash';
-
-    const claudePty = pty.spawn(command, commandArgs, {
-      name: 'xterm-color',
-      cols: 80,
-      rows: 30,
-      cwd: workingDirectory,
-      env: {
-        ...process.env,
-        FORCE_COLOR: '1',
-        TERM: 'xterm-256color',
-        HOME: process.env.HOME, // Ensure HOME is set so Claude can find ~/.claude/settings.json
-        USER: process.env.USER, // Ensure USER is set
-        SHELL: userShell, // Ensure SHELL is set
-        // Add instance-specific environment variables for hooks
-        CLAUDE_INSTANCE_ID: instanceId,
-        CLAUDE_INSTANCE_NAME: instanceName || `Claude-${instanceId.slice(7, 15)}`, // Use provided name or short ID
-        CLAUDE_IDE_INSTANCE: 'true'
-      }
-    });
-
-
-    // Store this instance
-    claudeInstances.set(instanceId, claudePty);
-
-    // Handle output from Claude
-    claudePty.onData((data: string) => {
-      // Send data with instance ID
-      mainWindow?.webContents.send(`claude:output:${instanceId}`, data);
-    });
-
-    // Handle exit
-    claudePty.onExit(({ exitCode, signal }) => {
-      mainWindow?.webContents.send(`claude:exit:${instanceId}`, exitCode);
-      claudeInstances.delete(instanceId);
-    });
-
-    return {
-      success: true,
-      pid: claudePty.pid,
-      claudeInfo: {
-        path: claudeInfo.path,
-        version: claudeInfo.version,
-        source: claudeInfo.source
-      }
-    };
-  } catch (error) {
-    console.error(`Failed to start Claude for ${instanceId}:`, error);
-    return { success: false, error: error instanceof Error ? error.message : String(error) };
-  }
+  return instanceService.startClaude(instanceId, workingDirectory, instanceName, runConfig);
 });
 
 ipcMain.handle('claude:send', async (event, instanceId: string, command: string) => {
-  const claudePty = claudeInstances.get(instanceId);
-  if (!claudePty) {
-    return { success: false, error: `Claude instance is not running. Please start a Claude instance in the terminal first.` };
-  }
-
-  try {
-    // Write raw data to PTY (xterm.js will handle line endings)
-    claudePty.write(command);
-
-    return { success: true };
-  } catch (error) {
-    console.error(`Failed to send command to Claude PTY ${instanceId}:`, error);
-    return { success: false, error: error instanceof Error ? error.message : String(error) };
-  }
+  return instanceService.sendCommand(instanceId, command);
 });
 
 ipcMain.handle('claude:stop', async (event, instanceId: string) => {
-  const claudePty = claudeInstances.get(instanceId);
-  if (claudePty) {
-    claudePty.kill();
-    claudeInstances.delete(instanceId);
-    return { success: true };
-  }
-  return { success: false, error: `No Claude PTY running for instance ${instanceId}` };
+  return instanceService.stopInstance(instanceId);
 });
 
 ipcMain.handle('claude:resize', async (event, instanceId: string, cols: number, rows: number) => {
-  const claudePty = claudeInstances.get(instanceId);
-  if (claudePty) {
-    try {
-      claudePty.resize(cols, rows);
-      return { success: true };
-    } catch (error) {
-      console.error(`Failed to resize PTY for ${instanceId}:`, error);
-      return { success: false, error: error instanceof Error ? error.message : String(error) };
-    }
+  return instanceService.resizeTerminal(instanceId, cols, rows);
+});
+
+// Get preserved sessions that should auto-start
+ipcMain.handle('claude:getPreservedSessions', async () => {
+  return sessionService.getPreservedSessions();
+});
+
+// Check if a session exists for an instance
+ipcMain.handle('claude:hasSession', async (event, instanceId: string) => {
+  return sessionService.hasSession(instanceId);
+});
+
+// Clear auto-start flag after session is restored
+ipcMain.handle('claude:clearAutoStart', async (event, instanceId: string) => {
+  const session = sessionService.get(instanceId);
+  if (session) {
+    session.shouldAutoStart = false;
   }
-  return { success: false, error: `No Claude PTY running for instance ${instanceId}` };
+  return { success: true };
+});
+
+// Stop and delete Claude session permanently
+ipcMain.handle('claude:deleteSession', async (event, instanceId: string) => {
+  console.log(`Deleting session for instance ${instanceId}...`);
+  
+  // Stop the instance if running
+  await instanceService.stopInstance(instanceId);
+  
+  // Delete session and its file
+  const deleted = sessionService.deleteSessionAndFile(instanceId);
+  
+  return { success: deleted };
 });
 
 // Get home directory
@@ -1664,14 +1603,13 @@ Remember: Return ONLY the complete code for the file. No explanations. No markdo
       // Use Claude SDK to generate code
       const response = query({
         prompt: userPrompt,
-        abortController,
         options: {
           model: 'claude-sonnet-4-20250514', // Fast model for code generation
           maxTurns: 1,
           allowedTools: [],
           customSystemPrompt: systemPrompt
         }
-      });
+      } as any);
       
       let generatedCode = '';
       
@@ -1750,14 +1688,14 @@ app.on('before-quit', async () => {
   }
   
   // Clean up Claude instances
-  for (const [instanceId, claudePty] of claudeInstances) {
+  for (const [instanceId, claudePty] of instanceService.getAllInstances()) {
     try {
       claudePty.kill();
     } catch (error) {
       console.error(`Failed to kill Claude instance ${instanceId}:`, error);
     }
   }
-  claudeInstances.clear();
+  instanceService.clearInstances();
 });
 
 // MCP (Model Context Protocol) Management - Using Claude CLI

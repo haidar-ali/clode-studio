@@ -5,6 +5,10 @@ const electronAPI = {
     claude: {
         start: (instanceId, workingDirectory, instanceName, runConfig) => electron_1.ipcRenderer.invoke('claude:start', instanceId, workingDirectory, instanceName, runConfig),
         detectInstallation: () => electron_1.ipcRenderer.invoke('claude:detectInstallation'),
+        getPreservedSessions: () => electron_1.ipcRenderer.invoke('claude:getPreservedSessions'),
+        clearAutoStart: (instanceId) => electron_1.ipcRenderer.invoke('claude:clearAutoStart', instanceId),
+        hasSession: (instanceId) => electron_1.ipcRenderer.invoke('claude:hasSession', instanceId),
+        deleteSession: (instanceId) => electron_1.ipcRenderer.invoke('claude:deleteSession', instanceId),
         send: (instanceId, command) => electron_1.ipcRenderer.invoke('claude:send', instanceId, command),
         stop: (instanceId) => electron_1.ipcRenderer.invoke('claude:stop', instanceId),
         resize: (instanceId, cols, rows) => electron_1.ipcRenderer.invoke('claude:resize', instanceId, cols, rows),
@@ -27,10 +31,17 @@ const electronAPI = {
             electron_1.ipcRenderer.on(channel, handler);
             return () => electron_1.ipcRenderer.removeListener(channel, handler);
         },
+        onRestorationStatus: (instanceId, callback) => {
+            const channel = `claude:restoration-status:${instanceId}`;
+            const handler = (_, status) => callback(status);
+            electron_1.ipcRenderer.on(channel, handler);
+            return () => electron_1.ipcRenderer.removeListener(channel, handler);
+        },
         removeAllListeners: (instanceId) => {
             electron_1.ipcRenderer.removeAllListeners(`claude:output:${instanceId}`);
             electron_1.ipcRenderer.removeAllListeners(`claude:error:${instanceId}`);
             electron_1.ipcRenderer.removeAllListeners(`claude:exit:${instanceId}`);
+            electron_1.ipcRenderer.removeAllListeners(`claude:restoration-status:${instanceId}`);
         },
         sdk: {
             getTodos: (projectPath) => electron_1.ipcRenderer.invoke('claude:sdk:getTodos', projectPath),
