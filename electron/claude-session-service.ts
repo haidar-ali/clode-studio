@@ -211,10 +211,11 @@ export class ClaudeSessionService {
       
       // Add current sessionId to history if it exists and is different
       if (session.sessionId && session.sessionId !== newSessionId) {
-        // Keep only the last 5 session IDs for fallback
+        // Add current session ID to the beginning
         session.previousSessionIds.unshift(session.sessionId);
+        // Keep only the last 5 session IDs for fallback (remove oldest if needed)
         if (session.previousSessionIds.length > 5) {
-          session.previousSessionIds = session.previousSessionIds.slice(0, 5);
+          session.previousSessionIds.pop(); // Remove the oldest (last) element
         }
       }
       

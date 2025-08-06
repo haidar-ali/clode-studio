@@ -45,6 +45,194 @@ const claudeInstances: Map<string, pty.IPty> = new Map();
 // Initialize Claude session service
 const sessionService = new ClaudeSessionService(store as any);
 
+// Helper function to start Claude with a specific session ID (used for retries)
+async function startClaudeWithSessionId(
+  instanceId: string,
+  workingDirectory: string,
+  instanceName?: string,
+  runConfig?: any,
+  sessionId?: string,
+  attemptNumber: number = 0,
+  totalAttempts: number = 1
+): Promise<{ success: boolean; error?: string; pid?: number }> {
+  try {
+    const claudeInfo = await ClaudeDetector.detectClaude(workingDirectory);
+    
+    if (!claudeInfo) {
+      throw new Error('Claude CLI not found');
+    }
+    
+    const debugArgs = process.env.CLAUDE_DEBUG === 'true' ? ['--debug'] : [];
+    
+    // Build arguments for retry
+    let baseArgs: string[];
+    if (sessionId) {
+      baseArgs = ['--resume', sessionId, ...debugArgs];
+      console.log(`[Retry ${attemptNumber}/${totalAttempts}] Attempting to resume with session ID: ${sessionId}`);
+    } else {
+      // Generate new session ID
+      const newSessionId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+      baseArgs = ['--session-id', newSessionId, ...debugArgs];
+    }
+    
+    let { command, args: commandArgs, useShell } = ClaudeDetector.getClaudeCommand(claudeInfo, baseArgs);
+    
+    // Override with run config if provided
+    if (runConfig) {
+      if (runConfig.command) {
+        command = runConfig.command === 'claude' ? command : runConfig.command;
+      }
+      if (runConfig.args && runConfig.args.length > 0) {
+        const allArgs = sessionId 
+          ? ['--resume', sessionId, ...runConfig.args, ...debugArgs]
+          : baseArgs.concat(runConfig.args);
+        const result = ClaudeDetector.getClaudeCommand(claudeInfo, allArgs);
+        command = result.command;
+        commandArgs = result.args;
+        useShell = result.useShell;
+      }
+    }
+    
+    // Create the PTY instance
+    const claudePty = pty.spawn(command, commandArgs, {
+      name: 'xterm-color',
+      cols: 80,
+      rows: 30,
+      cwd: workingDirectory,
+      env: { ...process.env, TERM: 'xterm-256color' } as any,
+      useConpty: false
+    });
+    
+    // Store the instance
+    claudeInstances.set(instanceId, claudePty);
+    
+    // Get remaining fallback session IDs for further retries
+    const sessionOptions = sessionService.getSessionWithFallbacks(instanceId);
+    let localAttemptIndex = attemptNumber;
+    let isRetrying = false;
+    let isKillingForRetry = false;
+    let hasUpdatedSuccessfulSession = false; // Prevent duplicate session updates
+    
+    // Setup data handler with retry detection
+    claudePty.onData((data: string) => {
+      // Send output to renderer
+      mainWindow?.webContents.send(`claude:output:${instanceId}`, data);
+      
+      // Check for session restoration failure
+      if (!isRetrying && data.includes('No conversation found with session ID:')) {
+        console.log(`[Retry] Session ${sessionId} not found, checking for more fallbacks...`);
+        
+        // Send failure status
+        mainWindow?.webContents.send(`claude:restoration-status:${instanceId}`, {
+          status: 'failed',
+          sessionId: sessionId,
+          attemptNumber: localAttemptIndex + 1,
+          totalAttempts: totalAttempts
+        });
+        
+        // Check if we have more fallbacks
+        localAttemptIndex++;
+        if (localAttemptIndex < sessionOptions.fallbacks.length) {
+          const nextSessionId = sessionOptions.fallbacks[localAttemptIndex];
+          console.log(`[Retry] Attempting next fallback session ID: ${nextSessionId}`);
+          
+          // Send retry status
+          mainWindow?.webContents.send(`claude:restoration-status:${instanceId}`, {
+            status: 'retrying',
+            sessionId: nextSessionId,
+            attemptNumber: localAttemptIndex + 1,
+            totalAttempts: totalAttempts
+          });
+          
+          isRetrying = true;
+          isKillingForRetry = true;
+          
+          // Kill current process
+          try {
+            claudePty.kill();
+          } catch (error) {
+            console.error('Error killing Claude process for retry:', error);
+          }
+          
+          // Remove from instances
+          claudeInstances.delete(instanceId);
+          
+          // Retry with next session ID
+          setTimeout(async () => {
+            const retryResult = await startClaudeWithSessionId(
+              instanceId,
+              workingDirectory,
+              instanceName,
+              runConfig,
+              nextSessionId,
+              localAttemptIndex,
+              totalAttempts
+            );
+            
+            if (!retryResult.success) {
+              console.error(`Failed to retry with fallback session ID: ${retryResult.error}`);
+              mainWindow?.webContents.send(`claude:restoration-status:${instanceId}`, {
+                status: 'all-failed',
+                error: retryResult.error,
+                totalAttempts: totalAttempts
+              });
+            }
+          }, 1000);
+        } else {
+          // No more fallbacks
+          console.log(`[Retry] All ${totalAttempts} session restoration attempts failed`);
+          mainWindow?.webContents.send(`claude:restoration-status:${instanceId}`, {
+            status: 'all-failed',
+            totalAttempts: totalAttempts
+          });
+        }
+      }
+      
+      // Check for successful restoration - "Welcome to Claude Code" appears after successful start
+      // Strip ANSI escape codes to check plain text
+      const plainData = data.replace(/\x1b\[[0-9;]*m/g, '');
+      if (!hasUpdatedSuccessfulSession && plainData.includes('Welcome to Claude Code')) {
+        console.log(`[Retry] Session successfully restored with ID: ${sessionId}`);
+        
+        // Update the session with the successful session ID
+        // Only update if we haven't already (prevent duplicate updates)
+        if (sessionId) {
+          hasUpdatedSuccessfulSession = true;
+          sessionService.updateSessionId(instanceId, sessionId);
+        }
+        
+        mainWindow?.webContents.send(`claude:restoration-status:${instanceId}`, {
+          status: 'success',
+          sessionId: sessionId,
+          attemptNumber: localAttemptIndex + 1
+        });
+        isRetrying = false; // Clear retry flag on success
+      }
+    });
+    
+    // Setup exit handler
+    claudePty.onExit((event: { exitCode: number; signal?: number }) => {
+      // Only send exit event if not killing for retry
+      if (!isKillingForRetry) {
+        mainWindow?.webContents.send(`claude:exit:${instanceId}`, event.exitCode);
+        claudeInstances.delete(instanceId);
+      }
+    });
+    
+    return { success: true, pid: claudePty.pid };
+  } catch (error) {
+    console.error(`Failed to start Claude with session ID ${sessionId}:`, error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : String(error) 
+    };
+  }
+}
+
 // Knowledge cache instances per workspace
 const knowledgeCaches: Map<string, any> = new Map();
 
@@ -343,7 +531,9 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
     }
 
     // After starting Claude, detect the new session file
-    if (shouldRestore) {
+    // Skip immediate detection for restoration attempts, but schedule a later check
+    // to catch new sessions Claude creates after successful restoration
+    if (shouldRestore && !sessionToRestore) {
       // Get the Claude project directory for this workspace
       const projectDirName = workingDirectory.replace(/\//g, '-');
       const claudeProjectDir = join(homedir(), '.claude', 'projects', projectDirName);
@@ -381,27 +571,156 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
       }, 3000); // Wait 3 seconds for Claude to create the session file
     }
     
-    // Track if we've seen a session restoration failure
+    // Track session restoration attempts
     let sessionRestorationFailed = false;
-    let attemptedFallback = false;
+    let currentAttemptIndex = 0;
+    const sessionOptions = sessionService.getSessionWithFallbacks(instanceId);
+    let isRetrying = false;
+    let isKillingForRetry = false; // Flag to prevent exit handler during retry
+    let hasUpdatedSuccessfulSession = false; // Prevent duplicate session updates
     
     // Handle output from Claude
     claudePty.onData((data: string) => {
-      // Detect session restoration failure
-      if (!attemptedFallback && data.includes('No conversation found with session ID:')) {
+      // Detect session restoration failure and automatically retry with fallbacks
+      if (!isRetrying && data.includes('No conversation found with session ID:')) {
         sessionRestorationFailed = true;
-        console.log(`[Claude Session] Session restoration failed for ${instanceId}`);
+        const failedSessionId = sessionOptions.fallbacks[currentAttemptIndex] || 'unknown';
+        console.log(`[Claude Session] Session restoration failed for ${instanceId} with session ID: ${failedSessionId}`);
         
-        // Get fallback sessions
-        const sessionOptions = sessionService.getSessionWithFallbacks(instanceId);
-        if (sessionOptions.fallbacks.length > 1) {
-          // We have fallbacks (skip the first one as we already tried it)
-          const fallbackId = sessionOptions.fallbacks[1];
-          console.log(`[Claude Session] Could retry with fallback session ID: ${fallbackId}`);
-          // Note: We can't restart the process here, but we log for debugging
-          // In future, we could implement automatic retry with fallback
+        // Send restoration status to renderer
+        mainWindow?.webContents.send(`claude:restoration-status:${instanceId}`, {
+          status: 'failed',
+          sessionId: failedSessionId,
+          attemptNumber: currentAttemptIndex + 1,
+          totalAttempts: sessionOptions.fallbacks.length
+        });
+        
+        // Check if we have more fallbacks to try
+        currentAttemptIndex++;
+        if (currentAttemptIndex < sessionOptions.fallbacks.length) {
+          const nextSessionId = sessionOptions.fallbacks[currentAttemptIndex];
+          console.log(`[Claude Session] Automatically retrying with fallback session ID ${currentAttemptIndex + 1}/${sessionOptions.fallbacks.length}: ${nextSessionId}`);
+          
+          // Send retry status to renderer
+          mainWindow?.webContents.send(`claude:restoration-status:${instanceId}`, {
+            status: 'retrying',
+            sessionId: nextSessionId,
+            attemptNumber: currentAttemptIndex + 1,
+            totalAttempts: sessionOptions.fallbacks.length
+          });
+          
+          // Kill current process and restart with fallback
+          isRetrying = true;
+          isKillingForRetry = true; // Set flag to prevent exit handler
+          
+          // Kill the current Claude process
+          try {
+            claudePty.kill();
+          } catch (error) {
+            console.error('Error killing Claude process for retry:', error);
+          }
+          
+          // Remove from instances map
+          claudeInstances.delete(instanceId);
+          
+          // Wait a bit before retrying
+          setTimeout(async () => {
+            // Restart Claude with the fallback session ID
+            const retryResult = await startClaudeWithSessionId(
+              instanceId, 
+              workingDirectory, 
+              instanceName, 
+              runConfig, 
+              nextSessionId,
+              currentAttemptIndex,
+              sessionOptions.fallbacks.length
+            );
+            
+            if (!retryResult.success) {
+              console.error(`Failed to retry with fallback session ID: ${retryResult.error}`);
+              mainWindow?.webContents.send(`claude:restoration-status:${instanceId}`, {
+                status: 'all-failed',
+                error: retryResult.error
+              });
+            }
+          }, 1000);
+        } else {
+          // No more fallbacks, session restoration completely failed
+          console.log(`[Claude Session] All ${sessionOptions.fallbacks.length} session restoration attempts failed for ${instanceId}`);
+          mainWindow?.webContents.send(`claude:restoration-status:${instanceId}`, {
+            status: 'all-failed',
+            totalAttempts: sessionOptions.fallbacks.length
+          });
         }
-        attemptedFallback = true;
+      }
+      
+      // Detect successful restoration - "Welcome to Claude Code" appears after successful start
+      // Strip ANSI escape codes to check plain text
+      const plainData = data.replace(/\x1b\[[0-9;]*m/g, '');
+      if (!hasUpdatedSuccessfulSession && plainData.includes('Welcome to Claude Code')) {
+        const successfulSessionId = sessionOptions.fallbacks[currentAttemptIndex];
+        console.log(`[Claude Session] Session successfully restored for ${instanceId} with session ID: ${successfulSessionId}`);
+        
+        // Update the session with the successful session ID so next pause/continue uses the right one
+        // Only update if we haven't already (prevent duplicate updates)
+        hasUpdatedSuccessfulSession = true;
+        sessionService.updateSessionId(instanceId, successfulSessionId);
+        
+        mainWindow?.webContents.send(`claude:restoration-status:${instanceId}`, {
+          status: 'success',
+          sessionId: successfulSessionId,
+          attemptNumber: currentAttemptIndex + 1
+        });
+        isRetrying = false; // Clear retry flag on success
+        
+        // After successful restoration, schedule a check for new session files
+        // Claude might create a new session when you continue working
+        // 
+        // NOTE: Tab safety limitations
+        // This is still not 100% tab-safe because:
+        // - If Tab B creates a new session AFTER Tab A's restoration time (within that 10-second window), 
+        //   Tab A might still pick it up
+        // - There's no way to definitively link a Claude session file to a specific tab instance
+        //
+        // A truly tab-safe solution would require Claude to provide instance-specific session IDs or some way 
+        // to track which session belongs to which terminal instance. For now, this time-based filtering is 
+        // the best we can do to minimize cross-tab interference.
+        const restorationTime = Date.now();
+        setTimeout(async () => {
+          try {
+            const projectDirName = workingDirectory.replace(/\//g, '-');
+            const claudeProjectDir = join(homedir(), '.claude', 'projects', projectDirName);
+            
+            if (existsSync(claudeProjectDir)) {
+              const files = readdirSync(claudeProjectDir)
+                .filter(f => f.endsWith('.jsonl'))
+                .map(f => {
+                  const fullPath = join(claudeProjectDir, f);
+                  const stats = statSync(fullPath);
+                  return { 
+                    name: f.replace('.jsonl', ''), 
+                    time: stats.mtimeMs,
+                    createdAfterRestore: stats.mtimeMs > restorationTime
+                  };
+                })
+                .filter(f => f.createdAfterRestore) // Only consider files created after restoration
+                .sort((a, b) => b.time - a.time);
+              
+              if (files.length > 0) {
+                const newestSessionId = files[0].name;
+                const currentSession = sessionService.get(instanceId);
+                
+                // Only update if we find a session created after this instance's restoration
+                if (currentSession && newestSessionId !== currentSession.sessionId) {
+                  console.log(`[Claude Session] Detected new session file after restoration for ${instanceId}: ${newestSessionId}`);
+                  sessionService.updateSessionId(instanceId, newestSessionId);
+                }
+              }
+            }
+          } catch (error) {
+            console.error('Failed to check for new session after restoration:', error);
+          }
+        }, 10000); // Check after 10 seconds to give Claude time to create new session
       }
       
       // Update last active time on any output
@@ -416,14 +735,17 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
 
     // Handle exit
     claudePty.onExit(({ exitCode, signal }) => {
-      mainWindow?.webContents.send(`claude:exit:${instanceId}`, exitCode);
-      claudeInstances.delete(instanceId);
-      
-      // Clear auto-start flag when session exits normally
-      const session = sessionService.get(instanceId);
-      if (session) {
-        session.shouldAutoStart = false;
-        sessionService.saveSessionsToDisk();
+      // Don't send exit event if we're killing for retry
+      if (!isKillingForRetry) {
+        mainWindow?.webContents.send(`claude:exit:${instanceId}`, exitCode);
+        claudeInstances.delete(instanceId);
+        
+        // Clear auto-start flag when session exits normally
+        const session = sessionService.get(instanceId);
+        if (session) {
+          session.shouldAutoStart = false;
+          sessionService.saveSessionsToDisk();
+        }
       }
     });
 

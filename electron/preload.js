@@ -31,10 +31,17 @@ const electronAPI = {
             electron_1.ipcRenderer.on(channel, handler);
             return () => electron_1.ipcRenderer.removeListener(channel, handler);
         },
+        onRestorationStatus: (instanceId, callback) => {
+            const channel = `claude:restoration-status:${instanceId}`;
+            const handler = (_, status) => callback(status);
+            electron_1.ipcRenderer.on(channel, handler);
+            return () => electron_1.ipcRenderer.removeListener(channel, handler);
+        },
         removeAllListeners: (instanceId) => {
             electron_1.ipcRenderer.removeAllListeners(`claude:output:${instanceId}`);
             electron_1.ipcRenderer.removeAllListeners(`claude:error:${instanceId}`);
             electron_1.ipcRenderer.removeAllListeners(`claude:exit:${instanceId}`);
+            electron_1.ipcRenderer.removeAllListeners(`claude:restoration-status:${instanceId}`);
         },
         sdk: {
             getTodos: (projectPath) => electron_1.ipcRenderer.invoke('claude:sdk:getTodos', projectPath),

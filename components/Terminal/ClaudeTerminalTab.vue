@@ -44,6 +44,26 @@
       </div>
     </div>
 
+    <!-- Session Restoration Status -->
+    <div v-if="restorationStatus" class="restoration-status" :class="restorationStatus.status">
+      <div v-if="restorationStatus.status === 'retrying'" class="restoration-message">
+        <Icon name="mdi:loading" class="spin" size="16" />
+        <span>Retrying session restoration (Attempt {{ restorationStatus.attemptNumber }}/{{ restorationStatus.totalAttempts }})</span>
+      </div>
+      <div v-else-if="restorationStatus.status === 'failed'" class="restoration-message">
+        <Icon name="mdi:alert-circle" size="16" />
+        <span>Session {{ restorationStatus.sessionId?.slice(0, 8) }} not found, trying fallback...</span>
+      </div>
+      <div v-else-if="restorationStatus.status === 'success'" class="restoration-message">
+        <Icon name="mdi:check-circle" size="16" />
+        <span>Session restored successfully</span>
+      </div>
+      <div v-else-if="restorationStatus.status === 'all-failed'" class="restoration-message">
+        <Icon name="mdi:close-circle" size="16" />
+        <span>All {{ restorationStatus.totalAttempts }} session restoration attempts failed</span>
+      </div>
+    </div>
+
     <div ref="terminalElement" class="terminal-content"></div>
 
     <!-- Floating Chat Button -->
@@ -95,6 +115,7 @@ const { currentBranch, isWorktree } = useGitBranch();
 const terminalElement = ref<HTMLElement>();
 const showChatInput = ref(false);
 const selectedRunConfig = ref<ClaudeRunConfig | null>(null);
+const restorationStatus = ref<any>(null);
 
 // Provide working directory for child components
 provide('workingDirectory', props.instance.workingDirectory);
@@ -120,6 +141,7 @@ let listenersSetup = false;
 let cleanupOutputListener: (() => void) | null = null;
 let cleanupErrorListener: (() => void) | null = null;
 let cleanupExitListener: (() => void) | null = null;
+let cleanupRestorationListener: (() => void) | null = null;
 let emergencyCleanupListener: (() => void) | null = null;
 
 
@@ -450,6 +472,18 @@ const setupClaudeListeners = () => {
     emit('status-change', 'disconnected');
   });
 
+  // Setup restoration status listener
+  cleanupRestorationListener = window.electronAPI.claude.onRestorationStatus(props.instance.id, (status: any) => {
+    restorationStatus.value = status;
+    
+    // Clear the status after a few seconds for success/failure messages
+    if (status.status === 'success' || status.status === 'all-failed') {
+      setTimeout(() => {
+        restorationStatus.value = null;
+      }, 5000);
+    }
+  });
+
   listenersSetup = true;
 };
 
@@ -467,6 +501,10 @@ const removeClaudeListeners = () => {
     if (cleanupExitListener) {
       cleanupExitListener();
       cleanupExitListener = null;
+    }
+    if (cleanupRestorationListener) {
+      cleanupRestorationListener();
+      cleanupRestorationListener = null;
     }
 
     // Also call the removeAllListeners for this instance
@@ -559,15 +597,6 @@ const startClaude = async () => {
     if (result.restored) {
       terminal.writeln('\x1b[32m✓ Session restored successfully!\x1b[0m');
       terminal.writeln('Your previous conversation has been continued.');
-      
-      // Add "Continue" text that user can just press Enter on
-      // Wait a bit for Claude to show its prompt first
-      setTimeout(() => {
-        if (props.instance.status === 'connected') {
-          // Write "Continue" to the terminal so user can just press Enter
-          window.electronAPI.claude.send(props.instance.id, 'Continue');
-        }
-      }, 2000);
     } else if (result.restorationFailed) {
       terminal.writeln('\x1b[33m⚠ Previous session expired, starting fresh.\x1b[0m');
     } else {
@@ -1006,5 +1035,60 @@ onUnmounted(() => {
 .floating-chat-button.active {
   background: #1a7dc4;
   transform: rotate(45deg);
+}
+
+/* Restoration Status Styles */
+.restoration-status {
+  padding: 8px 16px;
+  background: #2d2d30;
+  border-bottom: 1px solid #181818;
+  animation: slideDown 0.3s ease;
+}
+
+.restoration-message {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.restoration-status.retrying .restoration-message {
+  color: #4fc3f7;
+}
+
+.restoration-status.failed .restoration-message {
+  color: #ffb74d;
+}
+
+.restoration-status.success .restoration-message {
+  color: #81c784;
+}
+
+.restoration-status.all-failed .restoration-message {
+  color: #e57373;
+}
+
+.restoration-message .spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 </style>
