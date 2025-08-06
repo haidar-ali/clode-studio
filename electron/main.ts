@@ -276,8 +276,9 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
 
   // If restoring, add a delay to ensure any locks are released
   if (shouldRestore) {
-    console.log(`Waiting for session lock to be released for ${instanceId}...`);
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    console.log(`Preparing to restore session for ${instanceId}...`);
+    // Longer wait to ensure lock files are completely released
+    await new Promise(resolve => setTimeout(resolve, 3000));
   }
 
   try {
@@ -287,24 +288,30 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
     // Get the command configuration
     const debugArgs = process.env.CLAUDE_DEBUG === 'true' ? ['--debug'] : [];
     
-    // Generate or use a UUID for this instance to ensure session isolation
-    // Each instance gets its own unique session ID to prevent mixing
-    let sessionUuid: string;
-    if (shouldRestore && preservedSession?.claudeSessionId) {
-      // Use the preserved session UUID
-      sessionUuid = preservedSession.claudeSessionId;
-    } else {
-      // Generate a new UUID for this instance
-      // Simple UUID v4 generation
-      sessionUuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-        const r = Math.random() * 16 | 0;
-        const v = c === 'x' ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
-      });
+    // Always generate a new session ID to avoid lock conflicts
+    // The conversation context is preserved through --continue, not the session ID
+    let sessionUuid: string = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+      const r = Math.random() * 16 | 0;
+      const v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+    
+    console.log(`Using session ID ${sessionUuid} for instance ${instanceId}`);
+    
+    // If we had a previous session ID, log it for debugging
+    if (preservedSession?.claudeSessionId) {
+      console.log(`Previous session ID was ${preservedSession.claudeSessionId}, using new ID to avoid lock conflicts`);
     }
     
-    // Use --session-id to ensure each instance has its own isolated session
-    const baseArgs = ['--session-id', sessionUuid, ...debugArgs];
+    // Build base arguments
+    // Add --continue if we're restoring a session
+    const baseArgs = shouldRestore 
+      ? ['--continue', '--session-id', sessionUuid, ...debugArgs]
+      : ['--session-id', sessionUuid, ...debugArgs];
+    
+    if (shouldRestore) {
+      console.log(`Adding --continue flag to restore conversation for ${instanceId}`);
+    }
 
     let { command, args: commandArgs, useShell } = ClaudeDetector.getClaudeCommand(claudeInfo, baseArgs);
 
@@ -316,8 +323,10 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
       }
       if (runConfig.args && runConfig.args.length > 0) {
         // When we have custom args, we need to rebuild the command
-        // Always include session-id to ensure isolation
-        const allArgs = ['--session-id', sessionUuid, ...runConfig.args, ...debugArgs];
+        // Include --continue if restoring, and always include session-id to ensure isolation
+        const allArgs = shouldRestore
+          ? ['--continue', '--session-id', sessionUuid, ...runConfig.args, ...debugArgs]
+          : ['--session-id', sessionUuid, ...runConfig.args, ...debugArgs];
         const result = ClaudeDetector.getClaudeCommand(claudeInfo, allArgs);
         command = result.command;
         commandArgs = result.args;
@@ -552,15 +561,15 @@ ipcMain.handle('claude:stop', async (event, instanceId: string) => {
     try {
       console.log(`Stopping Claude instance ${instanceId} (PID: ${claudePty.pid})...`);
       
-      // First send EOF (Ctrl+D) to allow Claude to save session properly
-      claudePty.write('\x04');
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Send exit command to Claude to ensure clean shutdown
+      claudePty.write('/exit\n');
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
       // Then try graceful shutdown with SIGINT (Ctrl+C)
       claudePty.kill('SIGINT');
       
       // Wait for graceful shutdown
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      await new Promise(resolve => setTimeout(resolve, 2000));
       
       // Check if process is still alive and send SIGTERM if needed
       try {
