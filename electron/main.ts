@@ -1651,12 +1651,9 @@ Request: ${prompt}
 
 Remember: Return ONLY the complete code for the file. No explanations. No markdown. Just the raw code.`;
 
-  
-    
     // Create an AbortController for timeout
     const abortController = new AbortController();
     const timeoutId = setTimeout(() => {
-    
       abortController.abort();
     }, 60000); // 60 second timeout
     
@@ -1664,8 +1661,8 @@ Remember: Return ONLY the complete code for the file. No explanations. No markdo
       // Use Claude SDK to generate code
       const response = query({
         prompt: userPrompt,
-        abortController,
         options: {
+          abortController,
           model: 'claude-sonnet-4-20250514', // Fast model for code generation
           maxTurns: 1,
           allowedTools: [],
@@ -1693,8 +1690,6 @@ Remember: Return ONLY the complete code for the file. No explanations. No markdo
       clearTimeout(timeoutId);
       
       if (generatedCode) {
-      
-        
         // Clean the response - remove any markdown code blocks if present
         generatedCode = generatedCode.trim();
         
