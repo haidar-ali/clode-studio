@@ -47,7 +47,7 @@ export const useCodeAnalysisStore = defineStore('code-analysis', {
       analyzeOnFileOpen: false,
       cacheResults: true,
       maxHistorySize: 100,
-      excludePatterns: ['node_modules', '.git', 'dist', 'build', '.nuxt', '.claude', '.claude-checkpoints', '.worktrees', '.output', 'coverage', '.nyc_output', 'tmp', 'temp', '.cache', '.parcel-cache', '.vscode', '.idea', '__pycache__', '.DS_Store']
+      excludePatterns: ['node_modules', '.git', 'dist', 'build', '.nuxt', '.claude', '.clode', '.claude-checkpoints', '.worktrees', '.output', 'coverage', '.nyc_output', 'tmp', 'temp', '.cache', '.parcel-cache', '.vscode', '.idea', '__pycache__', '.DS_Store']
     }
   }),
 

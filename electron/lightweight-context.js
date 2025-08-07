@@ -47,6 +47,7 @@ export class LightweightContext {
         '.git',
         '.claude',
         '.claude-checkpoints',
+        '.clode',
         '.worktrees',
         'dist',
         'build',

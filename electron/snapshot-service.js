@@ -374,6 +374,7 @@ export class SnapshotService {
             const gitignorePath = path.join(this.projectPath, '.gitignore');
             const claudeDirectories = [
                 '.claude/',
+                '.clode/',
                 '.claude-snapshots/',
                 '.claude-checkpoints/',
                 '.worktrees/'
@@ -793,6 +794,8 @@ export class SnapshotService {
             '.claude-snapshots/',
             '.claude-checkpoints',
             '.claude-checkpoints/',
+            '.clode',
+            '.clode/',
             '.worktrees',
             '.worktrees/',
             'node_modules',
