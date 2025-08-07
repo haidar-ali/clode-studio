@@ -77,6 +77,65 @@
               </div>
             </div>
             
+            <!-- Active Remote Connections -->
+            <div v-if="appStatus.isRemoteServerRunning.value && remoteConnections.length > 0" class="connections-section">
+              <h4>Active Remote Connections</h4>
+              <div class="connections-list">
+                <div v-for="conn in remoteConnections" :key="conn.sessionId" class="connection-item">
+                  <Icon name="mdi:devices" class="device-icon" />
+                  <div class="connection-info">
+                    <div class="connection-name">{{ conn.deviceName }}</div>
+                    <div class="connection-details">
+                      <span class="connection-id">ID: {{ conn.deviceId.substring(0, 8) }}...</span>
+                      <span class="connection-token" v-if="conn.token">Token: {{ conn.token.substring(0, 8) }}...</span>
+                      <span class="connection-time">Connected {{ formatTimeSince(conn.connectedAt) }}</span>
+                      <span class="connection-status" :class="{ active: conn.isActive }">
+                        {{ conn.isActive ? 'Active' : 'Idle' }}
+                      </span>
+                    </div>
+                  </div>
+                  <button 
+                    class="revoke-btn" 
+                    @click="revokeConnection(conn)"
+                    title="Revoke this device's access"
+                  >
+                    <Icon name="mdi:close-circle" />
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Token Management Section -->
+            <div v-if="appStatus.isRemoteServerRunning.value" class="token-section">
+              <h4>Device Tokens</h4>
+              <div class="token-list">
+                <div v-for="token in activeTokens" :key="token.token" class="token-item">
+                  <div class="token-info">
+                    <div class="token-device">{{ token.deviceName }}</div>
+                    <div class="token-details">
+                      <span class="token-id">Token: {{ token.token.substring(0, 12) }}...</span>
+                      <span class="token-created">Created: {{ formatDate(token.createdAt) }}</span>
+                      <span class="token-expires">Expires: {{ formatDate(token.expiresAt) }}</span>
+                      <span class="token-usage">Used {{ token.connectionCount }} times</span>
+                      <span v-if="token.lastUsed" class="token-last-used">
+                        Last used: {{ formatTimeSince(token.lastUsed) }}
+                      </span>
+                    </div>
+                  </div>
+                  <button 
+                    class="revoke-token-btn" 
+                    @click="revokeToken(token.token)"
+                    title="Revoke this token"
+                  >
+                    <Icon name="mdi:delete" />
+                  </button>
+                </div>
+              </div>
+              <div v-if="activeTokens.length === 0" class="no-tokens">
+                No active tokens. Generate a QR code to create one.
+              </div>
+            </div>
+            
             <!-- Quick Connect Section (for hybrid mode with running server) -->
             <QuickConnectSection v-if="appStatus.isHybridMode.value && appStatus.isRemoteServerRunning.value" />
             
@@ -186,7 +245,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, onMounted, onUnmounted } from 'vue';
 import { useConnectionManager } from '~/composables/useConnectionManager';
 import { usePerformanceCache } from '~/composables/usePerformanceCache';
 import { useAppStatus } from '~/composables/useAppStatus';
@@ -219,6 +278,133 @@ const bandwidthSaved = computed(() => performanceCache.bandwidthSaved.value);
 
 // Device switching state
 const isSwitching = ref(false);
+
+// Remote connections
+const remoteConnections = ref<Array<{
+  sessionId: string;
+  deviceName: string;
+  deviceId: string;
+  token?: string;
+  connectedAt: Date;
+  lastActivity: Date;
+  isActive: boolean;
+}>>([]);
+
+// Active tokens
+const activeTokens = ref<Array<{
+  token: string;
+  deviceId: string;
+  deviceName: string;
+  pairingCode: string;
+  createdAt: Date;
+  expiresAt: Date;
+  lastUsed?: Date;
+  connectionCount: number;
+}>>([]);
+
+// Update interval
+let updateInterval: NodeJS.Timeout | null = null;
+
+// Fetch remote connections
+async function fetchRemoteConnections() {
+  if (window.electronAPI?.remote?.getConnections && appStatus.isRemoteServerRunning.value) {
+    try {
+      const connections = await window.electronAPI.remote.getConnections();
+      remoteConnections.value = connections.map((c: any) => ({
+        ...c,
+        connectedAt: new Date(c.connectedAt),
+        lastActivity: new Date(c.lastActivity)
+      }));
+    } catch (error) {
+      console.error('Failed to fetch remote connections:', error);
+    }
+  }
+}
+
+// Fetch active tokens
+async function fetchActiveTokens() {
+  if (window.electronAPI?.remote?.getActiveTokens && appStatus.isRemoteServerRunning.value) {
+    try {
+      const tokens = await window.electronAPI.remote.getActiveTokens();
+      activeTokens.value = tokens.map((t: any) => ({
+        ...t,
+        createdAt: new Date(t.createdAt),
+        expiresAt: new Date(t.expiresAt),
+        lastUsed: t.lastUsed ? new Date(t.lastUsed) : undefined
+      }));
+    } catch (error) {
+      console.error('Failed to fetch active tokens:', error);
+    }
+  }
+}
+
+// Revoke a connection
+async function revokeConnection(conn: any) {
+  if (window.electronAPI?.remote?.disconnectDevice) {
+    try {
+      await window.electronAPI.remote.disconnectDevice(conn.sessionId);
+      // If connection has a token, revoke it too
+      if (conn.token) {
+        await revokeToken(conn.token);
+      }
+      await fetchRemoteConnections();
+    } catch (error) {
+      console.error('Failed to revoke connection:', error);
+    }
+  }
+}
+
+// Revoke a token
+async function revokeToken(token: string) {
+  if (window.electronAPI?.remote?.revokeToken) {
+    try {
+      await window.electronAPI.remote.revokeToken(token);
+      await fetchActiveTokens();
+      await fetchRemoteConnections();
+    } catch (error) {
+      console.error('Failed to revoke token:', error);
+    }
+  }
+}
+
+// Format date
+function formatDate(date: Date): string {
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(date);
+}
+
+// Format time since connection
+function formatTimeSince(date: Date): string {
+  const now = new Date();
+  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+  
+  if (seconds < 60) return 'just now';
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86400)}d ago`;
+}
+
+onMounted(() => {
+  // Fetch connections and tokens immediately
+  fetchRemoteConnections();
+  fetchActiveTokens();
+  
+  // Update every 5 seconds
+  updateInterval = setInterval(() => {
+    fetchRemoteConnections();
+    fetchActiveTokens();
+  }, 5000);
+});
+
+onUnmounted(() => {
+  if (updateInterval) {
+    clearInterval(updateInterval);
+  }
+});
 
 // Computed states
 const isConnected = computed(() => 
@@ -455,6 +641,156 @@ async function switchToDevice(deviceId: string) {
   font-weight: 600;
   color: var(--color-text-primary);
   margin: 0 0 16px 0;
+}
+
+/* Active Connections Section */
+.connections-section {
+  margin-bottom: 24px;
+  padding: 16px;
+  background-color: var(--color-bg-secondary);
+  border-radius: 8px;
+}
+
+.connections-section h4 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin: 0 0 16px 0;
+}
+
+.connections-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.connection-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background-color: var(--color-bg-primary);
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+}
+
+.connection-item .device-icon {
+  font-size: 24px;
+  color: var(--color-primary);
+}
+
+.connection-info {
+  flex: 1;
+}
+
+.connection-name {
+  font-weight: 500;
+  color: var(--color-text-primary);
+  margin-bottom: 4px;
+}
+
+.connection-details {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.connection-id {
+  font-family: var(--font-mono);
+}
+
+.connection-status {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background-color: var(--color-bg-tertiary);
+  color: var(--color-text-secondary);
+}
+
+.connection-status.active {
+  background-color: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+/* Token Management Styles */
+.token-section {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--color-border);
+}
+
+.token-section h4 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: var(--color-text-primary);
+}
+
+.token-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.token-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background-color: var(--color-bg-secondary);
+  border-radius: 8px;
+}
+
+.token-info {
+  flex: 1;
+}
+
+.token-device {
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.token-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.token-details span {
+  padding: 2px 6px;
+  background-color: var(--color-bg-tertiary);
+  border-radius: 4px;
+}
+
+.token-id,
+.connection-token {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.revoke-btn,
+.revoke-token-btn {
+  padding: 6px;
+  background: transparent;
+  border: none;
+  color: var(--color-danger);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.revoke-btn:hover,
+.revoke-token-btn:hover {
+  background-color: var(--color-danger-bg);
+}
+
+.no-tokens {
+  padding: 20px;
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-size: 13px;
 }
 
 .server-info {

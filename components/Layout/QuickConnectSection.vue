@@ -91,7 +91,13 @@ let copyTimeout: NodeJS.Timeout;
 
 // Generate connection info on mount
 onMounted(async () => {
-  await generateConnectionInfo();
+  // First try to load existing persisted token
+  if (await loadPersistedToken()) {
+    console.log('[QuickConnect] Loaded persisted token');
+  } else {
+    // Generate new if no persisted token
+    await generateConnectionInfo();
+  }
 });
 
 // Cleanup
@@ -129,6 +135,43 @@ async function generateConnectionInfo() {
     pairingCode.value = connectionInfo.pairingCode;
     deviceToken.value = deviceAuth.token;
     
+    // Store token on server for validation (only in Electron)
+    if (typeof window !== 'undefined' && window.electronAPI?.remote?.storeToken) {
+      try {
+        await window.electronAPI.remote.storeToken({
+          token: deviceAuth.token,
+          deviceId: deviceAuth.deviceId,
+          deviceName: deviceAuth.name,
+          pairingCode: connectionInfo.pairingCode,
+          expiresAt: deviceAuth.expiresAt
+        });
+        console.log('[QuickConnect] Token stored for validation');
+      } catch (error) {
+        console.error('[QuickConnect] Failed to store token:', error);
+      }
+    } else {
+      // In browser mode, we can't store tokens server-side
+      // The remote server will need to handle this differently
+      console.log('[QuickConnect] Running in browser mode - token validation handled differently');
+    }
+    
+    // Persist token data to workspace for reuse
+    if (window.electronAPI?.remote?.persistToken) {
+      try {
+        await window.electronAPI.remote.persistToken({
+          token: deviceAuth.token,
+          deviceId: deviceAuth.deviceId,
+          deviceName: deviceAuth.name,
+          pairingCode: connectionInfo.pairingCode,
+          connectionUrl: connectionInfo.url,
+          expiresAt: deviceAuth.expiresAt
+        });
+        console.log('[QuickConnect] Token persisted to workspace');
+      } catch (error) {
+        console.error('[QuickConnect] Failed to persist token:', error);
+      }
+    }
+    
     // Generate QR code
     try {
       qrCodeDataUrl.value = await QRCode.toDataURL(connectionInfo.url, {
@@ -145,6 +188,60 @@ async function generateConnectionInfo() {
   } finally {
     isGenerating.value = false;
   }
+}
+
+/**
+ * Load persisted token from workspace
+ */
+async function loadPersistedToken(): Promise<boolean> {
+  if (!window.electronAPI?.remote?.loadPersistedToken) {
+    return false;
+  }
+  
+  try {
+    const tokenData = await window.electronAPI.remote.loadPersistedToken();
+    if (tokenData && tokenData.token) {
+      // Check if token is still valid (not expired)
+      const expiresAt = new Date(tokenData.expiresAt);
+      if (expiresAt > new Date()) {
+        // Use the persisted token
+        connectionUrl.value = tokenData.connectionUrl;
+        pairingCode.value = tokenData.pairingCode;
+        deviceToken.value = tokenData.token;
+        
+        // Store it on server for validation
+        if (window.electronAPI?.remote?.storeToken) {
+          await window.electronAPI.remote.storeToken({
+            token: tokenData.token,
+            deviceId: tokenData.deviceId,
+            deviceName: tokenData.deviceName,
+            pairingCode: tokenData.pairingCode,
+            expiresAt: expiresAt
+          });
+        }
+        
+        // Generate QR code
+        try {
+          qrCodeDataUrl.value = await QRCode.toDataURL(tokenData.connectionUrl, {
+            width: 256,
+            margin: 2,
+            color: {
+              dark: '#333333',
+              light: '#FFFFFF'
+            }
+          });
+        } catch (err) {
+          console.error('Failed to generate QR code:', err);
+        }
+        
+        return true;
+      }
+    }
+  } catch (error) {
+    console.error('[QuickConnect] Failed to load persisted token:', error);
+  }
+  
+  return false;
 }
 
 /**

@@ -265,6 +265,16 @@ const electronAPI = {
         getPlatform: () => process.platform,
         getVersion: () => process.versions.electron
     },
+    // Remote server operations
+    remote: {
+        storeToken: (args) => electron_1.ipcRenderer.invoke('remote:store-token', args),
+        getConnections: () => electron_1.ipcRenderer.invoke('remote:get-connections'),
+        getActiveTokens: () => electron_1.ipcRenderer.invoke('remote:get-active-tokens'),
+        revokeToken: (token) => electron_1.ipcRenderer.invoke('remote:revoke-token', token),
+        disconnectDevice: (sessionId) => electron_1.ipcRenderer.invoke('remote:disconnect-device', sessionId),
+        loadPersistedToken: () => electron_1.ipcRenderer.invoke('remote:load-persisted-token'),
+        persistToken: (tokenData) => electron_1.ipcRenderer.invoke('remote:persist-token', tokenData)
+    },
     // Local database removed - SQLite not actively used
     snapshots: {
         save: (snapshot) => electron_1.ipcRenderer.invoke('snapshots:save', snapshot),

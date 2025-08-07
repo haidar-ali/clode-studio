@@ -1,10 +1,12 @@
 import { app, BrowserWindow, ipcMain, shell, dialog } from 'electron';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import * as path from 'path';
 import { spawn, ChildProcess } from 'child_process';
 import Store from 'electron-store';
 import * as pty from 'node-pty';
-import { FSWatcher, existsSync } from 'fs';
+import { FSWatcher, existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import * as fs from 'fs';
 import { readFile, mkdir } from 'fs/promises';
 import { watch as chokidarWatch } from 'chokidar';
 import { homedir } from 'os';
@@ -2565,8 +2567,99 @@ ipcMain.handle('app:status', async () => {
     mode: modeManager.getMode(),
     config: modeManager.getConfig(),
     remoteServerRunning: remoteServer?.isRunning() || false,
-    remoteConnections: remoteServer?.getActiveConnectionCount() || 0
+    remoteConnections: remoteServer?.getActiveConnectionCount() || 0,
+    remoteStats: remoteServer?.getStats()
   };
+});
+
+// Store token when QR code is generated
+ipcMain.handle('remote:store-token', async (event, args) => {
+  if (!remoteServer) {
+    throw new Error('Remote server not initialized');
+  }
+  
+  const { token, deviceId, deviceName, pairingCode, expiresAt } = args;
+  remoteServer.storeToken(token, deviceId, deviceName, pairingCode, expiresAt);
+  
+  return { success: true };
+});
+
+// Get active remote connections
+ipcMain.handle('remote:get-connections', async () => {
+  if (!remoteServer) {
+    return [];
+  }
+  
+  return remoteServer.getConnections();
+});
+
+// Get active tokens
+ipcMain.handle('remote:get-active-tokens', async () => {
+  if (!remoteServer) {
+    return [];
+  }
+  
+  return remoteServer.getActiveTokens();
+});
+
+// Revoke a token
+ipcMain.handle('remote:revoke-token', async (event, token: string) => {
+  if (!remoteServer) {
+    throw new Error('Remote server not initialized');
+  }
+  
+  return remoteServer.revokeToken(token);
+});
+
+// Disconnect a specific device
+ipcMain.handle('remote:disconnect-device', async (event, sessionId: string) => {
+  if (!remoteServer) {
+    throw new Error('Remote server not initialized');
+  }
+  
+  return remoteServer.disconnectDevice(sessionId);
+});
+
+// Load persisted token from workspace
+ipcMain.handle('remote:load-persisted-token', async () => {
+  const workspacePath = (store as any).get('workspacePath');
+  if (!workspacePath) return null;
+  
+  const tokenFile = path.join(workspacePath, '.clode', 'remote-token.json');
+  
+  try {
+    if (fs.existsSync(tokenFile)) {
+      const data = fs.readFileSync(tokenFile, 'utf-8');
+      return JSON.parse(data);
+    }
+  } catch (error) {
+    console.error('Failed to load persisted token:', error);
+  }
+  
+  return null;
+});
+
+// Persist token to workspace
+ipcMain.handle('remote:persist-token', async (event, tokenData: any) => {
+  const workspacePath = (store as any).get('workspacePath');
+  if (!workspacePath) return false;
+  
+  const clodeDir = path.join(workspacePath, '.clode');
+  const tokenFile = path.join(clodeDir, 'remote-token.json');
+  
+  try {
+    // Create .clode directory if it doesn't exist
+    if (!fs.existsSync(clodeDir)) {
+      fs.mkdirSync(clodeDir, { recursive: true });
+    }
+    
+    // Write token data
+    fs.writeFileSync(tokenFile, JSON.stringify(tokenData, null, 2));
+    return true;
+  } catch (error) {
+    console.error('Failed to persist token:', error);
+    return false;
+  }
 });
 
 // Local Database handlers removed - SQLite not actively used

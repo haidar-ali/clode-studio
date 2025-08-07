@@ -11,8 +11,11 @@ export class RemoteClaudeService implements IClaudeService {
   
   private async request<T, R>(event: string, payload: T): Promise<R> {
     const socket = this.getSocket();
-    if (!socket?.connected) {
-      throw new Error('Not connected to remote server');
+    if (!socket) {
+      throw new Error('Socket not initialized. Please ensure remote connection is established.');
+    }
+    if (!socket.connected) {
+      throw new Error('Not connected to remote server. Please check your connection status.');
     }
     
     return new Promise((resolve, reject) => {
@@ -21,12 +24,18 @@ export class RemoteClaudeService implements IClaudeService {
         payload
       };
       
+      // Add timeout handling
+      const timeout = setTimeout(() => {
+        reject(new Error(`Request timeout for ${event} after 30 seconds`));
+      }, 30000);
+      
       socket.emit(event, request, (response: RemoteResponse<R>) => {
+        clearTimeout(timeout);
         if (response.success) {
           resolve(response.data!);
         } else {
           console.error(`[RemoteClaudeService] Request failed for ${event}:`, response.error);
-          reject(new Error(response.error?.message || 'Request failed'));
+          reject(new Error(response.error?.message || `Request failed for ${event}`));
         }
       });
     });

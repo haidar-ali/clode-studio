@@ -4,6 +4,7 @@
  */
 import { randomBytes } from 'crypto';
 import { Permission } from './remote-protocol.js';
+import { TokenStore } from './token-store.js';
 export class RemoteSessionManager {
     authRequired;
     sessionTimeout;
@@ -26,17 +27,26 @@ export class RemoteSessionManager {
         // Determine user and permissions
         let userId;
         let permissions;
-        if (this.authRequired && authData) {
-            // Validate authentication
-            const user = await this.validateAuth(authData);
-            if (!user) {
-                throw new Error('Authentication failed');
+        let deviceId;
+        let deviceName;
+        let token;
+        if (authData && (authData.token || authData.deviceId)) {
+            // Validate authentication with token store
+            const validation = await this.validateAuth(authData);
+            if (!validation.user) {
+                throw new Error(validation.error || 'Authentication failed');
             }
-            userId = user.id;
-            permissions = user.permissions;
+            userId = validation.user.id;
+            permissions = validation.user.permissions;
+            deviceId = validation.deviceId;
+            deviceName = validation.deviceName;
+            token = validation.token;
         }
         else {
-            // Anonymous user with default permissions
+            // Anonymous user with default permissions (only if auth not required)
+            if (this.authRequired) {
+                throw new Error('Authentication required');
+            }
             userId = `anonymous-${socket.id}`;
             permissions = this.getDefaultPermissions();
         }
@@ -47,11 +57,15 @@ export class RemoteSessionManager {
             socketId: socket.id,
             permissions,
             createdAt: new Date(),
-            lastActivity: new Date()
+            lastActivity: new Date(),
+            deviceId,
+            deviceName,
+            token
         };
         // Store session
         this.sessions.set(sessionId, session);
         this.socketToSession.set(socket.id, sessionId);
+        console.log(`[SessionManager] Created session for ${deviceName || userId} (${deviceId || 'anonymous'})`);
         return session;
     }
     /**
@@ -78,6 +92,12 @@ export class RemoteSessionManager {
             session.lastActivity = new Date();
         }
         return session || null;
+    }
+    /**
+     * Get all sessions
+     */
+    getAllSessions() {
+        return Array.from(this.sessions.values());
     }
     /**
      * Check if session has permission
@@ -131,25 +151,48 @@ export class RemoteSessionManager {
      * Validate authentication data
      */
     async validateAuth(authData) {
-        // TODO: Implement actual authentication
-        // For now, accept any token and return test user
-        if (authData.token || authData.apiKey) {
+        const tokenStore = TokenStore.getInstance();
+        // Extract credentials from auth data
+        const token = authData.token;
+        const deviceId = authData.deviceId;
+        const pairingCode = authData.pairing || authData.pairingCode;
+        // Validate required fields
+        if (!token || !deviceId) {
             return {
-                id: 'test-user-' + Date.now(),
-                username: authData.username || 'Remote User',
-                permissions: [
-                    Permission.FILE_READ,
-                    Permission.FILE_WRITE,
-                    Permission.TERMINAL_CREATE,
-                    Permission.TERMINAL_WRITE,
-                    Permission.CLAUDE_SPAWN,
-                    Permission.CLAUDE_CONTROL,
-                    Permission.WORKSPACE_MANAGE
-                ],
-                workspaces: []
+                user: null,
+                error: 'Missing required authentication fields (token and deviceId)'
             };
         }
-        return null;
+        // Validate token with token store
+        const validation = tokenStore.validateConnection(token, deviceId, pairingCode);
+        if (!validation.valid) {
+            console.log(`[SessionManager] Authentication failed: ${validation.reason}`);
+            return {
+                user: null,
+                error: validation.reason
+            };
+        }
+        // Create user with appropriate permissions
+        const user = {
+            id: `device-${deviceId}`,
+            username: validation.tokenInfo?.deviceName || 'Remote Device',
+            permissions: [
+                Permission.FILE_READ,
+                Permission.FILE_WRITE,
+                Permission.TERMINAL_CREATE,
+                Permission.TERMINAL_WRITE,
+                Permission.CLAUDE_SPAWN,
+                Permission.CLAUDE_CONTROL,
+                Permission.WORKSPACE_MANAGE
+            ],
+            workspaces: []
+        };
+        return {
+            user,
+            deviceId,
+            deviceName: validation.tokenInfo?.deviceName,
+            token
+        };
     }
     /**
      * Get default permissions for anonymous users
@@ -182,11 +225,36 @@ export class RemoteSessionManager {
      * Get session stats
      */
     getStats() {
+        const sessions = Array.from(this.sessions.values());
+        const now = Date.now();
         return {
             totalSessions: this.sessions.size,
-            activeSessions: Array.from(this.sessions.values()).filter(s => Date.now() - s.lastActivity.getTime() < 300000 // Active in last 5 min
+            activeSessions: sessions.filter(s => now - s.lastActivity.getTime() < 300000 // Active in last 5 min
             ).length,
-            users: new Set(Array.from(this.sessions.values()).map(s => s.userId)).size
+            users: new Set(sessions.map(s => s.userId)).size,
+            devices: sessions.filter(s => s.deviceId).map(s => ({
+                deviceId: s.deviceId,
+                deviceName: s.deviceName,
+                lastActivity: s.lastActivity,
+                userId: s.userId
+            }))
         };
+    }
+    /**
+     * Get detailed connection info
+     */
+    getConnections() {
+        const now = Date.now();
+        return Array.from(this.sessions.values())
+            .filter(s => s.deviceId) // Only show authenticated connections
+            .map(s => ({
+            sessionId: s.id,
+            deviceName: s.deviceName || 'Unknown Device',
+            deviceId: s.deviceId || 'anonymous',
+            token: s.token,
+            connectedAt: s.createdAt,
+            lastActivity: s.lastActivity,
+            isActive: now - s.lastActivity.getTime() < 300000
+        }));
     }
 }

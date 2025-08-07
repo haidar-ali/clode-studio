@@ -16,6 +16,7 @@ import { RemoteDesktopFeaturesHandler } from './remote-handlers/RemoteDesktopFea
 import { RemoteSnapshotsHandler } from './remote-handlers/RemoteSnapshotsHandler.js';
 import { RemoteWorktreeHandler } from './remote-handlers/RemoteWorktreeHandler.js';
 import { RemoteEvent } from './remote-protocol.js';
+import { TokenStore } from './token-store.js';
 
 export interface RemoteServerOptions {
   config: ModeConfig;
@@ -235,8 +236,100 @@ export class RemoteServer {
     return {
       running: this.isRunning(),
       ...this.sessionManager.getStats(),
+      tokenStats: TokenStore.getInstance().getStats(),
       config: this.config
     };
+  }
+  
+  /**
+   * Store a token when QR code is generated (called from desktop app)
+   */
+  storeToken(
+    token: string,
+    deviceId: string,
+    deviceName: string,
+    pairingCode: string,
+    expiresAt?: Date
+  ): void {
+    TokenStore.getInstance().storeToken(token, deviceId, deviceName, pairingCode, expiresAt);
+  }
+  
+  /**
+   * Get active tokens
+   */
+  getActiveTokens() {
+    return TokenStore.getInstance().getActiveConnections();
+  }
+
+  /**
+   * Revoke a token
+   */
+  revokeToken(token: string): boolean {
+    const success = TokenStore.getInstance().revokeToken(token);
+    if (success && this.io) {
+      // Find and disconnect any active connections using this token
+      const sessions = this.sessionManager.getAllSessions();
+      for (const session of sessions) {
+        if (session.token === token) {
+          const socket = this.io.sockets.sockets.get(session.socketId);
+          if (socket) {
+            // Send a disconnection message before disconnecting
+            socket.emit('server:disconnected', { 
+              reason: 'Token revoked',
+              message: 'Your access token has been revoked. Please request a new connection.'
+            });
+            
+            // Give the client a moment to receive the message
+            setTimeout(() => {
+              socket.disconnect(true);
+            }, 100);
+            
+            console.log(`[RemoteServer] Disconnected device due to token revocation: ${session.deviceName}`);
+          }
+        }
+      }
+    }
+    return success;
+  }
+
+  /**
+   * Disconnect a specific device by session ID
+   */
+  disconnectDevice(sessionId: string): boolean {
+    // Find the session
+    const session = this.sessionManager.getSession(sessionId);
+    if (!session) {
+      console.log(`[RemoteServer] Session not found: ${sessionId}`);
+      return false;
+    }
+    
+    // Find the socket by socketId stored in session
+    const socket = this.io?.sockets.sockets.get(session.socketId);
+    if (socket) {
+      // Send a disconnection message before disconnecting
+      socket.emit('server:disconnected', { 
+        reason: 'Connection revoked by server',
+        message: 'Your connection has been terminated by the desktop application'
+      });
+      
+      // Give the client a moment to receive the message
+      setTimeout(() => {
+        socket.disconnect(true);
+      }, 100);
+      
+      console.log(`[RemoteServer] Disconnected device: ${session.deviceName} (${session.deviceId})`);
+      return true;
+    }
+    
+    console.log(`[RemoteServer] Socket not found for session: ${sessionId}`);
+    return false;
+  }
+
+  /**
+   * Get active connections with details
+   */
+  getConnections() {
+    return this.sessionManager.getConnections();
   }
   
   forwardTerminalData(socketId: string, terminalId: string, data: string): void {

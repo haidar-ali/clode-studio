@@ -11,10 +11,10 @@
           <p>Establishing connection...</p>
         </div>
         
-        <div v-else-if="error" class="error-state">
+        <div v-else-if="connectionError || validationError" class="error-state">
           <Icon name="mdi:alert-circle" />
           <p>Connection failed</p>
-          <p class="error-message">{{ error }}</p>
+          <p class="error-message">{{ validationError || connectionError }}</p>
           <div class="debug-info">
             <p>Device ID: {{ deviceId || 'None' }}</p>
             <p>Has Token: {{ !!deviceToken }}</p>
@@ -49,7 +49,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue';
+import { ref, onMounted, computed, watch, nextTick } from 'vue';
 import { useRemoteConnection } from '~/composables/useRemoteConnection';
 
 interface Props {
@@ -62,11 +62,12 @@ const emit = defineEmits<{
   connected: [];
 }>();
 
-const { connect, connected, connecting, error, debugInfo: connectionDebugInfo } = useRemoteConnection();
+const { connect, connected, connecting, error: connectionError, debugInfo: connectionDebugInfo } = useRemoteConnection();
 
 const deviceId = ref<string>('');
 const deviceToken = ref<string>('');
 const pairingCode = ref<string>('');
+const validationError = ref<string | null>(null);
 
 const debugInfo = ref({
   serverUrl: '',
@@ -80,7 +81,17 @@ const debugInfo = ref({
 const hasCredentials = computed(() => !!(deviceId.value && deviceToken.value));
 
 async function attemptConnection() {
-  if (!hasCredentials.value) return;
+  console.log('[RemoteConnection] attemptConnection called');
+  if (!hasCredentials.value) {
+    console.log('[RemoteConnection] No credentials, aborting');
+    return;
+  }
+  
+  console.log('[RemoteConnection] Starting connection with:', {
+    deviceId: deviceId.value,
+    tokenLength: deviceToken.value?.length,
+    pairingCode: pairingCode.value
+  });
   
   try {
     // Update debug info with connection details
@@ -91,13 +102,37 @@ async function attemptConnection() {
       errorType: connectionDebugInfo.value.errorType || 'None'
     };
     
+    // Start the connection
     await connect({
       deviceId: deviceId.value,
-      deviceToken: deviceToken.value
+      deviceToken: deviceToken.value,
+      pairingCode: pairingCode.value
+    });
+    
+    // Wait for connection to complete (max 10 seconds)
+    let attempts = 0;
+    const maxAttempts = 20;
+    
+    while (attempts < maxAttempts && connecting.value && !connected.value && !connectionError.value) {
+      console.log(`[RemoteConnection] Waiting for connection... attempt ${attempts + 1}/${maxAttempts}`);
+      await new Promise(resolve => setTimeout(resolve, 500));
+      attempts++;
+    }
+    
+    console.log('[RemoteConnection] Final connection result:', {
+      connected: connected.value,
+      connecting: connecting.value,
+      error: connectionError.value
     });
     
     if (connected.value) {
+      console.log('[RemoteConnection] Connected! Emitting event');
       emit('connected');
+    } else if (connectionError.value) {
+      console.log('[RemoteConnection] Connection failed with error:', connectionError.value);
+    } else {
+      console.log('[RemoteConnection] Connection timed out');
+      validationError.value = 'Connection timed out. Please try again.';
     }
   } catch (err) {
     console.error('Connection failed:', err);
@@ -116,7 +151,7 @@ async function retry() {
 }
 
 // Watch for debug info changes
-watch([connectionDebugInfo, error], () => {
+watch([connectionDebugInfo, connectionError], () => {
   if (connectionDebugInfo.value.serverUrl) {
     debugInfo.value = {
       ...debugInfo.value,
@@ -128,15 +163,65 @@ watch([connectionDebugInfo, error], () => {
 });
 
 onMounted(() => {
-  // Extract credentials from URL
+  // Validate URL format and extract credentials
   const urlParams = new URLSearchParams(window.location.search);
-  deviceId.value = urlParams.get('deviceId') || '';
-  deviceToken.value = urlParams.get('token') || '';
-  pairingCode.value = urlParams.get('pairing') || '';
+  
+  // Required parameters
+  const extractedDeviceId = urlParams.get('deviceId');
+  const extractedToken = urlParams.get('token');
+  const extractedPairing = urlParams.get('pairing');
+  
+  // Validate URL has all required parameters
+  if (!extractedDeviceId || !extractedToken) {
+    console.error('[RemoteConnection] Invalid URL format - missing required parameters');
+    validationError.value = 'Invalid connection URL. Please use a valid QR code or connection link.';
+    return;
+  }
+  
+  // Validate token format (should be 64 hex characters)
+  if (!/^[a-f0-9]{64}$/i.test(extractedToken)) {
+    console.error('[RemoteConnection] Invalid token format');
+    validationError.value = 'Invalid authentication token format.';
+    return;
+  }
+  
+  // Validate deviceId format (either 32 hex chars OR device-timestamp-random format)
+  const isHexFormat = /^[a-f0-9]{32}$/i.test(extractedDeviceId);
+  const isTimestampFormat = /^device-\d+-[a-z0-9]+$/i.test(extractedDeviceId);
+  
+  if (!isHexFormat && !isTimestampFormat) {
+    console.error('[RemoteConnection] Invalid device ID format:', extractedDeviceId);
+    validationError.value = 'Invalid device ID format.';
+    return;
+  }
+  
+  // Validate pairing code if present (6 uppercase alphanumeric, no confusing chars)
+  if (extractedPairing && !/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/.test(extractedPairing)) {
+    console.error('[RemoteConnection] Invalid pairing code format');
+    validationError.value = 'Invalid pairing code format.';
+    return;
+  }
+  
+  // All validations passed, set the values
+  deviceId.value = extractedDeviceId;
+  deviceToken.value = extractedToken;
+  pairingCode.value = extractedPairing || '';
+  
+  console.log('[RemoteConnection] URL validated successfully');
+  console.log('[RemoteConnection] Credentials:', {
+    deviceId: deviceId.value,
+    hasToken: !!deviceToken.value,
+    hasPairing: !!pairingCode.value,
+    hasCredentials: hasCredentials.value
+  });
   
   // Auto-connect if credentials exist
   if (hasCredentials.value) {
-    attemptConnection();
+    console.log('[RemoteConnection] Auto-connecting...');
+    // Use nextTick to ensure DOM is updated
+    nextTick(() => {
+      attemptConnection();
+    });
   }
 });
 </script>

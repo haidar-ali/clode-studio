@@ -107,29 +107,22 @@ export class RemoteServiceProvider implements IServiceProvider {
     
     // If no existing connection and autoConnect is enabled, try to connect
     if (this.config.autoConnect !== false) {
-      // For remote mode, we should wait for the connection to be established
-      // by the RemoteApp component instead of trying to connect ourselves
-      console.log('[RemoteServiceProvider] Waiting for connection from RemoteApp...');
+      // For remote mode, don't wait here - let the event system handle it
+      console.log('[RemoteServiceProvider] Deferring connection - will wait for remote-connection-ready event');
       
-      // Wait a bit for the connection to be established
-      let attempts = 0;
-      while (attempts < 10) {
-        const socket = remoteConnection.getSocket();
-        if (socket && socket.connected) {
-          console.log('[RemoteServiceProvider] Connection established via RemoteApp');
-          this.socket = socket;
-          this.setupSocketHandlers();
-          // Mark connectionManager as connected
-          (connectionManager as any).currentState = ConnectionState.CONNECTED;
-          (connectionManager as any).socket = socket;
-          return;
-        }
-        await new Promise(resolve => setTimeout(resolve, 500));
-        attempts++;
+      // Quick check if connection is already available
+      const socket = remoteConnection.getSocket();
+      if (socket && socket.connected) {
+        console.log('[RemoteServiceProvider] Connection already available');
+        this.socket = socket;
+        this.setupSocketHandlers();
+        (connectionManager as any).currentState = ConnectionState.CONNECTED;
+        (connectionManager as any).socket = socket;
+        return;
       }
       
-      // If still no connection, we can work without it (API fallback mode)
-      console.warn('[RemoteServiceProvider] No Socket.IO connection available - services will use API fallback');
+      // Otherwise, we'll wait for the remote-connection-ready event to call updateSocket()
+      console.log('[RemoteServiceProvider] No Socket.IO connection yet - services will use API fallback until connected');
     }
   }
   
@@ -137,6 +130,33 @@ export class RemoteServiceProvider implements IServiceProvider {
     await this.disconnect();
     this.syncService.dispose();
     connectionManager.dispose();
+  }
+  
+  /**
+   * Update the socket connection after it's established
+   */
+  async updateSocket(): Promise<void> {
+    const sharedSocket = remoteConnection.getSocket();
+    
+    if (sharedSocket && sharedSocket.connected) {
+      // Update even if we already have a socket (it might be disconnected)
+      if (!this.socket || !this.socket.connected) {
+        console.log('[RemoteServiceProvider] Updating with new socket connection');
+        this.socket = sharedSocket;
+        this.setupSocketHandlers();
+        
+        // Update connection manager
+        (connectionManager as any).currentState = ConnectionState.CONNECTED;
+        (connectionManager as any).socket = sharedSocket;
+        
+        console.log('[RemoteServiceProvider] Socket updated successfully');
+        // The services already use () => this.socket, so they'll get the updated socket automatically
+      } else {
+        console.log('[RemoteServiceProvider] Socket already connected, no update needed');
+      }
+    } else {
+      console.log('[RemoteServiceProvider] No connected socket available for update');
+    }
   }
   
   /**

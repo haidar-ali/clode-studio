@@ -215,39 +215,129 @@ function getPersonalityIcon(personalityId?: string): string | undefined {
   return personality?.icon;
 }
 
+// Retry loading instances with exponential backoff
+async function loadClaudeInstancesWithRetry(maxRetries = 2, delay = 500) {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      await loadClaudeInstances();
+      return; // Success, exit retry loop
+    } catch (error) {
+      console.log(`[MobileClaude] Attempt ${i + 1}/${maxRetries} failed, retrying in ${delay}ms...`);
+      if (i < maxRetries - 1) {
+        await new Promise(resolve => setTimeout(resolve, delay));
+        delay *= 1.5; // Gentler exponential backoff
+      }
+    }
+  }
+  console.error('[MobileClaude] Failed to load instances after all retries');
+}
+
+// Set up socket event listeners (defined outside for reuse)
+const setupSocketListeners = async () => {
+    // Try multiple ways to get the socket
+    let socket = (services.value as any)?.getSocket?.() || (services.value as any)?.__socket;
+    
+    // If not found through services, try the singleton directly
+    if (!socket) {
+      try {
+        const { remoteConnection } = await import('~/services/remote-client/RemoteConnectionSingleton');
+        socket = remoteConnection.getSocket();
+      } catch (e) {
+        console.log('[MobileClaude] Could not get socket from singleton:', e);
+      }
+    }
+    
+    if (socket) {
+      console.log('[MobileClaude] Socket found, setting up listeners');
+      
+      // Add connection listener to retry loading instances when connected
+      socket.on('connect', async () => {
+        console.log('[MobileClaude] Socket connected, loading instances...');
+        setTimeout(async () => {
+          await loadClaudeInstancesWithRetry();
+        }, 500);
+      });
+      
+      // If socket is already connected, load instances
+      if (socket.connected) {
+        console.log('[MobileClaude] Socket already connected, loading instances...');
+        setTimeout(async () => {
+          await loadClaudeInstancesWithRetry();
+        }, 500);
+      }
+      
+      return true;
+    }
+    return false;
+};
+
+// Handler for connection ready event
+const onConnectionReady = async () => {
+  console.log('[MobileClaude] Remote connection ready, setting up socket listeners');
+  // Wait a bit for services to update
+  await new Promise(resolve => setTimeout(resolve, 500));
+  
+  const hasSocket = await setupSocketListeners();
+  if (hasSocket) {
+    // Also reload instances after connection is ready
+    await loadClaudeInstancesWithRetry();
+  }
+};
+
+// Setup cleanup before any async operations
+onUnmounted(() => {
+  // Clean up event listeners
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('remote-connection-ready', onConnectionReady);
+  }
+});
+
 // Initialize services and load instances
 onMounted(async () => {
   await initialize();
   await claudeStore.init();
   
-  // Load existing Claude instances from desktop
-  await loadClaudeInstances();
+  // Try to load existing Claude instances
+  await loadClaudeInstancesWithRetry();
   
-  // Listen for Claude instance updates from desktop
-  const socket = (services.value as any)?.getSocket?.() || (services.value as any)?.__socket;
-  if (socket) {
-    socket.on('claude:instances:updated', async () => {
-     
-      setTimeout(async () => {
-        await claudeStore.reloadInstances();
-        await loadClaudeInstances();
-      }, 100);
-    });
-    
-    // Note: Auto-refresh is now handled per-session with debounced timeouts
-    
-    // Optional: Monitor all Claude events for debugging (uncomment if needed)
-    // socket.onAny((eventName: string, ...args: any[]) => {
-    //   if (eventName.startsWith('claude:')) {
-    //    
-    //   }
-    // });
+  // Try to set up socket listeners immediately
+  const hasSocket = await setupSocketListeners();
+  if (!hasSocket) {
+    console.log('[MobileClaude] No socket yet, waiting for remote-connection-ready event');
   }
+  
+  // Listen for remote connection ready event
+  window.addEventListener('remote-connection-ready', onConnectionReady);
+  
+  // Setup claude instance update listener
+  const setupInstanceUpdateListener = () => {
+    const socket = (services.value as any)?.getSocket?.() || (services.value as any)?.__socket;
+    if (socket) {
+      socket.on('claude:instances:updated', async () => {
+        console.log('[MobileClaude] Claude instances updated event received');
+        setTimeout(async () => {
+          await claudeStore.reloadInstances();
+          await loadClaudeInstances();
+        }, 100);
+      });
+      return true;
+    }
+    return false;
+  };
+  
+  setupInstanceUpdateListener();
 });
 
 // Load Claude instances from desktop
 async function loadClaudeInstances() {
   if (!services.value) return;
+  
+  // Check if connected before attempting to load instances
+  const socket = (services.value as any)?.getSocket?.() || (services.value as any)?.__socket;
+  if (!socket?.connected) {
+    console.log('[MobileClaude] Not connected to remote server, skipping instance load');
+    return;
+  }
   
   try {
     const desktopInstances = await services.value.claude.listDesktopInstances();

@@ -1,13 +1,20 @@
 <template>
   <div id="remote-app" :class="appClasses">
+    <!-- Connection Modal (handles authentication) -->
+    <RemoteConnectionModal 
+      v-if="!isConnected" 
+      :show="true"
+      @connected="onConnected"
+    />
+    
     <!-- Simple loading state -->
-    <div v-if="!isReady" class="loading-screen">
+    <div v-if="!isReady && isConnected" class="loading-screen">
       <Icon name="mdi:loading" class="animate-spin" />
-      <p>Connecting to desktop...</p>
+      <p>Loading workspace...</p>
     </div>
 
     <!-- Use existing desktop layout -->
-    <RemoteDesktopLayout v-else />
+    <RemoteDesktopLayout v-else-if="isReady && isConnected" />
   </div>
 </template>
 
@@ -19,6 +26,7 @@ import { useEditorStore } from '~/stores/editor';
 import { useProjectContextStore } from '~/stores/project-context';
 import { useAdaptiveUI } from '~/composables/useAdaptiveUI';
 import RemoteDesktopLayout from '~/components/Remote/RemoteDesktopLayout.vue';
+import RemoteConnectionModal from '~/components/Remote/RemoteConnectionModal.vue';
 
 // Stores
 const editorStore = useEditorStore();
@@ -30,6 +38,7 @@ const { adaptiveClasses, isMobile, isTablet, layoutMode } = useAdaptiveUI();
 
 // Connection state
 const isReady = ref(false);
+const isConnected = ref(false);
 const connectionError = ref<string | null>(null);
 
 // App classes for styling
@@ -40,94 +49,45 @@ const appClasses = computed(() => ({
   ...adaptiveClasses.value
 }));
 
-// Generate persistent device info (survives component remounts)
-const getDeviceInfo = () => {
-  if (typeof window === 'undefined') return null;
+// Handle successful connection from modal
+const onConnected = async () => {
+  console.log('Connected to remote server!');
+  isConnected.value = true;
   
-  // Check if we already have device info stored
-  const stored = window.sessionStorage.getItem('remote-device-info');
-  if (stored) {
-    try {
-      return JSON.parse(stored);
-    } catch (e) {
-      // Invalid stored data, regenerate
-    }
-  }
-  
-  // Generate new device info and store it
-  const deviceInfo = {
-    deviceToken: 'remote-' + Date.now(),
-    deviceId: 'browser-' + Math.random().toString(36).substr(2, 9)
-  };
-  
-  window.sessionStorage.setItem('remote-device-info', JSON.stringify(deviceInfo));
-  return deviceInfo;
-};
-
-// Initialize connection and load initial data
-onMounted(async () => {
   try {
-    // Try to connect to Socket.IO but don't fail if it doesn't work
-    const { connect, connected, error: socketError } = useRemoteConnection();
+    toast.success('Connected to desktop with real-time sync');
     
-    // Check if already connected (from previous mount)
-    if (connected.value) {
-      console.log('Already connected to Socket.IO, reusing connection');
-      isReady.value = true;
-      return;
+    // Wait for workspace info to be received
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // Check if we have workspace info from Socket.IO
+    const remoteWorkspace = (window as any).__remoteWorkspace;
+    if (remoteWorkspace?.path) {
+      console.log('Setting workspace from Socket.IO:', remoteWorkspace.path);
+      // Sync workspace to server for API calls
+      await $fetch('/api/workspace/set', {
+        method: 'POST',
+        body: { workspacePath: remoteWorkspace.path }
+      });
     }
     
-    // Get persistent device info
-    const deviceInfo = getDeviceInfo();
-    if (!deviceInfo) {
-      throw new Error('Failed to generate device info');
+    // Notify components that connection is ready by emitting a global event
+    if (typeof window !== 'undefined') {
+      console.log('[RemoteApp] Dispatching remote-connection-ready event');
+      window.dispatchEvent(new CustomEvent('remote-connection-ready'));
     }
     
-    console.log('Attempting to connect with device info:', deviceInfo);
-    
-    try {
-      await connect(deviceInfo);
-      
-      // Give it a moment to establish connection
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      console.log('Connection status:', connected.value);
-      console.log('Connection error:', socketError.value);
-      
-      if (connected.value) {
-        console.log('Socket.IO connected successfully - real-time features enabled');
-        toast.success('Connected to desktop with real-time sync');
-        
-        // After successful connection, wait a bit for workspace info to be received
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        // Check if we have workspace info from Socket.IO
-        const remoteWorkspace = (window as any).__remoteWorkspace;
-        if (remoteWorkspace?.path) {
-          console.log('Setting workspace from Socket.IO:', remoteWorkspace.path);
-          // Sync workspace to server for API calls
-          await $fetch('/api/workspace/set', {
-            method: 'POST',
-            body: { workspacePath: remoteWorkspace.path }
-          });
-        }
-      } else {
-        console.warn('Socket.IO connection failed - running in read-only mode');
-        toast.warning('Running in read-only mode (no real-time sync)');
-      }
-    } catch (error) {
-      console.warn('Socket.IO connection failed:', error);
-      toast.warning('Running without real-time features');
-    }
-    
-    // Mark as ready regardless of Socket.IO status
-    // The app can work without real-time features
     isReady.value = true;
   } catch (error) {
-    console.error('Failed to initialize remote app:', error);
-    connectionError.value = error.message;
-    toast.error(`Failed to initialize: ${error.message}`);
+    console.error('Post-connection setup failed:', error);
+    toast.error(`Setup failed: ${error.message}`);
   }
+};
+
+// Initialize on mount
+onMounted(async () => {
+  // RemoteConnectionModal will handle everything
+  console.log('RemoteApp mounted, waiting for connection...');
 });
 </script>
 

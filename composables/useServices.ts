@@ -2,7 +2,7 @@
  * Composable to access service layer
  * Provides reactive access to all services through the abstraction layer
  */
-import { ref, shallowRef, onMounted, computed } from 'vue';
+import { ref, shallowRef, onMounted, onUnmounted, computed } from 'vue';
 import type { IServiceProvider } from '~/services';
 import { getServices } from '~/services';
 
@@ -46,6 +46,42 @@ async function initializeServices() {
  *        await services.file.readFile(path);
  */
 export function useServices() {
+  // Set up event listener immediately (not in onMounted) to catch early events
+  if (typeof window !== 'undefined') {
+    console.log('[useServices] Setting up remote-connection-ready event listener');
+    const updateSocket = async () => {
+      console.log('[useServices] Remote connection ready event received');
+      
+      // If services haven't been initialized yet, do it now
+      if (!serviceProvider.value && !initPromise) {
+        console.log('[useServices] Initializing services first...');
+        await initializeServices();
+      }
+      
+      // Wait a bit for service provider to be ready if still initializing
+      let attempts = 0;
+      while (!serviceProvider.value && attempts < 5) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        attempts++;
+      }
+      
+      if (serviceProvider.value && 'updateSocket' in serviceProvider.value) {
+        console.log('[useServices] Updating socket in service provider');
+        await (serviceProvider.value as any).updateSocket();
+        console.log('[useServices] Socket updated successfully');
+      } else {
+        console.log('[useServices] Service provider not ready or doesn\'t support updateSocket');
+      }
+    };
+    
+    window.addEventListener('remote-connection-ready', updateSocket);
+    
+    // Cleanup on unmount
+    onUnmounted(() => {
+      window.removeEventListener('remote-connection-ready', updateSocket);
+    });
+  }
+  
   // Initialize on mount if not already done
   onMounted(() => {
     if (!serviceProvider.value && !initPromise) {

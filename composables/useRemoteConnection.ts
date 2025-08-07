@@ -5,11 +5,15 @@ import { remoteConnection } from '~/services/remote-client/RemoteConnectionSingl
 interface ConnectionOptions {
   deviceToken: string;
   deviceId: string;
+  pairingCode?: string;
 }
 
 export function useRemoteConnection() {
-  const socket = ref<Socket | null>(null);
-  const connected = ref(false);
+  // Check if we already have a socket in the singleton
+  const existingSocket = remoteConnection.getSocket();
+  
+  const socket = ref<Socket | null>(existingSocket);
+  const connected = ref(existingSocket?.connected || false);
   const connecting = ref(false);
   const error = ref<string | null>(null);
   const requestId = ref(0);
@@ -56,8 +60,9 @@ export function useRemoteConnection() {
       socket.value = io(serverUrl, {
         transports: ['polling', 'websocket'], // Start with polling for better mobile compatibility
         auth: {
-          deviceToken: options.deviceToken,
-          deviceId: options.deviceId
+          token: options.deviceToken,  // Server expects 'token' not 'deviceToken'
+          deviceId: options.deviceId,
+          pairing: options.pairingCode  // Include pairing code if available
         },
         reconnection: true,
         reconnectionDelay: 1000,
@@ -107,7 +112,23 @@ export function useRemoteConnection() {
       
       socket.value.on('disconnect', () => {
         connected.value = false;
-       
+        console.log('Disconnected from remote server');
+      });
+      
+      // Handle server-initiated disconnection
+      socket.value.on('server:disconnected', (data: { reason: string; message: string }) => {
+        console.log('Server disconnected:', data);
+        error.value = data.message || 'Disconnected by server';
+        
+        // Show alert to user
+        if (typeof window !== 'undefined') {
+          alert(data.message || 'Your connection has been terminated by the server');
+          
+          // Reload the page to show the connection modal again
+          setTimeout(() => {
+            window.location.reload();
+          }, 1000);
+        }
       });
       
       socket.value.on('connect_error', (err) => {
@@ -182,13 +203,19 @@ export function useRemoteConnection() {
       socket.value.disconnect();
       socket.value = null;
       connected.value = false;
-      remoteConnection.setSocket(null);
+      // Don't clear the singleton socket - other components might still be using it
+      // remoteConnection.setSocket(null);
     }
   }
   
-  // Clean up on unmount
+  // Clean up on unmount - but don't disconnect the shared socket
   onUnmounted(() => {
-    disconnect();
+    // Only clear local references, not the shared connection
+    // The socket in the singleton should persist across component lifecycles
+    socket.value = null;
+    connected.value = false;
+    connecting.value = false;
+    error.value = null;
   });
   
   return {
