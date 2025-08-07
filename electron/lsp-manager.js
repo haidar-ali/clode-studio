@@ -511,7 +511,7 @@ export class LSPManager {
               
               // Log detailed diagnostic info for Vue files with errors
               if (params.uri.endsWith('.vue') && newDiagnostics.length > 0) {
-                // console.log('[LSP] Vue diagnostics details:', newDiagnostics.map(d => ({
+                 console.log('[LSP] Vue diagnostics details:', newDiagnostics.map(d => ({
                   message: d.message,
                   line: d.range.start.line,
                   character: d.range.start.character,
@@ -697,11 +697,11 @@ export class LSPManager {
       // Debug Vue server capabilities
       if (language === 'vue') {
         // console.log(`[LSP] Vue server capabilities:`, {
-          hasCompletion: !!initResult.capabilities.completionProvider,
-          completionTriggerChars: initResult.capabilities.completionProvider?.triggerCharacters,
-          hasHover: !!initResult.capabilities.hoverProvider,
-          hasDefinition: !!initResult.capabilities.definitionProvider
-        });
+        //   hasCompletion: !!initResult.capabilities.completionProvider,
+        //   completionTriggerChars: initResult.capabilities.completionProvider?.triggerCharacters,
+        //   hasHover: !!initResult.capabilities.hoverProvider,
+        //   hasDefinition: !!initResult.capabilities.definitionProvider
+        // });
       }
       
       return connection;
@@ -739,12 +739,12 @@ export class LSPManager {
     // Debug logging for Vue files
     if (language === 'vue') {
       // console.log(`[LSP] Vue file completion request:`, {
-        filepath,
-        position,
-        triggerCharacter,
-        contentLength: content.length,
-        contentPreview: content.substring(0, 200)
-      });
+      //   filepath,
+      //   position,
+      //   triggerCharacter,
+      //   contentLength: content.length,
+      //   contentPreview: content.substring(0, 200)
+      // });
     }
     
     const connection = await this.getServerForFile(filepath);
@@ -842,15 +842,15 @@ export class LSPManager {
       if (language === 'vue') {
         // console.log(`[LSP] Sending Vue completion request:`, {
         //   uri,
-          originalPosition: position,
-          lspPosition: {
-            line: position.line - 1,
-            character: position.character
-          },
-          context: completionContext,
-          currentLine: currentLine.substring(0, 50) + '...',
-          currentWord
-        });
+        //   originalPosition: position,
+        //   lspPosition: {
+        //     line: position.line - 1,
+        //     character: position.character
+        //   },
+        //   context: completionContext,
+        //   currentLine: currentLine.substring(0, 50) + '...',
+        //   currentWord
+        // });
       }
       
       // Add timeout for completion request
@@ -893,14 +893,14 @@ export class LSPManager {
       // Debug Vue completions
       if (language === 'vue') {
         // console.log(`[LSP] Vue completions received:`, {
-          hasCompletions: !!completions,
-          isArray: Array.isArray(completions),
-          hasItems: !!(completions && completions.items),
-          count: Array.isArray(completions) ? completions.length : (completions?.items?.length || 0),
-          firstFew: completions?.items ? completions.items.slice(0, 3).map(i => i.label) : 
-                    Array.isArray(completions) ? completions.slice(0, 3).map(i => i.label) : [],
-          raw: completions // Log raw response to see what we're getting
-        });
+        //   hasCompletions: !!completions,
+        //   isArray: Array.isArray(completions),
+        //   hasItems: !!(completions && completions.items),
+        //   count: Array.isArray(completions) ? completions.length : (completions?.items?.length || 0),
+        //   firstFew: completions?.items ? completions.items.slice(0, 3).map(i => i.label) : 
+        //             Array.isArray(completions) ? completions.slice(0, 3).map(i => i.label) : [],
+        //   raw: completions // Log raw response to see what we're getting
+        // });
         
         // If we got timeout, try a simple hover request to test if server is responsive
         if (completions.length === 0) {
@@ -1005,9 +1005,9 @@ export class LSPManager {
       // Debug final result for Vue
       if (language === 'vue') {
         // console.log(`[LSP] Vue completions final result:`, {
-          count: result.length,
-          firstFew: result.slice(0, 3).map(r => ({ label: r.label, kind: r.kind }))
-        });
+          //count: result.length,
+        //  firstFew: result.slice(0, 3).map(r => ({ label: r.label, kind: r.kind }))
+        //});
       }
       
       return result;

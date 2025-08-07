@@ -23,7 +23,7 @@ import { GitHooksManagerGlobal } from './git-hooks-manager-global.js';
 import { SnapshotService } from './snapshot-service.js';
 import { setupGitTimelineHandlers } from './git-timeline-handlers.js';
 import { ghostTextService } from './ghost-text-service.js';
-import { getLocalDatabase, closeLocalDatabase } from './services/local-database.js';
+// LocalDatabase removed - SQLite not actively used
 import { getModeManager } from './services/mode-config.js';
 import { RemoteServer } from './services/remote-server.js';
 // Load environment variables from .env file
@@ -93,9 +93,8 @@ app.whenReady().then(async () => {
     GitServiceManager.getInstance();
     WorktreeManagerGlobal.getInstance();
     GitHooksManagerGlobal.getInstance();
-    // Initialize local database
+    // LocalDatabase removed - SQLite not actively used
     const workspacePath = store.get('workspacePath');
-    const localDatabase = getLocalDatabase(workspacePath);
     // Initialize autocomplete services
     await ghostTextService.initialize();
     // Setup Git Timeline handlers
@@ -2295,165 +2294,14 @@ ipcMain.handle('app:status', async () => {
         remoteConnections: remoteServer?.getActiveConnectionCount() || 0
     };
 });
-// Local Database handlers
-ipcMain.handle('db:saveClaudeSession', async (event, sessionData) => {
-    try {
-        const db = getLocalDatabase();
-        await db.saveClaudeSession(sessionData);
-        return { success: true };
-    }
-    catch (error) {
-        return { success: false, error: error.message };
-    }
-});
-ipcMain.handle('db:getClaudeSession', async (event, sessionId) => {
-    try {
-        const db = getLocalDatabase();
-        const session = await db.getClaudeSession(sessionId);
-        return { success: true, session };
-    }
-    catch (error) {
-        return { success: false, error: error.message };
-    }
-});
-ipcMain.handle('db:getClaudeSessionsByUser', async (event, userId) => {
-    try {
-        const db = getLocalDatabase();
-        const sessions = await db.getClaudeSessionsByUser(userId);
-        return { success: true, sessions };
-    }
-    catch (error) {
-        return { success: false, error: error.message };
-    }
-});
-ipcMain.handle('db:saveWorkspaceState', async (event, workspacePath, stateType, stateData) => {
-    try {
-        const db = getLocalDatabase();
-        await db.saveWorkspaceState(workspacePath, stateType, stateData);
-        return { success: true };
-    }
-    catch (error) {
-        return { success: false, error: error.message };
-    }
-});
-ipcMain.handle('db:getWorkspaceState', async (event, workspacePath, stateType) => {
-    try {
-        const db = getLocalDatabase();
-        const state = await db.getWorkspaceState(workspacePath, stateType);
-        return { success: true, state };
-    }
-    catch (error) {
-        return { success: false, error: error.message };
-    }
-});
-ipcMain.handle('db:saveKnowledgeEntry', async (event, entry) => {
-    try {
-        const db = getLocalDatabase();
-        await db.saveKnowledgeEntry(entry);
-        return { success: true };
-    }
-    catch (error) {
-        return { success: false, error: error.message };
-    }
-});
-ipcMain.handle('db:searchKnowledge', async (event, query, userId) => {
-    try {
-        const db = getLocalDatabase();
-        const results = await db.searchKnowledge(query, userId);
-        return { success: true, results };
-    }
-    catch (error) {
-        return { success: false, error: error.message };
-    }
-});
-ipcMain.handle('db:addToSyncQueue', async (event, actionType, actionData, priority) => {
-    try {
-        const db = getLocalDatabase();
-        const result = await db.addToSyncQueue(actionType, actionData, priority);
-        return { success: true, result };
-    }
-    catch (error) {
-        return { success: false, error: error.message };
-    }
-});
-ipcMain.handle('db:getNextSyncItem', async (event) => {
-    try {
-        const db = getLocalDatabase();
-        const item = await db.getNextSyncItem();
-        return { success: true, item };
-    }
-    catch (error) {
-        return { success: false, error: error.message };
-    }
-});
-ipcMain.handle('db:updateSyncItemStatus', async (event, id, status) => {
-    try {
-        const db = getLocalDatabase();
-        await db.updateSyncItemStatus(id, status);
-        return { success: true };
-    }
-    catch (error) {
-        return { success: false, error: error.message };
-    }
-});
-ipcMain.handle('db:getPendingSyncCount', async (event) => {
-    try {
-        const db = getLocalDatabase();
-        const count = await db.getPendingSyncCount();
-        return { success: true, count };
-    }
-    catch (error) {
-        return { success: false, error: error.message };
-    }
-});
-ipcMain.handle('db:setSetting', async (event, key, value) => {
-    try {
-        const db = getLocalDatabase();
-        await db.setSetting(key, value);
-        return { success: true };
-    }
-    catch (error) {
-        return { success: false, error: error.message };
-    }
-});
-ipcMain.handle('db:getSetting', async (event, key) => {
-    try {
-        const db = getLocalDatabase();
-        const value = await db.getSetting(key);
-        return { success: true, value };
-    }
-    catch (error) {
-        return { success: false, error: error.message };
-    }
-});
-ipcMain.handle('db:getAllSettings', async (event) => {
-    try {
-        const db = getLocalDatabase();
-        const settings = await db.getAllSettings();
-        return { success: true, settings };
-    }
-    catch (error) {
-        return { success: false, error: error.message };
-    }
-});
-ipcMain.handle('db:getStats', async (event) => {
-    try {
-        const db = getLocalDatabase();
-        const stats = await db.getStats();
-        return { success: true, stats };
-    }
-    catch (error) {
-        return { success: false, error: error.message };
-    }
-});
+// Local Database handlers removed - SQLite not actively used
 // Clean up on app quit
 app.on('before-quit', async () => {
     // Stop remote server if running
     if (remoteServer && remoteServer.isRunning()) {
         await remoteServer.stop();
     }
-    // Clean up database
-    closeLocalDatabase();
+    // Database cleanup removed - SQLite not actively used
     for (const [path, service] of gitServices) {
         service.cleanup();
     }

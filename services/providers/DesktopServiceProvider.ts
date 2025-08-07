@@ -22,7 +22,7 @@ import { DesktopGitService } from './desktop/DesktopGitService.js';
 import { DesktopTerminalService } from './desktop/DesktopTerminalService.js';
 import { DesktopKnowledgeService } from './desktop/DesktopKnowledgeService.js';
 import { DesktopMCPService } from './desktop/DesktopMCPService.js';
-import { DesktopStorageService } from './desktop/DesktopStorageService.js';
+// DesktopStorageService removed - SQLite not actively used
 // Use browser-safe cache in renderer process, full SQLite cache in main process
 import { BrowserSafePerformanceCache } from './desktop/BrowserSafePerformanceCache.js';
 import { DesktopTasksService } from './desktop/DesktopTasksService.js';
@@ -36,7 +36,7 @@ export class DesktopServiceProvider implements IServiceProvider {
   public readonly terminal: ITerminalService;
   public readonly knowledge: IKnowledgeService;
   public readonly mcp: IMCPService;
-  public readonly storage: IStorageService;
+  public readonly storage?: IStorageService; // Made optional - SQLite not actively used
   public readonly cache: IPerformanceCache;
   public readonly tasks: ITasksService;
   
@@ -48,7 +48,7 @@ export class DesktopServiceProvider implements IServiceProvider {
     this.terminal = new DesktopTerminalService();
     this.knowledge = new DesktopKnowledgeService();
     this.mcp = new DesktopMCPService();
-    this.storage = new DesktopStorageService();
+    // this.storage = undefined; // SQLite storage removed - not actively used
     this.tasks = new DesktopTasksService();
     
     // Initialize performance cache

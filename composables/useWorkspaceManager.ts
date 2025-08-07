@@ -5,14 +5,10 @@ import { useTasksStore } from '~/stores/tasks';
 import { useClaudeInstancesStore } from '~/stores/claude-instances';
 import { useTerminalInstancesStore } from '~/stores/terminal-instances';
 import { useSourceControlStore } from '~/stores/source-control';
-import { DesktopFeatureSync } from '~/services/desktop-feature-sync';
 import { getServices } from '~/services';
 
 const currentWorkspacePath = ref<string>('');
 const isChangingWorkspace = ref(false);
-
-// Desktop feature sync instance
-let desktopFeatureSync: DesktopFeatureSync | null = null;
 
 // NEW: Worktree management within workspace
 const activeWorktreePath = ref<string>('');
@@ -87,10 +83,7 @@ export function useWorkspaceManager() {
         await claudeInstancesStore.saveWorkspaceConfiguration(currentWorkspacePath.value);
         
         // Stop desktop feature sync
-        if (desktopFeatureSync) {
-          desktopFeatureSync.stopSync();
-          desktopFeatureSync = null;
-        }
+        // Desktop feature sync removed - now using Socket.IO for real-time sync
       }
       
       // 1. Close all editor tabs and reset terminals to avoid confusion
@@ -197,23 +190,7 @@ export function useWorkspaceManager() {
       }
       
       // Sync desktop features to cache for remote access
-      if (window.electronAPI) {
-        console.log('[WorkspaceManager] Starting desktop feature sync for workspace:', path);
-        try {
-          const services = await getServices();
-          if (services?.cache) {
-            if (!desktopFeatureSync) {
-              desktopFeatureSync = new DesktopFeatureSync(services.cache);
-            }
-            // Do an immediate sync
-            await desktopFeatureSync.syncAll();
-            // Start periodic sync
-            desktopFeatureSync.startSync();
-          }
-        } catch (error) {
-          console.error('[WorkspaceManager] Failed to start desktop feature sync:', error);
-        }
-      }
+      // Desktop feature sync removed - now using Socket.IO for real-time sync
       
     } catch (error) {
       console.error('Failed to change workspace:', error);

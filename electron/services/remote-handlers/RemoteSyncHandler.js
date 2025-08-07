@@ -1,15 +1,13 @@
 import { Permission } from '../remote-protocol.js';
-import { LocalDatabase } from '../local-database.js';
 export class RemoteSyncHandler {
     mainWindow;
     sessionManager;
     patchStore = new Map();
-    database;
+    // In-memory patch storage - database removed
     constructor(mainWindow, sessionManager) {
         this.mainWindow = mainWindow;
         this.sessionManager = sessionManager;
-        // Initialize database for persistent storage
-        this.database = new LocalDatabase();
+        // Using in-memory storage for sync patches
     }
     /**
      * Register sync handlers on a socket
@@ -67,8 +65,7 @@ export class RemoteSyncHandler {
                 receivedAt: new Date()
             }));
             this.patchStore.get(storeKey).push(...enrichedPatches);
-            // Persist to database
-            await this.database.addSyncPatches(storeKey, enrichedPatches);
+            // Store in memory only - database persistence removed
             // Broadcast to other sessions of same user/workspace
             this.broadcastPatches(session, enrichedPatches);
             callback({
@@ -101,8 +98,8 @@ export class RemoteSyncHandler {
                 });
             }
             const storeKey = `${session.userId}:${session.workspaceId || 'default'}`;
-            // Get patches from database
-            let patches = await this.database.getSyncPatches(storeKey, request.payload.since, request.payload.types);
+            // Get patches from memory store
+            let patches = this.getPatchesFromMemory(storeKey, request.payload.since, request.payload.types);
             // Filter out patches from this session to avoid echoing
             patches = patches.filter((p) => p.sessionId !== session.id);
             // Compress if beneficial
@@ -145,7 +142,7 @@ export class RemoteSyncHandler {
                 });
             }
             const storeKey = `${session.userId}:${session.workspaceId || 'default'}`;
-            const stats = await this.database.getSyncStats(storeKey);
+            const stats = this.getMemoryStats(storeKey);
             callback({
                 id: request.id,
                 success: true,
@@ -198,6 +195,40 @@ export class RemoteSyncHandler {
     cleanupSession(sessionId) {
         // Patches are persisted, so no cleanup needed
         // Could implement patch expiration logic here
+    }
+    /**
+     * Get patches from memory store
+     */
+    getPatchesFromMemory(storeKey, since, types) {
+        const patches = this.patchStore.get(storeKey) || [];
+        return patches.filter(patch => {
+            // Filter by date if provided
+            if (since && patch.receivedAt && patch.receivedAt <= since) {
+                return false;
+            }
+            // Filter by types if provided
+            if (types && types.length > 0 && patch.entityType && !types.includes(patch.entityType)) {
+                return false;
+            }
+            return true;
+        });
+    }
+    /**
+     * Get memory statistics for a store key
+     */
+    getMemoryStats(storeKey) {
+        const patches = this.patchStore.get(storeKey) || [];
+        const patchesByType = {};
+        patches.forEach(patch => {
+            const type = patch.entityType || 'unknown';
+            patchesByType[type] = (patchesByType[type] || 0) + 1;
+        });
+        return {
+            totalPatches: patches.length,
+            patchesByType,
+            oldestPatch: patches.length > 0 ? patches[0].receivedAt : null,
+            newestPatch: patches.length > 0 ? patches[patches.length - 1].receivedAt : null
+        };
     }
     /**
      * Get sync statistics

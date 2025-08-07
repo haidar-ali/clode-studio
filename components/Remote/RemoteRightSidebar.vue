@@ -28,7 +28,7 @@
           @dragend="handleTabDragEnd"
           @contextmenu.prevent="showTabMenu($event, moduleId)"
         >
-          <Icon :name="getModuleIcon(moduleId)" size="16" />
+          <Icon :name="getModuleIcon(moduleId)" size="16" :style="{ color: getModuleColor(moduleId) }" />
           <span>{{ getModuleLabel(moduleId) }}</span>
         </button>
       </div>
@@ -97,6 +97,40 @@ const getModuleIcon = (moduleId: ModuleId) => moduleConfig[moduleId]?.icon || 'm
 const getModuleComponent = (moduleId: ModuleId | undefined) => {
   if (!moduleId) return null;
   return moduleComponents[moduleId];
+};
+
+// Get module color based on type
+const getModuleColor = (moduleId: ModuleId): string => {
+  // Return white for active module for better visibility
+  if (activeRightModule.value === moduleId) {
+    return '#ffffff';
+  }
+  
+  switch (moduleId) {
+    case 'claude':
+      return '#ff8c42'; // Orange for Anthropic/Claude
+    case 'context':
+      return '#ff69b4'; // Pink for brain/context
+    case 'explorer':
+    case 'explorer-editor':
+      return '#42a5f5'; // Blue for file explorer
+    case 'tasks':
+      return '#66bb6a'; // Green for tasks
+    case 'knowledge':
+      return '#ab47bc'; // Purple for knowledge
+    case 'source-control':
+      return '#4caf50'; // Git green
+    case 'snapshots':
+      return '#ffca28'; // Yellow for camera/snapshots
+    case 'worktrees':
+      return '#26a69a'; // Teal for worktrees
+    case 'prompts':
+      return '#ef5350'; // Red for prompts
+    case 'terminal':
+      return '#78909c'; // Blue-grey for terminal
+    default:
+      return '#858585'; // Default grey
+  }
 };
 
 const setActiveRightModule = (moduleId: ModuleId) => {

@@ -81,7 +81,8 @@
             <QuickConnectSection v-if="appStatus.isHybridMode.value && appStatus.isRemoteServerRunning.value" />
             
             <!-- Performance Metrics -->
-            <div v-if="isConnected" class="metrics-section">
+            <!-- TODO: Re-enable when performance metrics are properly implemented and tracked -->
+            <!-- <div v-if="isConnected" class="metrics-section">
               <h4>Performance Metrics</h4>
               <div class="metrics-grid">
                 <div class="metric-item">
@@ -116,7 +117,7 @@
                   </div>
                 </div>
               </div>
-            </div>
+            </div> -->
             
             <!-- Connected Devices -->
             <div v-if="connectedDevices.length > 0" class="devices-section">

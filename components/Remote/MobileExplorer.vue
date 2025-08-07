@@ -56,7 +56,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
-import RemoteFileTree from './RemoteFileTree.vue';
+import RemoteFileTree from '~/components/FileExplorer/RemoteFileTree.vue';
 import { useServices } from '~/composables/useServices';
 import { useWorkspaceStore } from '~/stores/workspace';
 import { remoteConnection } from '~/services/remote-client/RemoteConnectionSingleton';

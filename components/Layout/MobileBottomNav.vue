@@ -7,7 +7,7 @@
       @click="handleNavClick(item.id)"
       class="nav-item"
     >
-      <Icon :name="item.icon" size="20" />
+      <Icon :name="item.icon" size="20" :style="{ color: getIconColor(item.id, activeTab === item.id) }" />
       <span>{{ item.label }}</span>
     </button>
     
@@ -29,7 +29,7 @@
               @click="selectMoreItem(item.id)"
               class="more-menu-item"
             >
-              <Icon :name="item.icon" size="20" />
+              <Icon :name="item.icon" size="20" :style="{ color: getIconColor(item.id, activeTab === item.id) }" />
               <span>{{ item.label }}</span>
             </button>
           </div>
@@ -81,6 +81,41 @@ const handleNavClick = (id: string) => {
 const selectMoreItem = (id: string) => {
   emit('change', id);
   showMoreMenu.value = false;
+};
+
+// Get icon color based on item type
+const getIconColor = (itemId: string, isActive: boolean): string => {
+  // Return bright color for active item
+  if (isActive) {
+    return '#007acc'; // VS Code blue for active
+  }
+  
+  switch (itemId) {
+    case 'explorer-editor':
+      return '#42a5f5'; // Blue for code/explorer
+    case 'terminal':
+      return '#78909c'; // Blue-grey for terminal
+    case 'claude':
+      return '#ff8c42'; // Orange for Claude/Anthropic
+    case 'tasks':
+      return '#66bb6a'; // Green for tasks
+    case 'source-control':
+      return '#4caf50'; // Git green
+    case 'knowledge':
+      return '#ab47bc'; // Purple for knowledge
+    case 'context':
+      return '#ff69b4'; // Pink for brain/context
+    case 'prompts':
+      return '#ef5350'; // Red for prompts
+    case 'snapshots':
+      return '#ffca28'; // Yellow for snapshots
+    case 'worktrees':
+      return '#26a69a'; // Teal for worktrees
+    case 'more':
+      return '#9e9e9e'; // Grey for more menu
+    default:
+      return '#858585'; // Default grey
+  }
 };
 </script>
 

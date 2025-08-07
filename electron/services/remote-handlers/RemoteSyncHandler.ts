@@ -12,7 +12,7 @@ import {
 import type { RemoteSession } from '../remote-session-manager.js';
 import { RemoteSessionManager } from '../remote-session-manager.js';
 import type { SyncPatch } from '../types/sync-types.js';
-import { LocalDatabase } from '../local-database.js';
+// LocalDatabase removed - using in-memory storage for sync patches
 
 interface SyncPushRequest {
   patches: SyncPatch[];
@@ -24,16 +24,21 @@ interface SyncPullRequest {
   types?: string[];
 }
 
+// Extended SyncPatch type for internal storage
+interface StoredSyncPatch extends SyncPatch {
+  receivedAt?: Date;
+  sessionId?: string;
+}
+
 export class RemoteSyncHandler {
-  private patchStore: Map<string, SyncPatch[]> = new Map();
-  private database: LocalDatabase;
+  private patchStore: Map<string, StoredSyncPatch[]> = new Map();
+  // In-memory patch storage - database removed
   
   constructor(
     private mainWindow: BrowserWindow,
     private sessionManager: RemoteSessionManager
   ) {
-    // Initialize database for persistent storage
-    this.database = new LocalDatabase();
+    // Using in-memory storage for sync patches
   }
   
   /**
@@ -97,7 +102,7 @@ export class RemoteSyncHandler {
       }
       
       // Add patches with metadata
-      const enrichedPatches = patches.map(patch => ({
+      const enrichedPatches: StoredSyncPatch[] = patches.map(patch => ({
         ...patch,
         userId: session.userId,
         sessionId: session.id,
@@ -106,8 +111,7 @@ export class RemoteSyncHandler {
       
       this.patchStore.get(storeKey)!.push(...enrichedPatches);
       
-      // Persist to database
-      await this.database.addSyncPatches(storeKey, enrichedPatches);
+      // Store in memory only - database persistence removed
       
       // Broadcast to other sessions of same user/workspace
       this.broadcastPatches(session, enrichedPatches);
@@ -148,8 +152,8 @@ export class RemoteSyncHandler {
       
       const storeKey = `${session.userId}:${session.workspaceId || 'default'}`;
       
-      // Get patches from database
-      let patches = await this.database.getSyncPatches(
+      // Get patches from memory store
+      let patches = this.getPatchesFromMemory(
         storeKey,
         request.payload.since,
         request.payload.types
@@ -204,7 +208,7 @@ export class RemoteSyncHandler {
       }
       
       const storeKey = `${session.userId}:${session.workspaceId || 'default'}`;
-      const stats = await this.database.getSyncStats(storeKey);
+      const stats = this.getMemoryStats(storeKey);
       
       callback({
         id: request.id,
@@ -228,7 +232,7 @@ export class RemoteSyncHandler {
    */
   private broadcastPatches(
     senderSession: RemoteSession,
-    patches: any[]
+    patches: StoredSyncPatch[]
   ): void {
     // Get all sessions for same user/workspace
     const sessions = this.sessionManager.getSessionsForUser(senderSession.userId);
@@ -265,6 +269,51 @@ export class RemoteSyncHandler {
     // Could implement patch expiration logic here
   }
   
+  /**
+   * Get patches from memory store
+   */
+  private getPatchesFromMemory(
+    storeKey: string,
+    since: Date | null,
+    types?: string[]
+  ): StoredSyncPatch[] {
+    const patches = this.patchStore.get(storeKey) || [];
+    
+    return patches.filter(patch => {
+      // Filter by date if provided
+      if (since && patch.receivedAt && patch.receivedAt <= since) {
+        return false;
+      }
+      
+      // Filter by types if provided
+      if (types && types.length > 0 && patch.entityType && !types.includes(patch.entityType)) {
+        return false;
+      }
+      
+      return true;
+    });
+  }
+  
+  /**
+   * Get memory statistics for a store key
+   */
+  private getMemoryStats(storeKey: string): any {
+    const patches = this.patchStore.get(storeKey) || [];
+    const patchesByType: Record<string, number> = {};
+    
+    patches.forEach(patch => {
+      const type = patch.entityType || 'unknown';
+      patchesByType[type] = (patchesByType[type] || 0) + 1;
+    });
+    
+    return {
+      totalPatches: patches.length,
+      patchesByType,
+      oldestPatch: patches.length > 0 ? patches[0].receivedAt : null,
+      newestPatch: patches.length > 0 ? patches[patches.length - 1].receivedAt : null
+    };
+  }
+
   /**
    * Get sync statistics
    */
