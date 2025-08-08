@@ -7,8 +7,8 @@ import fs from 'fs';
 export var MainProcessMode;
 (function (MainProcessMode) {
     MainProcessMode["DESKTOP"] = "desktop";
-    MainProcessMode["HYBRID"] = "hybrid";
-    MainProcessMode["SERVER"] = "server"; // Headless server only (future)
+    MainProcessMode["HYBRID"] = "hybrid"; // Desktop + remote server
+    // SERVER = 'server'    // Headless server only (not yet implemented)
 })(MainProcessMode || (MainProcessMode = {}));
 export class ModeManager {
     config;
@@ -60,15 +60,15 @@ export class ModeManager {
                     maxRemoteConnections: parseInt(process.env.CLODE_MAX_CONNECTIONS || '10'),
                     authRequired: process.env.CLODE_AUTH_REQUIRED === 'true' // Changed to opt-in
                 };
-            case MainProcessMode.SERVER:
-                return {
-                    mode: MainProcessMode.SERVER,
-                    serverPort: parseInt(process.env.CLODE_SERVER_PORT || '3789'),
-                    serverHost: process.env.CLODE_SERVER_HOST || '0.0.0.0',
-                    enableRemoteAccess: true,
-                    maxRemoteConnections: parseInt(process.env.CLODE_MAX_CONNECTIONS || '50'),
-                    authRequired: true
-                };
+            // case MainProcessMode.SERVER:
+            //   return {
+            //     mode: MainProcessMode.SERVER,
+            //     serverPort: parseInt(process.env.CLODE_SERVER_PORT || '3789'),
+            //     serverHost: process.env.CLODE_SERVER_HOST || '0.0.0.0',
+            //     enableRemoteAccess: true,
+            //     maxRemoteConnections: parseInt(process.env.CLODE_MAX_CONNECTIONS || '50'),
+            //     authRequired: true
+            //   };
             case MainProcessMode.DESKTOP:
             default:
                 return {
@@ -89,9 +89,9 @@ export class ModeManager {
     isHybridMode() {
         return this.config.mode === MainProcessMode.HYBRID;
     }
-    isServerMode() {
-        return this.config.mode === MainProcessMode.SERVER;
-    }
+    // isServerMode(): boolean {
+    //   return this.config.mode === MainProcessMode.SERVER;
+    // }
     isRemoteEnabled() {
         return this.config.enableRemoteAccess === true;
     }

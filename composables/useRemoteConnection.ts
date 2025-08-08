@@ -44,25 +44,63 @@ export function useRemoteConnection() {
     error.value = null;
     
     try {
-      // Get server URL - use the same host as the web UI but on port 3789
+      // Get server URL
       let serverUrl = import.meta.env.VITE_REMOTE_SERVER_URL;
       
       if (!serverUrl) {
-        // If no env var, construct URL from current location
         const protocol = window.location.protocol;
         const hostname = window.location.hostname;
-        serverUrl = `${protocol}//${hostname}:3789`;
+        const port = window.location.port;
+        
+        // Check if we're accessing through subdomain-based relay
+        // Format: sessionid.relay.clode.studio
+        const hostParts = hostname.split('.');
+        const isSubdomainRelay = hostParts.length >= 3 && 
+                                 hostParts.slice(-2).join('.') === 'clode.studio' &&
+                                 /^[a-z0-9]{6}$/.test(hostParts[0]);
+        
+        // Check if we're accessing through a tunnel
+        const isTunnel = hostname.includes('trycloudflare.com') || 
+                        hostname.includes('cloudflare') ||
+                        hostname.includes('ngrok') ||
+                        hostname.includes('tunnelmole.net') ||
+                        hostname.includes('serveo.net') ||
+                        hostname.includes('localhost.run') ||
+                        hostname.includes('bore.pub') ||
+                        hostname.includes('localtunnel.me') ||
+                        hostname.includes('lhr.life') ||
+                        hostname.includes('loca.lt');
+        
+        if (isSubdomainRelay) {
+          // Subdomain relay mode - extract session and use same origin
+          const sessionId = hostParts[0].toUpperCase();
+          serverUrl = window.location.origin;
+          console.log('[useRemoteConnection] Subdomain relay mode, session:', sessionId, 'origin:', serverUrl);
+          // Store session ID for auth
+          (options as any).sessionId = sessionId;
+        } else if (isTunnel || port === '3000') {
+          // Use the same origin - Socket.IO is now on the same port via Nitro/proxy
+          serverUrl = window.location.origin;
+          console.log('[useRemoteConnection] Tunnel/proxy detected, using origin:', serverUrl);
+        } else {
+          // Legacy: Direct connection on local network - use port 3789
+          // This is for backward compatibility with existing setups
+          serverUrl = `${protocol}//${hostname}:3789`;
+          console.log('[useRemoteConnection] Local network mode, using port 3789:', serverUrl);
+        }
       }
       
-     
       debugInfo.value.serverUrl = serverUrl;
       
       socket.value = io(serverUrl, {
+        path: '/socket.io/', // Explicit Socket.IO path
         transports: ['polling', 'websocket'], // Start with polling for better mobile compatibility
         auth: {
+          role: (options as any).sessionId ? 'client' : undefined, // Set role to 'client' when connecting through relay
           token: options.deviceToken,  // Server expects 'token' not 'deviceToken'
           deviceId: options.deviceId,
-          pairing: options.pairingCode  // Include pairing code if available
+          pairing: options.pairingCode,  // Include pairing code if available
+          sessionId: (options as any).sessionId  // Include session ID for relay mode
         },
         reconnection: true,
         reconnectionDelay: 1000,
@@ -79,14 +117,45 @@ export function useRemoteConnection() {
       remoteConnection.setSocket(socket.value);
       
       // Set up event handlers
-      socket.value.on('connect', () => {
+      socket.value.on('connect', async () => {
         connected.value = true;
         connecting.value = false;
-       
+        console.log('[useRemoteConnection] Connected to relay');
+        
+        // For relay connections, immediately request workspace after connecting
+        if ((options as any).sessionId) {
+          console.log('[useRemoteConnection] Relay connection detected, fetching workspace');
+          try {
+            const workspace = await request('workspace:get', {});
+            console.log('[useRemoteConnection] Received workspace:', workspace);
+            
+            if (workspace?.path) {
+              // Store in window for immediate access
+              (window as any).__remoteWorkspace = workspace;
+              
+              // Import and update the workspace state directly
+              const { workspaceState } = await import('~/composables/useWorkspaceManager');
+              workspaceState.currentWorkspacePath.value = workspace.path;
+              
+              // Also sync to server for API endpoints
+              try {
+                await $fetch('/api/workspace/set', {
+                  method: 'POST',
+                  body: { workspacePath: workspace.path }
+                });
+                console.log('[useRemoteConnection] Workspace synced to server:', workspace.path);
+              } catch (error) {
+                console.error('[useRemoteConnection] Failed to sync workspace to server:', error);
+              }
+            }
+          } catch (err) {
+            console.error('[useRemoteConnection] Failed to get workspace info:', err);
+          }
+        }
       });
       
       socket.value.on('connection:ready', async (data) => {
-       
+        console.log('[useRemoteConnection] Connection ready, fetching workspace');
         
         // Check if socket still exists before making request
         if (!socket.value || !connected.value) {
@@ -97,13 +166,27 @@ export function useRemoteConnection() {
         // Request workspace information from desktop
         try {
           const workspace = await request('workspace:get', {});
-         
+          console.log('[useRemoteConnection] Received workspace:', workspace);
           
           // Store workspace info in a way components can access
-          // Since we can't emit to ourselves, we'll use a different approach
           if (workspace?.path) {
             // Store in window for immediate access
             (window as any).__remoteWorkspace = workspace;
+            
+            // Import and update the workspace state directly
+            const { workspaceState } = await import('~/composables/useWorkspaceManager');
+            workspaceState.currentWorkspacePath.value = workspace.path;
+            
+            // Also sync to server for API endpoints
+            try {
+              await $fetch('/api/workspace/set', {
+                method: 'POST',
+                body: { workspacePath: workspace.path }
+              });
+              console.log('[useRemoteConnection] Workspace synced to server:', workspace.path);
+            } catch (error) {
+              console.error('[useRemoteConnection] Failed to sync workspace to server:', error);
+            }
           }
         } catch (err) {
           console.error('Failed to get workspace info:', err);

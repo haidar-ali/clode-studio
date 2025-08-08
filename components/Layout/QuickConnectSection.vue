@@ -28,9 +28,9 @@
         </div>
       </div>
       
-      <!-- Connection URL -->
+      <!-- Connection URLs -->
       <div class="connection-url-container">
-        <p class="url-label">Connection URL:</p>
+        <p class="url-label">Full Connection URL (with authentication):</p>
         <div class="connection-url">
           <input 
             type="text" 
@@ -47,6 +47,34 @@
             <Icon :name="urlCopied ? 'mdi:check' : 'mdi:content-copy'" />
           </button>
         </div>
+        <!-- Hide Cloudflare tunnel message for now -->
+        <p class="url-note" v-if="false && tunnelUrl">
+          <Icon name="mdi:cloud" />
+          Using Cloudflare tunnel for global access
+        </p>
+        
+        <!-- Local Network URL -->
+        <p class="url-label" style="margin-top: 12px;">Local Network URL:</p>
+        <div class="connection-url">
+          <input 
+            type="text" 
+            :value="localNetworkUrl" 
+            readonly
+            @click="selectLocalUrl"
+            ref="localUrlInput"
+          />
+          <button 
+            class="copy-btn" 
+            @click="copyLocalUrl"
+            :title="localUrlCopied ? 'Copied!' : 'Copy URL'"
+          >
+            <Icon :name="localUrlCopied ? 'mdi:check' : 'mdi:content-copy'" />
+          </button>
+        </div>
+        <p class="url-note">
+          <Icon name="mdi:lan" />
+          For devices on the same network
+        </p>
       </div>
       
       <!-- Device Token Info -->
@@ -81,13 +109,20 @@ const qrCodeDataUrl = ref<string>('');
 const pairingCode = ref<string>('');
 const connectionUrl = ref<string>('');
 const deviceToken = ref<string>('');
+const tunnelUrl = ref<string>('');
+const localNetworkUrl = ref<string>('');
 const copied = ref(false);
 const urlCopied = ref(false);
+const localUrlCopied = ref(false);
 const isGenerating = ref(false);
 const urlInput = ref<HTMLInputElement>();
+const localUrlInput = ref<HTMLInputElement>();
 
 // Copy timeout
 let copyTimeout: NodeJS.Timeout;
+
+// Tunnel check interval
+let tunnelCheckInterval: NodeJS.Timer;
 
 // Generate connection info on mount
 onMounted(async () => {
@@ -98,12 +133,39 @@ onMounted(async () => {
     // Generate new if no persisted token
     await generateConnectionInfo();
   }
+  
+  // Check for relay/tunnel availability periodically
+  tunnelCheckInterval = setInterval(async () => {
+    if (!tunnelUrl.value) {
+      // Check relay first
+      if (window.electronAPI?.relay?.getInfo) {
+        const relayInfo = await window.electronAPI.relay.getInfo();
+        if (relayInfo?.url) {
+          console.log('[QuickConnect] Relay became available, regenerating connection info');
+          await generateConnectionInfo();
+          return;
+        }
+      }
+      
+      // Then check tunnel
+      if (window.electronAPI?.tunnel?.getInfo) {
+        const tunnelInfo = await window.electronAPI.tunnel.getInfo();
+        if (tunnelInfo?.url && tunnelInfo.status === 'ready') {
+          console.log('[QuickConnect] Tunnel became available, regenerating connection info');
+          await generateConnectionInfo();
+        }
+      }
+    }
+  }, 5000);
 });
 
 // Cleanup
 onUnmounted(() => {
   if (copyTimeout) {
     clearTimeout(copyTimeout);
+  }
+  if (tunnelCheckInterval) {
+    clearInterval(tunnelCheckInterval);
   }
 });
 
@@ -115,18 +177,45 @@ async function generateConnectionInfo() {
   
   isGenerating.value = true;
   try {
-    // Get server URL from app status (Socket.IO server)
-    const socketUrl = appStatus.serverUrl.value || `http://localhost:3789`;
+    // Check if we have a relay or tunnel URL available
+    let baseUrl: string;
     
-    // Convert to web UI URL (change port from 3789 to 3000)
-    const webUrl = socketUrl.replace(':3789', ':3000');
+    // Check relay first (preferred)
+    const relayInfo = await window.electronAPI?.relay?.getInfo?.();
+    console.log('[QuickConnect] Relay info:', relayInfo);
+    
+    if (relayInfo?.url) {
+      // Use relay URL if available (subdomain-based now)
+      // The relay server will return the subdomain URL
+      baseUrl = relayInfo.url;
+      tunnelUrl.value = relayInfo.url;
+      console.log('[QuickConnect] Using relay URL (subdomain):', baseUrl);
+    } else {
+      // Fall back to tunnel info
+      const tunnelInfo = await window.electronAPI?.tunnel?.getInfo?.();
+      console.log('[QuickConnect] Tunnel info:', tunnelInfo);
+      
+      if (tunnelInfo?.url && tunnelInfo.status === 'ready') {
+        // Use tunnel URL if available
+        baseUrl = tunnelInfo.url;
+        tunnelUrl.value = tunnelInfo.url;
+        console.log('[QuickConnect] Using tunnel URL:', baseUrl);
+      } else {
+        // Fall back to local URL
+        const socketUrl = appStatus.serverUrl.value || `http://localhost:3789`;
+        // Convert to web UI URL (change port from 3789 to 3000)
+        baseUrl = socketUrl.replace(':3789', ':3000');
+        tunnelUrl.value = '';
+        console.log('[QuickConnect] Using local URL:', baseUrl);
+      }
+    }
     
     // Generate device auth token
     const deviceAuth = await DeviceAuthService.generateDeviceToken();
     
-    // Generate connection info with web UI URL
+    // Generate connection info with the chosen URL
     const connectionInfo = await DeviceAuthService.generateConnectionInfo(
-      webUrl,
+      baseUrl,
       deviceAuth
     );
     
@@ -134,6 +223,20 @@ async function generateConnectionInfo() {
     connectionUrl.value = connectionInfo.url;
     pairingCode.value = connectionInfo.pairingCode;
     deviceToken.value = deviceAuth.token;
+    
+    // Set local network URL with same auth params as the main connection URL
+    const socketUrl = appStatus.serverUrl.value || `http://localhost:3789`;
+    const localBaseUrl = socketUrl.replace(':3789', ':3000');
+    
+    // Build local URL with the SAME pairing code from the main connection
+    const localUrl = new URL(localBaseUrl);
+    localUrl.searchParams.set('deviceId', deviceAuth.deviceId);
+    localUrl.searchParams.set('token', deviceAuth.token);
+    localUrl.searchParams.set('pairing', connectionInfo.pairingCode);  // Use same pairing code
+    
+    console.log('[QuickConnect] Generated local URL:', localUrl.toString());
+    console.log('[QuickConnect] Previous local URL:', localNetworkUrl.value);
+    localNetworkUrl.value = localUrl.toString();
     
     // Store token on server for validation (only in Electron)
     if (typeof window !== 'undefined' && window.electronAPI?.remote?.storeToken) {
@@ -293,6 +396,32 @@ function selectUrl() {
     urlInput.value.select();
   }
 }
+
+/**
+ * Copy local network URL to clipboard
+ */
+async function copyLocalUrl() {
+  try {
+    await navigator.clipboard.writeText(localNetworkUrl.value);
+    localUrlCopied.value = true;
+    
+    if (copyTimeout) clearTimeout(copyTimeout);
+    copyTimeout = setTimeout(() => {
+      localUrlCopied.value = false;
+    }, 2000);
+  } catch (err) {
+    console.error('Failed to copy:', err);
+  }
+}
+
+/**
+ * Select local URL text when clicked
+ */
+function selectLocalUrl() {
+  if (localUrlInput.value) {
+    localUrlInput.value.select();
+  }
+}
 </script>
 
 <style scoped>
@@ -404,6 +533,20 @@ function selectUrl() {
 .connection-url input:focus {
   outline: none;
   border-color: var(--color-primary);
+}
+
+.url-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.url-note .icon {
+  width: 14px;
+  height: 14px;
 }
 
 /* Copy Button */

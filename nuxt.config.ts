@@ -3,11 +3,16 @@ import { nodePolyfills } from 'vite-plugin-node-polyfills'
 
 export default defineNuxtConfig({
   compatibilityDate: '2025-05-15',
-  devtools: { enabled: true },
+  devtools: { enabled: false },
   ssr: false, // SPA mode for Electron
   devServer: {
     host: '0.0.0.0', // Listen on all network interfaces
     port: 3000
+  },
+  nitro: {
+    experimental: {
+      websocket: true // Enable WebSocket support for Socket.IO integration
+    }
   },
   experimental: {
     componentIslands: true // Enable server components

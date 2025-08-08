@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  relay:
+    build: .
+    container_name: clode-relay
+    ports:
+      - "3790:3790"
+    environment:
+      - PORT=3790
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=${JWT_SECRET:-change-this-secret-in-production}
+      - DOMAIN=${DOMAIN:-localhost:3000}
+    depends_on:
+      - redis
+    restart: unless-stopped
+    networks:
+      - clode-network
+  
+  redis:
+    image: redis:7-alpine
+    container_name: clode-redis
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+    networks:
+      - clode-network
+  
+  # Optional: Nginx for SSL termination
+  nginx:
+    image: nginx:alpine
+    container_name: clode-nginx
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+      - ./certbot/www:/var/www/certbot:ro
+    depends_on:
+      - relay
+    restart: unless-stopped
+    networks:
+      - clode-network
+
+volumes:
+  redis-data:
+
+networks:
+  clode-network:
+    driver: bridge

@@ -83,6 +83,80 @@ export class RemoteServer {
     this.worktreeHandler = new RemoteWorktreeHandler();
   }
   
+  updateMainWindow(mainWindow: BrowserWindow): void {
+    this.mainWindow = mainWindow;
+    
+    // Update all handlers with new window reference
+    this.fileHandler = new RemoteFileHandler(
+      this.mainWindow,
+      this.sessionManager
+    );
+    
+    this.terminalHandler = new RemoteTerminalHandler(
+      this.mainWindow,
+      this.sessionManager
+    );
+    
+    this.claudeHandler = new RemoteClaudeHandler(
+      this.mainWindow,
+      this.sessionManager
+    );
+    
+    this.syncHandler = new RemoteSyncHandler(
+      this.mainWindow,
+      this.sessionManager
+    );
+    
+    this.workspaceHandler = new RemoteWorkspaceHandler(
+      this.mainWindow,
+      this.sessionManager
+    );
+    
+    this.desktopFeaturesHandler = new RemoteDesktopFeaturesHandler(
+      this.mainWindow,
+      this.sessionManager
+    );
+    
+    // Re-register handlers for all existing socket connections
+    if (this.io) {
+      this.io.sockets.sockets.forEach((socket) => {
+        // Remove all old listeners first
+        socket.removeAllListeners();
+        
+        // Re-register all handlers
+        this.fileHandler.registerHandlers(socket);
+        this.terminalHandler.registerHandlers(socket);
+        this.claudeHandler.registerHandlers(socket);
+        this.syncHandler.registerHandlers(socket);
+        this.workspaceHandler.registerHandlers(socket);
+        this.desktopFeaturesHandler.registerHandlers(socket);
+        this.snapshotsHandler.registerHandlers(socket);
+        this.worktreeHandler.registerHandlers(socket);
+        
+        // Re-register other handlers
+        this.setupLSPProxy(socket);
+        this.setupAIProxy(socket);
+        this.setupDesktopTerminalForwarding(socket);
+        
+        // Re-add disconnect handler
+        socket.on('disconnect', () => {
+          this.terminalHandler.cleanupSocketTerminals(socket.id);
+          this.claudeHandler.cleanupSocketInstances(socket.id);
+          this.sessionManager.removeSession(socket.id);
+        });
+        
+        // Re-add ping handler
+        socket.on('ping', (callback) => {
+          if (typeof callback === 'function') {
+            callback({ pong: Date.now() });
+          }
+        });
+      });
+    }
+    
+    console.log('[RemoteServer] Updated mainWindow reference and re-registered handlers for existing connections');
+  }
+  
   async start(): Promise<void> {
     if (!this.config.enableRemoteAccess) {
      
@@ -91,8 +165,26 @@ export class RemoteServer {
     
    
     
-    // Create HTTP server
-    this.httpServer = createServer();
+    // Create HTTP server with health check endpoint
+    this.httpServer = createServer((req, res) => {
+      // Handle health check endpoint
+      if (req.url === '/health' && req.method === 'GET') {
+        const stats = this.sessionManager.getStats();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          status: 'ok',
+          mode: this.config.mode,
+          connections: stats.totalSessions,
+          activeConnections: stats.activeSessions,
+          uptime: process.uptime(),
+          timestamp: new Date().toISOString()
+        }));
+      } else {
+        // Default response for other routes
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.end('Clode Studio Remote Server');
+      }
+    });
     
     // Create Socket.IO server
     this.io = new SocketIOServer(this.httpServer, {

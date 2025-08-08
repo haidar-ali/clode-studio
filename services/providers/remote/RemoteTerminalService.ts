@@ -118,7 +118,6 @@ export class RemoteTerminalService implements ITerminalService {
     // Desktop sends data as terminal:data event
     const eventName = 'terminal:data';
     const handler = (event: { terminalId: string; data: Buffer | string }) => {
-     
       if (event.terminalId === terminalId) {
         // Convert data to string
         let dataStr: string;
@@ -175,8 +174,8 @@ export class RemoteTerminalService implements ITerminalService {
       return () => {};
     }
     
-    // Desktop sends exit as TERMINAL_EXIT event with { terminalId, code, signal }
-    const eventName = 'TERMINAL_EXIT';
+    // Desktop sends exit as terminal:exit event with { terminalId, code, signal }
+    const eventName = 'terminal:exit';
     const handler = (event: { terminalId: string; code: number; signal?: string }) => {
       if (event.terminalId === terminalId) {
         callback(event.code);

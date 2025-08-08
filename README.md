@@ -123,6 +123,17 @@ Unlike traditional IDEs with fixed layouts, Clode Studio introduces a revolution
 - **Go to Definition**: Navigate code intelligently
 - **Find References**: Locate all usages across your project
 
+### 🌐 Remote Access & Relay Server
+- **Hybrid Mode**: Access your desktop Clode Studio from any device
+- **Relay Server**: Built-in HTTP-over-WebSocket tunneling (like ngrok/Cloudflare Tunnel)
+- **Subdomain Routing**: Each desktop gets a unique subdomain (e.g., `abc123.relay.clode.studio`)
+- **Device Authentication**: Secure token-based authentication with pairing codes
+- **QR Code Connection**: Scan to instantly connect mobile devices
+- **Local Network Access**: Direct connection when on the same network
+- **Custom Relay Support**: Deploy your own relay server for privacy
+- **Real-time Synchronization**: Changes sync instantly between desktop and remote
+- **Mobile-Optimized UI**: Touch-friendly interface for phones and tablets
+
 ### ⌨️ Keyboard Shortcuts
 - **Cmd/Ctrl+P**: Open prompt/command palette
 - **Cmd/Ctrl+G**: Trigger AI ghost text manually
@@ -194,14 +205,31 @@ Drag and drop these modules between docks:
 
 ## 🛠️ Installation
 
-### Prerequisites
+### Quick Install (Recommended)
 
-- **Node.js 22+** (LTS recommended)
-- **Claude Code CLI** installed and configured
-- **Git** for cloning the repository
-- **Ripgrep** (optional, for faster search)
+**One-line install:**
+```bash
+curl -sSL https://get.clode.studio | bash
+# or
+curl -sSL https://raw.githubusercontent.com/haidar-ali/clode-studio/main/install.sh | bash
+```
 
-### Quick Start
+This will:
+- Check prerequisites (Node.js 20+, Git)
+- Install Clode Studio in `~/.clode-studio`
+- Create launch commands
+- Set up configuration
+
+**After installation:**
+```bash
+# Start in desktop mode (default)
+clode-studio
+
+# Start with remote access enabled
+clode-studio --hybrid
+```
+
+### Manual Installation
 
 1. **Clone the repository**
    ```bash
@@ -214,20 +242,35 @@ Drag and drop these modules between docks:
    npm install
    ```
 
-3. **Compile Electron TypeScript files**
+3. **Compile TypeScript**
    ```bash
    npm run electron:compile
    ```
 
 4. **Start the application**
    ```bash
+   # Desktop mode
    npm run electron:dev
+   
+   # Hybrid mode (desktop + remote) with Clode Relay
+   CLODE_MODE=hybrid npm run electron:dev
+   
+   # Hybrid mode with custom relay server
+   RELAY_TYPE=CLODE RELAY_URL=wss://your-relay.example.com CLODE_MODE=hybrid npm run electron:dev
+   
+   # Hybrid mode with Cloudflare tunnel
+   RELAY_TYPE=CLOUDFLARE CLODE_MODE=hybrid npm run electron:dev
+   
+   # Hybrid mode with your own tunnel (ngrok, serveo, etc.)
+   RELAY_TYPE=CUSTOM CLODE_MODE=hybrid npm run electron:dev
    ```
 
-5. **Build for production**
-   ```bash
-   npm run dist
-   ```
+### Prerequisites
+
+- **Node.js 20+** (installed automatically on macOS)
+- **Git** (installed automatically on macOS)
+- **Claude Code CLI** (optional, for enhanced features)
+- **Ripgrep** (optional, for faster search)
 
 ## ⚙️ Configuration
 
@@ -242,6 +285,85 @@ npm install -g claude-code
 # Verify installation
 claude --version
 ```
+
+### Remote Access Setup
+
+Clode Studio offers multiple options for remote access via the `RELAY_TYPE` environment variable:
+
+#### Option 1: Clode Relay (Default)
+
+```bash
+# Uses relay.clode.studio automatically
+CLODE_MODE=hybrid npm run electron:dev
+
+# Or with a custom relay server
+RELAY_TYPE=CLODE RELAY_URL=wss://your-relay.example.com CLODE_MODE=hybrid npm run electron:dev
+
+# The app will:
+# 1. Connect to relay server
+# 2. Get a unique subdomain (e.g., abc123.relay.clode.studio)
+# 3. Generate QR code and connection URL
+```
+
+#### Option 2: Cloudflare Tunnel
+
+```bash
+# Uses Cloudflare's quick tunnel (no account needed)
+RELAY_TYPE=CLOUDFLARE CLODE_MODE=hybrid npm run electron:dev
+
+# Generates a .trycloudflare.com URL
+# Requires cloudflared installed on your system
+```
+
+#### Option 3: Custom Tunnel (tunnelmole, localtunnel, ngrok, etc.)
+
+```bash
+# Start Clode Studio
+RELAY_TYPE=CUSTOM CLODE_MODE=hybrid npm run electron:dev
+
+# In another terminal, start your preferred tunnel on port 3000:
+npx tunnelmole@latest 3000
+# OR
+npx localtunnel --port 3000
+# OR
+ngrok http 3000
+# OR
+ssh -R 80:localhost:3000 serveo.net
+```
+
+#### Option 4: Local Network Only
+
+```bash
+# No external access, LAN only
+RELAY_TYPE=NONE CLODE_MODE=hybrid npm run electron:dev
+```
+
+#### How the Relay Works
+
+The relay server provides HTTP-over-WebSocket tunneling, similar to ngrok or Cloudflare Tunnel:
+
+1. **Desktop connects** to relay server via WebSocket
+2. **Relay assigns** unique subdomain based on connection ID
+3. **Remote devices** access via `https://[subdomain].relay.clode.studio`
+4. **Relay forwards** HTTP requests through WebSocket to desktop
+5. **Desktop processes** requests and sends responses back
+6. **Authentication** handled locally by desktop (tokens never leave your machine)
+
+**Technical Details:**
+- Uses wildcard DNS (`*.relay.clode.studio`) for subdomain routing
+- Each desktop connection gets a unique 6-character subdomain
+- HTTP requests are serialized and sent through WebSocket frames
+- Supports streaming responses for large files
+- Handles binary data and all HTTP methods
+- No data is stored on relay server (pure passthrough)
+
+#### Security Features
+
+- **Token-based auth**: Each device gets a unique token
+- **Pairing codes**: Easy manual entry for devices without QR scanning
+- **Local validation**: Desktop validates all tokens locally
+- **Automatic expiry**: Tokens expire after configured time
+- **Instant revocation**: Remove device access immediately from desktop
 
 ## 🎯 How to Use
 
@@ -609,6 +731,10 @@ MIT License - see [LICENSE](LICENSE) file for details.
 - [x] Code generation with AI loading indicators
 - [x] Advanced keyboard shortcuts system
 - [x] Enhanced diff view with merge capabilities
+- [x] Relay Server with subdomain-based routing
+- [x] HTTP-over-WebSocket tunneling for remote access
+- [x] Token-based device authentication
+- [x] QR code connection for mobile devices
 
 ### Coming Soon
 - [ ] Custom module development API

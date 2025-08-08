@@ -48,7 +48,11 @@ const electronAPI = {
         'remote-worktree-lock',
         'remote-worktree-compare',
         'remote-worktree-createSession',
-        'remote-worktree-deleteSession'
+        'remote-worktree-deleteSession',
+        'tunnel:status-updated',
+        'relay:connected',
+        'relay:reconnected',
+        'relay:disconnected'
       ];
       if (allowedChannels.includes(channel)) {
         ipcRenderer.on(channel, listener);
@@ -384,6 +388,20 @@ const electronAPI = {
     disconnectDevice: (sessionId: string) => ipcRenderer.invoke('remote:disconnect-device', sessionId),
     loadPersistedToken: () => ipcRenderer.invoke('remote:load-persisted-token'),
     persistToken: (tokenData: any) => ipcRenderer.invoke('remote:persist-token', tokenData)
+  },
+
+  // Cloudflare tunnel operations
+  tunnel: {
+    getInfo: () => ipcRenderer.invoke('tunnel:getInfo'),
+    start: () => ipcRenderer.invoke('tunnel:start'),
+    stop: () => ipcRenderer.invoke('tunnel:stop')
+  },
+  
+  // Relay client operations
+  relay: {
+    getInfo: () => ipcRenderer.invoke('relay:getInfo'),
+    connect: () => ipcRenderer.invoke('relay:connect'),
+    disconnect: () => ipcRenderer.invoke('relay:disconnect')
   },
   
   // Local database removed - SQLite not actively used

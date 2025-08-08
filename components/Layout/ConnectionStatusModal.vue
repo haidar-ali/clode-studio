@@ -12,20 +12,6 @@
           
           <div class="modal-content">
             <!-- Status Section -->
-            <div class="status-section">
-              <div class="status-item main-status">
-                <Icon :name="statusIcon" :class="['status-icon', statusClass]" />
-                <div class="status-info">
-                  <div class="status-label">Connection</div>
-                  <div class="status-value">{{ statusText }}</div>
-                </div>
-              </div>
-              
-              <div v-if="error" class="error-message">
-                <Icon name="mdi:alert-circle" />
-                <span>{{ error }}</span>
-              </div>
-            </div>
             
             <!-- Remote Server Status (for hybrid mode) -->
             <div v-if="appStatus.isHybridMode.value" class="server-status-section">
@@ -52,20 +38,12 @@
                   </div>
                 </div>
                 
-                <div v-if="appStatus.serverUrl.value" class="info-item">
-                  <Icon name="mdi:web" />
-                  <div class="info-content">
-                    <div class="info-label">Server URL</div>
-                    <div class="info-value mono">{{ appStatus.serverUrl.value }}</div>
-                  </div>
-                </div>
-                
                 <div v-if="appStatus.isRemoteServerRunning.value" class="info-item">
                   <Icon name="mdi:shield-check" />
                   <div class="info-content">
                     <div class="info-label">Authentication</div>
                     <div class="info-value">
-                      {{ appStatus.appStatus.value?.config.authRequired ? 'Required' : 'Disabled' }}
+                       Enabled
                     </div>
                   </div>
                 </div>
@@ -74,6 +52,64 @@
               <div class="server-help">
                 <Icon name="mdi:information" />
                 <span>Other devices can connect to this server to access your Clode Studio environment</span>
+              </div>
+            </div>
+
+            <!-- Cloudflare Tunnel Status (for hybrid mode) - Hidden for now -->
+            <div v-if="false && appStatus.isHybridMode.value" class="tunnel-status-section">
+              <h4>Remote Access Options</h4>
+              <div class="tunnel-info">
+                <div class="info-item">
+                  <Icon 
+                    :name="getTunnelStatusIcon()" 
+                    :class="['tunnel-icon', tunnelStatus?.status || 'stopped']"
+                  />
+                  <div class="info-content">
+                    <div class="info-label">Tunnel Status</div>
+                    <div class="info-value">{{ getTunnelStatusText() }}</div>
+                  </div>
+                </div>
+                
+                <div v-if="tunnelStatus?.url" class="info-item">
+                  <Icon name="mdi:cloud" />
+                  <div class="info-content">
+                    <div class="info-label">Public URL (via Cloudflare)</div>
+                    <div class="info-value mono">
+                      <a :href="tunnelStatus.url" target="_blank" class="tunnel-url">
+                        {{ tunnelStatus.url }}
+                      </a>
+                      <button @click="copyTunnelUrl" class="copy-btn" title="Copy URL">
+                        <Icon name="mdi:content-copy" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                
+                <div class="info-item">
+                  <Icon name="mdi:lan" />
+                  <div class="info-content">
+                    <div class="info-label">Local Network URL</div>
+                    <div class="info-value mono">
+                      {{ getLocalUrl() }}
+                      <button @click="copyLocalUrl" class="copy-btn" title="Copy URL">
+                        <Icon name="mdi:content-copy" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                
+                <div v-if="tunnelStatus?.error" class="error-item">
+                  <Icon name="mdi:alert-circle" class="error-icon" />
+                  <div class="error-content">
+                    <div class="error-label">Error</div>
+                    <div class="error-message">{{ tunnelStatus.error }}</div>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="tunnel-help">
+                <Icon name="mdi:information" />
+                <span>Use the public URL for access from anywhere, or the local URL when on the same network</span>
               </div>
             </div>
             
@@ -107,8 +143,8 @@
             
             <!-- Token Management Section -->
             <div v-if="appStatus.isRemoteServerRunning.value" class="token-section">
-              <h4>Device Tokens</h4>
-              <div class="token-list">
+              <h4>Device Tokens (Local Network)</h4>
+              <div v-if="activeTokens.length > 0" class="token-list">
                 <div v-for="token in activeTokens" :key="token.token" class="token-item">
                   <div class="token-info">
                     <div class="token-device">{{ token.deviceName }}</div>
@@ -132,7 +168,11 @@
                 </div>
               </div>
               <div v-if="activeTokens.length === 0" class="no-tokens">
-                No active tokens. Generate a QR code to create one.
+                No active local tokens. Generate a QR code to create one.
+              </div>
+              <div class="token-note">
+                <Icon name="mdi:information" />
+                <span>Connections through relay server are managed separately and not shown here.</span>
               </div>
             </div>
             
@@ -207,7 +247,7 @@
               </div>
             </div>
             
-            <!-- Actions -->
+            <!-- Actions 
             <div class="actions-section">
               <button 
                 v-if="!isConnected && canConnect" 
@@ -236,7 +276,7 @@
                 <Icon name="mdi:connection" />
                 Disconnect
               </button>
-            </div>
+            </div> -->
           </div>
         </div>
       </div>
@@ -302,6 +342,16 @@ const activeTokens = ref<Array<{
   connectionCount: number;
 }>>([]);
 
+// Tunnel status
+const tunnelStatus = ref<{
+  url: string;
+  status: 'starting' | 'ready' | 'error' | 'stopped';
+  error?: string;
+} | null>(null);
+
+// QR container ref
+const qrContainer = ref<HTMLElement | null>(null);
+
 // Update interval
 let updateInterval: NodeJS.Timeout | null = null;
 
@@ -335,6 +385,113 @@ async function fetchActiveTokens() {
     } catch (error) {
       console.error('Failed to fetch active tokens:', error);
     }
+  }
+}
+
+// Fetch tunnel status
+async function fetchTunnelStatus() {
+  if (window.electronAPI?.tunnel?.getInfo && appStatus.isHybridMode.value) {
+    try {
+      const info = await window.electronAPI.tunnel.getInfo();
+      tunnelStatus.value = info;
+      
+      // Generate QR code if tunnel is ready and has URL
+      if (info.status === 'ready' && info.url && qrContainer.value) {
+        await generateQRCode(info.url);
+      }
+    } catch (error) {
+      console.error('Failed to fetch tunnel status:', error);
+    }
+  }
+}
+
+// Generate QR code
+async function generateQRCode(url: string) {
+  if (!qrContainer.value) return;
+  
+  try {
+    // Import QRCode dynamically to avoid SSR issues
+    const QRCode = await import('qrcode');
+    
+    // Clear previous QR code
+    qrContainer.value.innerHTML = '';
+    
+    // Generate new QR code
+    const qrCanvas = document.createElement('canvas');
+    await QRCode.toCanvas(qrCanvas, url, {
+      width: 150,
+      margin: 2,
+      color: {
+        dark: '#1f2937',
+        light: '#ffffff'
+      }
+    });
+    
+    qrContainer.value.appendChild(qrCanvas);
+  } catch (error) {
+    console.error('Failed to generate QR code:', error);
+  }
+}
+
+// Copy tunnel URL to clipboard
+async function copyTunnelUrl() {
+  if (!tunnelStatus.value?.url) return;
+  
+  try {
+    await navigator.clipboard.writeText(tunnelStatus.value.url);
+    // You could show a toast notification here
+    console.log('Tunnel URL copied to clipboard');
+  } catch (error) {
+    console.error('Failed to copy tunnel URL:', error);
+  }
+}
+
+// Get tunnel status icon
+function getTunnelStatusIcon() {
+  switch (tunnelStatus.value?.status) {
+    case 'starting': return 'mdi:loading';
+    case 'ready': return 'mdi:check-circle';
+    case 'error': return 'mdi:alert-circle';
+    default: return 'mdi:circle-outline';
+  }
+}
+
+// Get tunnel status text
+function getTunnelStatusText() {
+  switch (tunnelStatus.value?.status) {
+    case 'starting': return 'Starting tunnel...';
+    case 'ready': return 'Tunnel active';
+    case 'error': return 'Tunnel failed';
+    default: return 'Tunnel inactive';
+  }
+}
+
+// Get local URL
+function getLocalUrl() {
+  // Get local IP address from network interfaces
+  const hostname = window.location.hostname === 'localhost' 
+    ? 'localhost' 
+    : (appStatus.serverUrl.value?.split('//')[1]?.split(':')[0] || window.location.hostname);
+  return `http://${hostname}:3000`;
+}
+
+// Copy local URL to clipboard
+async function copyLocalUrl() {
+  try {
+    await navigator.clipboard.writeText(getLocalUrl());
+    console.log('Local URL copied to clipboard');
+  } catch (error) {
+    console.error('Failed to copy local URL:', error);
+  }
+}
+
+// Handle tunnel status updates from main process
+function handleTunnelStatusUpdate(event: any, newTunnelInfo: any) {
+  tunnelStatus.value = newTunnelInfo;
+  
+  // Generate QR code if tunnel is ready
+  if (newTunnelInfo.status === 'ready' && newTunnelInfo.url && qrContainer.value) {
+    generateQRCode(newTunnelInfo.url);
   }
 }
 
@@ -389,20 +546,32 @@ function formatTimeSince(date: Date): string {
 }
 
 onMounted(() => {
-  // Fetch connections and tokens immediately
+  // Fetch connections, tokens, and tunnel status immediately
   fetchRemoteConnections();
   fetchActiveTokens();
+  fetchTunnelStatus();
+  
+  // Listen for tunnel status updates
+  if (window.electronAPI?.ipcRenderer?.on) {
+    window.electronAPI.ipcRenderer.on('tunnel:status-updated', handleTunnelStatusUpdate);
+  }
   
   // Update every 5 seconds
   updateInterval = setInterval(() => {
     fetchRemoteConnections();
     fetchActiveTokens();
+    fetchTunnelStatus();
   }, 5000);
 });
 
 onUnmounted(() => {
   if (updateInterval) {
     clearInterval(updateInterval);
+  }
+  
+  // Remove tunnel status listener
+  if (window.electronAPI?.ipcRenderer?.removeListener) {
+    window.electronAPI.ipcRenderer.removeListener('tunnel:status-updated', handleTunnelStatusUpdate);
   }
 });
 
@@ -791,6 +960,23 @@ async function switchToDevice(deviceId: string) {
   text-align: center;
   color: var(--color-text-secondary);
   font-size: 13px;
+}
+
+.token-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 8px 12px;
+  background: var(--color-bg-tertiary);
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.token-note .icon {
+  flex-shrink: 0;
+  font-size: 16px;
 }
 
 .server-info {

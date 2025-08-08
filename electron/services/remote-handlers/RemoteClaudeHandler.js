@@ -232,6 +232,31 @@ export class RemoteClaudeHandler {
                 return { success: false, error: 'Claude API not available' };
               })()
             `);
+                        // After starting, focus the Claude tab on desktop
+                        if (startResult.success) {
+                            // Small delay to ensure the instance is fully started
+                            setTimeout(async () => {
+                                await this.mainWindow.webContents.executeJavaScript(`
+                  (() => {
+                    if (window.__getClaudeStore) {
+                      const store = window.__getClaudeStore();
+                      // Set active instance which will switch the tab
+                      store.setActiveInstance('${request.payload.instanceId}');
+                      
+                      // Also try to focus the terminal element directly
+                      const terminalElement = document.querySelector('.claude-terminal-tab[data-instance-id="${request.payload.instanceId}"]');
+                      if (terminalElement) {
+                        terminalElement.scrollIntoView();
+                      }
+                    }
+                  })()
+                `);
+                                // Bring the window to focus
+                                if (!this.mainWindow.isFocused()) {
+                                    this.mainWindow.focus();
+                                }
+                            }, 100);
+                        }
                         if (!startResult.success) {
                             console.error('[RemoteClaudeHandler] Failed to start desktop Claude:', startResult.error);
                         }
@@ -295,6 +320,28 @@ export class RemoteClaudeHandler {
                 if (startResult.success) {
                     // Set up forwarding
                     this.setupDesktopClaudeForwarding(socket, request.payload.instanceId);
+                    // After starting, focus the Claude tab on desktop
+                    setTimeout(async () => {
+                        await this.mainWindow.webContents.executeJavaScript(`
+              (() => {
+                if (window.__getClaudeStore) {
+                  const store = window.__getClaudeStore();
+                  // Set active instance which will switch the tab
+                  store.setActiveInstance('${request.payload.instanceId}');
+                  
+                  // Also try to focus the terminal element directly
+                  const terminalElement = document.querySelector('.claude-terminal-tab[data-instance-id="${request.payload.instanceId}"]');
+                  if (terminalElement) {
+                    terminalElement.scrollIntoView();
+                  }
+                }
+              })()
+            `);
+                        // Bring the window to focus
+                        if (!this.mainWindow.isFocused()) {
+                            this.mainWindow.focus();
+                        }
+                    }, 100);
                     return callback({
                         id: request.id,
                         success: true,

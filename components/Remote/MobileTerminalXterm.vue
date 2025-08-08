@@ -110,18 +110,41 @@ const isTerminalAvailable = computed(() => {
   return hasServices && (serviceConnected || connected.value);
 });
 
+// Retry loading terminals with exponential backoff
+async function loadTerminalsWithRetry(maxRetries = 2, delay = 500) {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      await loadTerminals();
+      return; // Success, exit retry loop
+    } catch (error) {
+      console.log(`[MobileTerminal] Attempt ${i + 1}/${maxRetries} failed, retrying in ${delay}ms...`);
+      if (i < maxRetries - 1) {
+        await new Promise(resolve => setTimeout(resolve, delay));
+        delay *= 1.5; // Gentler exponential backoff
+      }
+    }
+  }
+  console.error('[MobileTerminal] Failed to load terminals after all retries');
+}
+
 // Initialize services on mount
 onMounted(async () => {
   await initialize();
   if (isTerminalAvailable.value) {
-    await loadTerminals();
+    // Add delay and retry logic for initial load
+    setTimeout(async () => {
+      await loadTerminalsWithRetry();
+    }, 500);
   }
 });
 
 // Watch for terminal availability
 watch(isTerminalAvailable, async (available) => {
   if (available && terminals.value.length === 0) {
-    await loadTerminals();
+    // Add delay and retry logic when terminal becomes available
+    setTimeout(async () => {
+      await loadTerminalsWithRetry();
+    }, 500);
   }
 });
 
@@ -142,8 +165,8 @@ const workspaceCheckInterval = setInterval(async () => {
     }
     terminalSessions.value.clear();
     
-    // Reload terminals for new workspace
-    await loadTerminals();
+    // Reload terminals for new workspace with retry
+    await loadTerminalsWithRetry();
   }
 }, 1000);
 
@@ -256,7 +279,6 @@ async function initializeTerminalSession(terminalInfo: any) {
   try {
     // Set up data handler from remote terminal
     session.dataHandler = services.value!.terminal.onTerminalData(terminalInfo.id, (data: string) => {
-     
       terminal.write(data);
     });
     
@@ -299,8 +321,8 @@ async function initializeTerminalSession(terminalInfo: any) {
         }
       }
     } else {
-      // Send empty string to trigger initial prompt only if no buffer
-      await services.value!.terminal.writeToTerminal(terminalInfo.id, '');
+      // Send a newline to trigger initial prompt only if no buffer
+      await services.value!.terminal.writeToTerminal(terminalInfo.id, '\n');
     }
     
   } catch (error) {

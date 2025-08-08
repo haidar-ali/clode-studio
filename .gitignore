@@ -6,6 +6,7 @@ package-lock.json
 .claude-checkpoints/
 .worktrees/
 .claude/
+.clode/
 
 # Nuxt dev/build outputs
 .output

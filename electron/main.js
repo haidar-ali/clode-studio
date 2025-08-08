@@ -28,6 +28,8 @@ import { ghostTextService } from './ghost-text-service.js';
 // LocalDatabase removed - SQLite not actively used
 import { getModeManager } from './services/mode-config.js';
 import { RemoteServer } from './services/remote-server.js';
+import { CloudflareTunnel } from './services/cloudflare-tunnel.js';
+import { RelayClient } from './services/relay-client.js';
 // Load environment variables from .env file
 import { config } from 'dotenv';
 config();
@@ -41,6 +43,8 @@ const claudeInstances = new Map();
 // Mode manager and remote server
 const modeManager = getModeManager();
 let remoteServer = null;
+let cloudflareTunnel = null;
+let relayClient = null;
 // Claude settings manager
 const claudeSettingsManager = importedClaudeSettingsManager;
 // Knowledge cache instances per workspace
@@ -78,6 +82,10 @@ function createWindow() {
         mainWindow?.show();
         if (isDev) {
             mainWindow?.webContents.openDevTools();
+        }
+        // Update remote server with new window reference if it exists
+        if (remoteServer && mainWindow) {
+            remoteServer.updateMainWindow(mainWindow);
         }
     });
     mainWindow.on('closed', () => {
@@ -146,6 +154,119 @@ app.whenReady().then(async () => {
                 // Also notify the desktop UI
                 mainWindow?.webContents.send('claude:instances:updated');
             });
+            // Initialize tunnel/relay based on RELAY_TYPE environment variable
+            // Options: CLODE (default), CLOUDFLARE, CUSTOM
+            const relayType = (process.env.RELAY_TYPE || process.env.USE_RELAY || 'CLODE').toUpperCase();
+            console.log(`[Main] Using relay type: ${relayType}`);
+            switch (relayType) {
+                case 'CLODE':
+                case 'TRUE': // Backward compatibility with USE_RELAY=true
+                    // Use Clode relay server (default behavior)
+                    relayClient = new RelayClient(process.env.RELAY_URL || 'wss://relay.clode.studio');
+                    relayClient.on('registered', (info) => {
+                        console.log(`[Main] Clode Relay registered: ${info.url}`);
+                        mainWindow?.webContents.send('relay:connected', info);
+                    });
+                    relayClient.on('reconnected', () => {
+                        console.log('[Main] Clode Relay reconnected');
+                        mainWindow?.webContents.send('relay:reconnected');
+                    });
+                    relayClient.on('connection_lost', () => {
+                        console.log('[Main] Clode Relay connection lost');
+                        mainWindow?.webContents.send('relay:disconnected');
+                    });
+                    // Connect to relay after server is ready
+                    setTimeout(async () => {
+                        try {
+                            const info = await relayClient.connect();
+                            console.log(`[Main] Connected to Clode Relay: ${info.url}`);
+                            global.__relayClient = relayClient;
+                        }
+                        catch (error) {
+                            console.error('[Main] Failed to connect to Clode Relay:', error);
+                            // Continue without relay - fallback to local network
+                        }
+                    }, 2000);
+                    break;
+                case 'CLOUDFLARE':
+                    // Use Cloudflare tunnel
+                    console.log('[Main] Initializing Cloudflare tunnel...');
+                    cloudflareTunnel = new CloudflareTunnel();
+                    // Set up tunnel status updates
+                    cloudflareTunnel.onStatusUpdated((tunnelInfo) => {
+                        // Send tunnel info to renderer process
+                        mainWindow?.webContents.send('tunnel:status-updated', tunnelInfo);
+                        console.log('[Main] Cloudflare tunnel status:', tunnelInfo);
+                    });
+                    // Start tunnel (wait a bit for Nuxt to be ready)
+                    setTimeout(async () => {
+                        try {
+                            await cloudflareTunnel?.start();
+                            console.log('[Main] Cloudflare tunnel started successfully');
+                        }
+                        catch (tunnelError) {
+                            console.error('[Main] Failed to start Cloudflare tunnel:', tunnelError);
+                            // Tunnel failure shouldn't break the app, just log it
+                        }
+                    }, 2000); // Wait 2 seconds for Nuxt server to be ready
+                    break;
+                case 'CUSTOM':
+                    // User will provide their own tunnel solution (ngrok, serveo, etc.)
+                    // Custom tunnels should expose port 3000 (Nuxt UI), not 3789 (remote server)
+                    const uiPort = 3000;
+                    console.log('[Main] Custom tunnel mode - user will provide their own tunnel');
+                    console.log('[Main] UI server running on port:', uiPort);
+                    console.log('[Main] Remote server running on port:', config.serverPort);
+                    console.log('[Main] To expose your app, use one of these commands:');
+                    console.log(`[Main]   tunnelmole: npx tunnelmole@latest ${uiPort}`);
+                    console.log(`[Main]   localtunnel: npx localtunnel --port ${uiPort}`);
+                    console.log(`[Main]   ngrok: ngrok http ${uiPort}`);
+                    console.log(`[Main]   serveo: ssh -R 80:localhost:${uiPort} serveo.net`);
+                    console.log(`[Main]   bore: bore local ${uiPort} --to bore.pub`);
+                    // Send a message to the renderer that custom mode is active
+                    setTimeout(() => {
+                        mainWindow?.webContents.send('tunnel:custom-mode', {
+                            port: uiPort,
+                            message: 'Please set up your own tunnel solution for port 3000',
+                            suggestions: [
+                                `npx tunnelmole@latest ${uiPort}`,
+                                `npx localtunnel --port ${uiPort}`,
+                                `ngrok http ${uiPort}`,
+                                `ssh -R 80:localhost:${uiPort} serveo.net`,
+                                `bore local ${uiPort} --to bore.pub`
+                            ]
+                        });
+                    }, 2000);
+                    break;
+                case 'FALSE':
+                case 'NONE':
+                    // No tunnel/relay - local network only
+                    console.log('[Main] No tunnel/relay - local network access only');
+                    console.log('[Main] UI available at http://localhost:3000');
+                    console.log('[Main] Remote server available at http://localhost:' + config.serverPort);
+                    setTimeout(() => {
+                        mainWindow?.webContents.send('tunnel:local-only', {
+                            port: 3000,
+                            serverPort: config.serverPort,
+                            message: 'Local network access only'
+                        });
+                    }, 2000);
+                    break;
+                default:
+                    console.warn(`[Main] Unknown RELAY_TYPE: ${relayType}, falling back to CLODE`);
+                    // Fall back to CLODE relay
+                    relayClient = new RelayClient(process.env.RELAY_URL || 'wss://relay.clode.studio');
+                    setTimeout(async () => {
+                        try {
+                            const info = await relayClient.connect();
+                            console.log(`[Main] Connected to relay: ${info.url}`);
+                            global.__relayClient = relayClient;
+                        }
+                        catch (error) {
+                            console.error('[Main] Failed to connect to relay:', error);
+                        }
+                    }, 2000);
+            }
         }
         catch (error) {
             console.error('Failed to start remote server:', error);
@@ -155,6 +276,15 @@ app.whenReady().then(async () => {
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {
             createWindow();
+            // After creating new window, update remote server reference
+            if (remoteServer && mainWindow) {
+                // Give window time to be ready
+                setTimeout(() => {
+                    if (remoteServer && mainWindow) {
+                        remoteServer.updateMainWindow(mainWindow);
+                    }
+                }, 100);
+            }
         }
     });
 });
@@ -2294,8 +2424,65 @@ ipcMain.handle('app:status', async () => {
         config: modeManager.getConfig(),
         remoteServerRunning: remoteServer?.isRunning() || false,
         remoteConnections: remoteServer?.getActiveConnectionCount() || 0,
-        remoteStats: remoteServer?.getStats()
+        remoteStats: remoteServer?.getStats(),
+        tunnel: cloudflareTunnel?.getInfo() || null
     };
+});
+// Cloudflare tunnel handlers
+ipcMain.handle('tunnel:getInfo', async () => {
+    return cloudflareTunnel?.getInfo() || { url: '', status: 'stopped' };
+});
+ipcMain.handle('tunnel:start', async () => {
+    if (!cloudflareTunnel) {
+        cloudflareTunnel = new CloudflareTunnel();
+        cloudflareTunnel.onStatusUpdated((tunnelInfo) => {
+            mainWindow?.webContents.send('tunnel:status-updated', tunnelInfo);
+        });
+    }
+    try {
+        return await cloudflareTunnel.start();
+    }
+    catch (error) {
+        return {
+            url: '',
+            status: 'error',
+            error: error instanceof Error ? error.message : 'Unknown error'
+        };
+    }
+});
+ipcMain.handle('tunnel:stop', async () => {
+    if (cloudflareTunnel) {
+        cloudflareTunnel.stop();
+        return { success: true };
+    }
+    return { success: false };
+});
+// Relay client handlers
+ipcMain.handle('relay:getInfo', async () => {
+    if (!relayClient)
+        return null;
+    return relayClient.getInfo();
+});
+ipcMain.handle('relay:connect', async () => {
+    if (!relayClient) {
+        relayClient = new RelayClient(process.env.RELAY_URL || 'wss://relay.clode.studio');
+    }
+    try {
+        const info = await relayClient.connect();
+        global.__relayClient = relayClient;
+        return info;
+    }
+    catch (error) {
+        return {
+            error: error instanceof Error ? error.message : 'Failed to connect to relay'
+        };
+    }
+});
+ipcMain.handle('relay:disconnect', async () => {
+    if (relayClient) {
+        relayClient.disconnect();
+    }
+    return { success: true };
 });
 // Store token when QR code is generated
 ipcMain.handle('remote:store-token', async (event, args) => {
@@ -2378,6 +2565,10 @@ app.on('before-quit', async () => {
     // Stop remote server if running
     if (remoteServer && remoteServer.isRunning()) {
         await remoteServer.stop();
+    }
+    // Stop Cloudflare tunnel if running
+    if (cloudflareTunnel && cloudflareTunnel.isRunning()) {
+        cloudflareTunnel.stop();
     }
     // Database cleanup removed - SQLite not actively used
     for (const [path, service] of gitServices) {

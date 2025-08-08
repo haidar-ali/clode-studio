@@ -7,8 +7,8 @@ import fs from 'fs';
 
 export enum MainProcessMode {
   DESKTOP = 'desktop',    // Pure desktop mode (default)
-  HYBRID = 'hybrid',      // Desktop + remote server
-  SERVER = 'server'       // Headless server only (future)
+  HYBRID = 'hybrid'       // Desktop + remote server
+  // SERVER = 'server'    // Headless server only (not yet implemented)
 }
 
 export interface ModeConfig {
@@ -76,15 +76,15 @@ export class ModeManager {
           authRequired: process.env.CLODE_AUTH_REQUIRED === 'true'  // Changed to opt-in
         };
         
-      case MainProcessMode.SERVER:
-        return {
-          mode: MainProcessMode.SERVER,
-          serverPort: parseInt(process.env.CLODE_SERVER_PORT || '3789'),
-          serverHost: process.env.CLODE_SERVER_HOST || '0.0.0.0',
-          enableRemoteAccess: true,
-          maxRemoteConnections: parseInt(process.env.CLODE_MAX_CONNECTIONS || '50'),
-          authRequired: true
-        };
+      // case MainProcessMode.SERVER:
+      //   return {
+      //     mode: MainProcessMode.SERVER,
+      //     serverPort: parseInt(process.env.CLODE_SERVER_PORT || '3789'),
+      //     serverHost: process.env.CLODE_SERVER_HOST || '0.0.0.0',
+      //     enableRemoteAccess: true,
+      //     maxRemoteConnections: parseInt(process.env.CLODE_MAX_CONNECTIONS || '50'),
+      //     authRequired: true
+      //   };
         
       case MainProcessMode.DESKTOP:
       default:
@@ -111,9 +111,9 @@ export class ModeManager {
     return this.config.mode === MainProcessMode.HYBRID;
   }
   
-  isServerMode(): boolean {
-    return this.config.mode === MainProcessMode.SERVER;
-  }
+  // isServerMode(): boolean {
+  //   return this.config.mode === MainProcessMode.SERVER;
+  // }
   
   isRemoteEnabled(): boolean {
     return this.config.enableRemoteAccess === true;

@@ -49,11 +49,8 @@ interface FileEntry {
   modified?: string;
 }
 
-const route = useRoute();
-const router = useRouter();
-
-// Get current path from route
-const currentPath = computed(() => (route.query.path as string) || '');
+// Internal path state (no URL manipulation for remote)
+const currentPath = ref('');
 
 // Fetch files for current path
 const { data, pending, error, refresh } = await useFetch('/api/files/list', {
@@ -70,10 +67,8 @@ const emit = defineEmits<{
 
 function handleClick(file: FileEntry) {
   if (file.isDirectory) {
-    // Navigate to directory
-    router.push({
-      query: { path: file.path }
-    });
+    // Navigate to directory by updating internal state
+    currentPath.value = file.path;
   } else {
     // Emit event to open file
     emit('file-open', file);
@@ -83,9 +78,7 @@ function handleClick(file: FileEntry) {
 function goUp() {
   const parts = currentPath.value.split('/').filter(Boolean);
   parts.pop();
-  router.push({
-    query: { path: parts.join('/') }
-  });
+  currentPath.value = parts.join('/');
 }
 
 function getIcon(entry: FileEntry): string {

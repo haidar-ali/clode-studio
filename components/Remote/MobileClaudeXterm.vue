@@ -148,6 +148,10 @@ const claudeSessions = ref(new Map<string, ClaudeSession>());
 const terminalRefs = ref<Record<string, any>>({});
 const chatInput = ref('');
 
+// Move these inside the component to ensure they're fresh on each mount
+const continuousRefreshIntervals = new Map<string, NodeJS.Timer>();
+const lastInputTime = new Map<string, number>();
+
 // Auto-refresh timeout (per session)
 const refreshTimeouts = new Map<string, NodeJS.Timeout>();
 
@@ -313,12 +317,82 @@ onMounted(async () => {
   const setupInstanceUpdateListener = () => {
     const socket = (services.value as any)?.getSocket?.() || (services.value as any)?.__socket;
     if (socket) {
+      // Remove any existing listener first to avoid duplicates
+      socket.off('claude:instances:updated');
+      
       socket.on('claude:instances:updated', async () => {
         console.log('[MobileClaude] Claude instances updated event received');
+        // Add a small delay to ensure backend state is updated
         setTimeout(async () => {
           await claudeStore.reloadInstances();
+          // Force reload all instances and their terminal sessions
           await loadClaudeInstances();
-        }, 100);
+          
+          // If we have an active instance that's now connected, re-setup its handlers
+          if (activeInstance.value && activeInstance.value.status === 'connected') {
+            const session = claudeSessions.value.get(activeInstance.value.id);
+            if (session && services.value) {
+              // Re-setup terminal input handler when instance becomes connected
+              // Dispose of existing data handler if it exists
+              if ((session as any).dataHandler) {
+                (session as any).dataHandler.dispose();
+              }
+              
+              (session as any).dataHandler = session.terminal.onData((data: string) => {
+                session.lastUserInputTime = Date.now();
+                if (services.value && activeInstance.value.status === 'connected') {
+                  console.log('[MobileClaude] Sending input after update:', data.charCodeAt(0));
+                  services.value.claude.send(activeInstance.value.id, data);
+                  
+                  // Only start refresh for actual character input, not control sequences
+                  if (data && data.length > 0 && data.charCodeAt(0) >= 32) {
+                    // Start continuous refresh for immediate feedback
+                    //startContinuousRefresh(activeInstance.value.id);
+                  }
+                }
+              });
+              
+              // Ensure output handler is set up
+              if (!session.outputHandler) {
+                session.outputHandler = services.value.claude.onOutput(activeInstance.value.id, (data: string | any) => {
+                  if (session.terminal) {
+                    session.lastDataTime = Date.now();
+                    session.lastOutputTime = Date.now();
+                    
+                    if (data.includes('\x1b[2J') || data.includes('\x1b[H')) {
+                      session.terminal.clear();
+                    }
+                    
+                    session.terminal.write(data);
+                    startRefreshWithDebounce(activeInstance.value.id);
+                    // Don't schedule auto-refresh here - continuous refresh handles it better
+                  }
+                });
+              }
+              
+              if (!session.spawned) {
+                try {
+                  const result = await services.value.claude.spawn(
+                    activeInstance.value.id,
+                    activeInstance.value.workingDirectory,
+                    activeInstance.value.name
+                  );
+                  session.spawned = true;
+                  
+                  // Get the current buffer to show existing content
+                  const buffer = await services.value.claude.getClaudeBuffer(activeInstance.value.id);
+                  if (buffer) {
+                    session.terminal.clear();
+                    restoreSerializedBuffer(session.terminal, buffer);
+                    session.terminal.scrollToBottom();
+                  }
+                } catch (error) {
+                  console.error('[MobileClaude] Failed to setup instance after update:', error);
+                }
+              }
+            }
+          }
+        }, 200);
       });
       return true;
     }
@@ -373,6 +447,9 @@ async function loadClaudeInstances() {
         if (session && services.value) {
          
           try {
+            // Re-enable terminal input in case it was disabled
+            session.terminal.options.disableStdin = false;
+            
             // Don't set up output handler again - it's already set up in initializeClaudeSession
             // Just ensure spawning if needed
             if (!session.spawned) {
@@ -450,8 +527,9 @@ async function initializeClaudeSession(instance: any) {
     fontFamily: '"SF Mono", Monaco, "Cascadia Code", monospace',
     fontSize: 14,
     lineHeight: 1.2,
-    cursorBlink: true,
-    cursorStyle: 'block',
+    cursorBlink: false, // Disable blinking
+    cursorStyle: 'block', // Keep block style but we'll hide it via CSS
+    cursorInactiveStyle: 'none', // Hide cursor when inactive
     scrollback: 10000,
     convertEol: true, // Match desktop - handles \r\n and \r properly
     disableStdin: false,
@@ -497,12 +575,19 @@ async function initializeClaudeSession(instance: any) {
   });
   
   // Handle terminal input
-  terminal.onData((data: string) => {
+  (session as any).dataHandler = terminal.onData((data: string) => {
     // Track user input time
     session.lastUserInputTime = Date.now();
     
     if (services.value && instance.status === 'connected') {
       services.value.claude.send(instance.id, data);
+      
+      // Only start refresh for actual character input, not control sequences
+      if (data && data.length > 0 && data.charCodeAt(0) >= 32) {
+        // Start continuous refresh for immediate feedback
+        // The function handles deduplication internally
+        //startContinuousRefresh(instance.id);
+      }
     }
   });
   
@@ -530,9 +615,8 @@ async function initializeClaudeSession(instance: any) {
         
         // Write data directly to terminal
         terminal.write(data);
-        
-        // Schedule auto-refresh with debouncing
-        scheduleAutoRefresh(instance.id);
+        startRefreshWithDebounce(instance.id);
+        // Don't schedule auto-refresh here - continuous refresh handles it better
         
         // Handle prompt detection for auto-scroll
         const hasPromptIndicators = data.includes('Do you want to') ||
@@ -747,6 +831,78 @@ async function startClaude(instanceId: string) {
     
     instance.status = 'connected';
     instance.pid = result.pid || -1;
+    session.spawned = true; // Mark as spawned
+    
+    // IMPORTANT: Set up output handler if not already set up
+    if (!session.outputHandler) {
+      session.outputHandler = services.value.claude.onOutput(instance.id, (data: string | any) => {
+        if (terminal) {
+          const currentTime = Date.now();
+          const timeSinceLastData = currentTime - session.lastDataTime;
+          session.lastDataTime = currentTime;
+          session.lastOutputTime = currentTime;
+          
+          // Check for clear screen sequences
+          if (data.includes('\x1b[2J') || data.includes('\x1b[H')) {
+            terminal.clear();
+          }
+          
+          // Write data directly to terminal
+          terminal.write(data);
+          startRefreshWithDebounce(instance.id);
+          // Don't schedule auto-refresh here - continuous refresh handles it better
+          
+          // Handle prompt detection for auto-scroll
+          const hasPromptIndicators = data.includes('Do you want to') ||
+                                     data.includes('❯') ||
+                                     data.includes('Yes, and don\'t ask again') ||
+                                     data.includes('No, and tell Claude');
+          
+          const hasBoxDrawing = data.includes('╭') || data.includes('╰') ||
+                               (data.includes('│') && data.includes('─'));
+          
+          if (hasPromptIndicators || (hasBoxDrawing && timeSinceLastData > 100)) {
+            session.pendingPromptScroll = true;
+          }
+          
+          if (session.pendingPromptScroll && (data.includes('╰') || data.includes('❯'))) {
+            setTimeout(() => {
+              terminal.scrollToBottom();
+              session.pendingPromptScroll = false;
+            }, 100);
+          } else if (!session.pendingPromptScroll) {
+            autoScrollIfNeeded(session);
+          }
+        }
+      });
+    }
+    
+    // IMPORTANT: Re-setup terminal input handler to ensure it works
+    // Dispose of existing data handler if it exists
+    if ((session as any).dataHandler) {
+      (session as any).dataHandler.dispose();
+    }
+    
+    // Set up fresh input handler
+    (session as any).dataHandler = terminal.onData((data: string) => {
+      // Track user input time
+      session.lastUserInputTime = Date.now();
+      
+      if (services.value && instance.status === 'connected') {
+        console.log('[MobileClaude] Sending input to Claude:', data.charCodeAt(0));
+        // Send to Claude
+        services.value.claude.send(instance.id, data);
+        
+        // Only start refresh for actual character input, not control sequences
+        if (data && data.length > 0 && data.charCodeAt(0) >= 32) {
+          // Start continuous auto-refresh to show the echo and response
+          //startContinuousRefresh(instance.id);
+        }
+      }
+    });
+    
+    // Enable terminal input
+    terminal.options.disableStdin = false;
     
     if ((result as any).alreadyRunning) {
       terminal.write(`\x1b[32mConnected to existing Claude instance on desktop\x1b[0m\r\n`);
@@ -782,6 +938,20 @@ async function startClaude(instanceId: string) {
     } else if (result.pid === -1) {
       terminal.write(`\x1b[33mStarting Claude on desktop...\x1b[0m\r\n`);
       terminal.write(`\x1b[90mPlease wait a moment for Claude to initialize\x1b[0m\r\n`);
+      
+      // Wait a bit then try to get the buffer to see initial output
+      setTimeout(async () => {
+        try {
+          const buffer = await services.value.claude.getClaudeBuffer(instance.id);
+          if (buffer) {
+            terminal.clear();
+            restoreSerializedBuffer(terminal, buffer);
+            terminal.scrollToBottom();
+          }
+        } catch (e) {
+          console.error('[MobileClaude] Failed to get initial buffer:', e);
+        }
+      }, 1000);
     } else {
       terminal.write(`\x1b[32mClaude started successfully!\x1b[0m\r\n`);
       terminal.write(`\x1b[90mInstance: ${instance.name} (${instance.id})\x1b[0m\r\n`);
@@ -807,6 +977,14 @@ async function stopClaude(instanceId: string) {
   const { terminal } = session;
   
   terminal.write('\r\n\x1b[33mStopping Claude...\x1b[0m\r\n');
+  
+  // Clear any running continuous refresh for this instance
+  const existingInterval = continuousRefreshIntervals.get(instanceId);
+  if (existingInterval) {
+    console.log('[MobileClaude] Clearing continuous refresh for stopped instance', instanceId);
+    clearInterval(existingInterval);
+    continuousRefreshIntervals.delete(instanceId);
+  }
   
   try {
     await services.value.claude.stop(instanceId);
@@ -841,6 +1019,7 @@ async function removeInstance(instanceId: string) {
       if (session.outputHandler) session.outputHandler();
       if (session.errorHandler) session.errorHandler();
       if (session.exitHandler) session.exitHandler();
+      if ((session as any).dataHandler) (session as any).dataHandler.dispose();
       session.terminal.dispose();
       claudeSessions.value.delete(instanceId);
       claudeSessions.value = new Map(claudeSessions.value);
@@ -895,7 +1074,7 @@ function scheduleAutoRefresh(instanceId: string) {
     clearTimeout(existingTimeout);
   }
   
-  // Set new timeout -
+  // Set new timeout - reduced from 80ms to 50ms for better responsiveness
   const timeout = setTimeout(async () => {
    
     
@@ -906,14 +1085,6 @@ function scheduleAutoRefresh(instanceId: string) {
     }
     
     try {
-      /*// Skip sync if user typed in the last 500ms to avoid interrupting typing
-      const timeSinceLastInput = Date.now() - (session.lastUserInputTime || 0);
-      if (timeSinceLastInput < 500) {
-        // Reschedule for later
-        scheduleAutoRefresh(instanceId);
-        return;
-      }*/
-      
       // Get the latest buffer from backend
       const buffer = await services.value.claude.getClaudeBuffer(instanceId);
       
@@ -935,11 +1106,7 @@ function scheduleAutoRefresh(instanceId: string) {
           restoreSerializedBuffer(session.terminal, buffer);
           
           // Restore scroll position
-          
-            session.terminal.scrollToBottom();
-          
-          
-         
+          session.terminal.scrollToBottom();
         }
       }
     } catch (error) {
@@ -948,10 +1115,112 @@ function scheduleAutoRefresh(instanceId: string) {
     
     // Clean up
     refreshTimeouts.delete(instanceId);
-  }, 80);
+  }, 50);
   
   // Store the timeout
   refreshTimeouts.set(instanceId, timeout);
+}
+
+// Debounce timers for refresh
+const debounceTimers = new Map<string, NodeJS.Timeout>();
+
+// Start refresh with debounce - waits for output to stop before refreshing
+function startRefreshWithDebounce(instanceId: string) {
+  // Clear any existing debounce timer for this instance
+  const existingTimer = debounceTimers.get(instanceId);
+  if (existingTimer) {
+    clearTimeout(existingTimer);
+  }
+  
+  // Set a new debounce timer
+  const timer = setTimeout(async () => {
+    // Remove the timer from the map
+    debounceTimers.delete(instanceId);
+    
+    // Perform a single buffer refresh
+    if (services.value && services.value.claude) {
+      try {
+        const buffer = await services.value.claude.getClaudeBuffer(instanceId);
+        if (buffer) {
+          const instance = claudeStore.instances.get(instanceId);
+          if (instance && instance.status === 'connected') {
+            const session = claudeSessions.value.get(instanceId);
+            if (session?.terminal) {
+              const terminal = session.terminal;
+              // Check if buffer actually changed
+              const bufferHash = buffer.length + '-' + buffer.slice(0, 100) + buffer.slice(-100);
+              if (bufferHash !== session.lastBufferHash) {
+                session.lastBufferHash = bufferHash;
+                terminal.clear();
+                restoreSerializedBuffer(terminal, buffer);
+                terminal.scrollToBottom();
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error('[MobileClaude] Failed to refresh buffer after debounce:', error);
+      }
+    }
+  }, 1000);
+  
+  debounceTimers.set(instanceId, timer);
+}
+
+// Start continuous refresh for a few seconds after input
+function startContinuousRefresh(instanceId: string) {
+  // Track when we last got input
+  const now = Date.now();
+  lastInputTime.set(instanceId, now);
+  
+  // Clear any existing interval first
+  const existingInterval = continuousRefreshIntervals.get(instanceId);
+  if (existingInterval) {
+    console.log('[MobileClaude] Clearing existing refresh interval for', instanceId);
+    clearInterval(existingInterval);
+    continuousRefreshIntervals.delete(instanceId);
+  }
+  
+  console.log('[MobileClaude] Starting continuous refresh for', instanceId);
+  
+  let refreshCount = 0;
+  const maxRefreshes = 1; // 1 second total (10 * 100ms)
+  const inputTimeStamp = now; // Capture the timestamp for this specific input
+  
+  const interval = setInterval(async () => {
+    refreshCount++;
+    
+    // Stop if we've hit max refreshes or if there's been new input
+    if (refreshCount > maxRefreshes || lastInputTime.get(instanceId) !== inputTimeStamp) {
+      clearInterval(interval);
+      continuousRefreshIntervals.delete(instanceId);
+      return;
+    }
+    
+    const session = claudeSessions.value.get(instanceId);
+    if (!session || !session.terminal || !services.value) {
+      clearInterval(interval);
+      continuousRefreshIntervals.delete(instanceId);
+      return;
+    }
+    
+    try {
+      const buffer = await services.value.claude.getClaudeBuffer(instanceId);
+      if (buffer) {
+        const bufferHash = buffer.length + '-' + buffer.slice(0, 100) + buffer.slice(-100);
+        if (bufferHash !== session.lastBufferHash) {
+          session.lastBufferHash = bufferHash;
+          session.terminal.clear();
+          restoreSerializedBuffer(session.terminal, buffer);
+          session.terminal.scrollToBottom();
+        }
+      }
+    } catch (error) {
+      // Ignore errors during continuous refresh
+    }
+  }, 1000); // Increased from 50ms to 100ms to reduce frequency
+  
+  continuousRefreshIntervals.set(instanceId, interval);
 }
 
 // Cleanup function for refresh timeouts
@@ -1009,16 +1278,39 @@ watch(activeInstanceId, (newId, oldId) => {
 
 // Cleanup
 onUnmounted(() => {
+  console.log('[MobileClaude] Component unmounting, cleaning up intervals');
+  
   // Clear all auto-refresh timeouts
   clearAutoRefresh();
+  
+  // Clear all continuous refresh intervals - be extra thorough
+  console.log('[MobileClaude] Clearing', continuousRefreshIntervals.size, 'continuous refresh intervals');
+  for (const [instanceId, interval] of continuousRefreshIntervals.entries()) {
+    console.log('[MobileClaude] Clearing interval for instance', instanceId);
+    clearInterval(interval);
+  }
+  continuousRefreshIntervals.clear();
+  
+  // Clear all debounce timers
+  for (const [instanceId, timer] of debounceTimers.entries()) {
+    console.log('[MobileClaude] Clearing debounce timer for instance', instanceId);
+    clearTimeout(timer);
+  }
+  debounceTimers.clear();
+  
+  // Also clear the lastInputTime map
+  lastInputTime.clear();
   
   // Clean up sessions
   for (const session of claudeSessions.value.values()) {
     if (session.outputHandler) session.outputHandler();
     if (session.errorHandler) session.errorHandler();
     if (session.exitHandler) session.exitHandler();
+    if ((session as any).dataHandler) (session as any).dataHandler.dispose();
     session.terminal.dispose();
   }
+  
+  claudeSessions.value.clear();
   
   resizeObserver.disconnect();
 });
@@ -1411,14 +1703,19 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
-/* Fix cursor issues - hide outline cursor and prevent duplication */
+/* Fix cursor issues - hide ALL cursors since we use chat input */
 :deep(.xterm-cursor-outline) {
   display: none !important;
 }
 
-/* Ensure cursor layer doesn't overflow or duplicate */
+/* Hide the main cursor completely */
+:deep(.xterm-cursor) {
+  display: none !important;
+}
+
+/* Hide the entire cursor layer */
 :deep(.xterm-cursor-layer) {
-  overflow: hidden !important;
+  display: none !important;
 }
 
 /* Hide any cursor that appears outside the viewport */
