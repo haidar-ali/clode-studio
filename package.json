@@ -11,7 +11,9 @@
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare && npx electron-rebuild && node scripts/download-ripgrep.js",
     "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
-    "electron:build": "npm run generate && electron-builder",
+    "electron:preview": "concurrently \"nuxt preview\" \"wait-on http://localhost:3000 && electron .\"",
+    "electron:build": "nuxt build && npm run electron:preview",
+    "electron:remote": "node scripts/check-build-needed.js && npm run electron:preview || npm run electron:build",
     "electron:compile": "tsc -p electron/tsconfig.json && tsc -p electron/tsconfig.preload.json",
     "dist": "npm run generate && npm run electron:compile && electron-builder"
   },

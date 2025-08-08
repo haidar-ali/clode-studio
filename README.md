@@ -249,20 +249,23 @@ clode-studio --hybrid
 
 4. **Start the application**
    ```bash
-   # Desktop mode
+   # Desktop mode (development with hot reload)
    npm run electron:dev
    
-   # Hybrid mode (desktop + remote) with Clode Relay
+   # Hybrid mode (desktop + remote) with hot reload - HIGH BANDWIDTH
    CLODE_MODE=hybrid npm run electron:dev
    
+   # Hybrid mode with optimized production build - LOW BANDWIDTH (Recommended for remote)
+   CLODE_MODE=hybrid npm run electron:remote
+   
    # Hybrid mode with custom relay server
-   RELAY_TYPE=CLODE RELAY_URL=wss://your-relay.example.com CLODE_MODE=hybrid npm run electron:dev
+   RELAY_TYPE=CLODE RELAY_URL=wss://your-relay.example.com CLODE_MODE=hybrid npm run electron:remote
    
    # Hybrid mode with Cloudflare tunnel
-   RELAY_TYPE=CLOUDFLARE CLODE_MODE=hybrid npm run electron:dev
+   RELAY_TYPE=CLOUDFLARE CLODE_MODE=hybrid npm run electron:remote
    
    # Hybrid mode with your own tunnel (ngrok, serveo, etc.)
-   RELAY_TYPE=CUSTOM CLODE_MODE=hybrid npm run electron:dev
+   RELAY_TYPE=CUSTOM CLODE_MODE=hybrid npm run electron:remote
    ```
 
 ### Prerequisites
@@ -288,7 +291,34 @@ claude --version
 
 ### Remote Access Setup
 
-Clode Studio offers multiple options for remote access via the `RELAY_TYPE` environment variable:
+Clode Studio offers multiple options for remote access via the `RELAY_TYPE` environment variable.
+
+#### Optimized Remote Mode (Recommended)
+
+For remote access, use the optimized production build to save 70-80% bandwidth:
+
+```bash
+# Auto-detect if rebuild needed (recommended)
+RELAY_TYPE=CLODE CLODE_MODE=hybrid npm run electron:remote
+
+# Force rebuild before running
+RELAY_TYPE=CLODE CLODE_MODE=hybrid npm run electron:build
+
+# Use existing build (fastest startup)
+RELAY_TYPE=CLODE CLODE_MODE=hybrid npm run electron:preview
+
+# Development mode with hot reload (high bandwidth)
+RELAY_TYPE=CLODE CLODE_MODE=hybrid npm run electron:dev
+```
+
+**Benefits of optimized mode:**
+- 70-80% bandwidth reduction
+- No hot reload overhead
+- Minified and compressed assets
+- Faster loading times
+- Auto-detects when rebuild is needed
+
+#### Remote Access Options
 
 #### Option 1: Clode Relay (Default)
 

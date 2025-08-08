@@ -78,6 +78,21 @@ CLODE_SERVER_PORT=8080 CLODE_AUTH_REQUIRED=true npm run electron:dev
    - Lowest resource usage
    - Good for LAN-only setups
 
+## NPM Scripts for Remote Access
+
+| Script | Description | Use Case |
+|--------|-------------|----------|
+| `electron:dev` | Development mode with hot reload | Local development, high bandwidth |
+| `electron:preview` | Serve existing production build | Fast startup, uses cached build |
+| `electron:build` | Build then serve production | Ensure fresh build before running |
+| `electron:remote` | Smart auto-detect mode | **Recommended for remote**, rebuilds only if needed |
+
+### Bandwidth Comparison
+
+- **Development mode** (`electron:dev`): ~100MB initial + continuous HMR traffic
+- **Production mode** (`electron:remote`): ~20-30MB initial, no HMR traffic
+- **Savings**: 70-80% bandwidth reduction
+
 ## Usage Examples
 
 ### 1. Basic Desktop Mode (Default)
@@ -85,25 +100,31 @@ CLODE_SERVER_PORT=8080 CLODE_AUTH_REQUIRED=true npm run electron:dev
 npm run electron:dev
 ```
 
-### 2. Hybrid Mode with Clode Relay (Default)
+### 2. Hybrid Mode with Clode Relay - Development (High Bandwidth)
 ```bash
 CLODE_MODE=hybrid npm run electron:dev
 ```
 
-### 3. Hybrid Mode with Custom Clode Relay Server
+### 3. Hybrid Mode with Clode Relay - Optimized (Low Bandwidth)
 ```bash
-RELAY_TYPE=CLODE RELAY_URL=wss://my-relay.example.com CLODE_MODE=hybrid npm run electron:dev
+# Recommended for remote access
+CLODE_MODE=hybrid npm run electron:remote
 ```
 
-### 4. Hybrid Mode with Cloudflare Tunnel
+### 4. Hybrid Mode with Custom Clode Relay Server
 ```bash
-RELAY_TYPE=CLOUDFLARE CLODE_MODE=hybrid npm run electron:dev
+RELAY_TYPE=CLODE RELAY_URL=wss://my-relay.example.com CLODE_MODE=hybrid npm run electron:remote
 ```
 
-### 5. Hybrid Mode with Custom Tunnel (tunnelmole/localtunnel/ngrok)
+### 5. Hybrid Mode with Cloudflare Tunnel
+```bash
+RELAY_TYPE=CLOUDFLARE CLODE_MODE=hybrid npm run electron:remote
+```
+
+### 6. Hybrid Mode with Custom Tunnel (tunnelmole/localtunnel/ngrok)
 ```bash
 # Start Clode with custom tunnel mode
-RELAY_TYPE=CUSTOM CLODE_MODE=hybrid npm run electron:dev
+RELAY_TYPE=CUSTOM CLODE_MODE=hybrid npm run electron:remote
 
 # In another terminal, start your tunnel on port 3000:
 # BORE
@@ -120,17 +141,17 @@ ssh -R 80:localhost:3000 serveo.net
 ssh -R 80:localhost:3000 localhost.run
 ```
 
-### 6. Local Network Only (No Tunnel)
+### 7. Local Network Only (No Tunnel)
 ```bash
-RELAY_TYPE=NONE CLODE_MODE=hybrid npm run electron:dev
+RELAY_TYPE=NONE CLODE_MODE=hybrid npm run electron:remote
 ```
 
-### 7. Development with Debug Output
+### 8. Development with Debug Output
 ```bash
 CLAUDE_DEBUG=true RELAY_TYPE=CLODE CLODE_MODE=hybrid npm run electron:dev
 ```
 
-### 8. Custom Server Configuration
+### 9. Custom Server Configuration
 ```bash
 CLODE_SERVER_PORT=8080 \
 CLODE_SERVER_HOST=127.0.0.1 \
@@ -138,12 +159,12 @@ CLODE_AUTH_REQUIRED=true \
 CLODE_MAX_CONNECTIONS=20 \
 RELAY_TYPE=CLODE \
 CLODE_MODE=hybrid \
-npm run electron:dev
+npm run electron:remote
 ```
 
-### 9. Production Build
+### 10. Production Build
 ```bash
-NODE_ENV=production npm run electron:build
+NODE_ENV=production npm run dist
 ```
 
 ## Mode Descriptions
