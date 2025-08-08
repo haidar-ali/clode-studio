@@ -1,0 +1,78 @@
+/* Mobile-specific styles for Remote Access */
+
+/* Touch-friendly targets */
+.phone .clickable,
+.phone button,
+.phone a,
+.tablet .clickable,
+.tablet button,
+.tablet a {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+/* Better touch scrolling */
+.phone *,
+.tablet * {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Prevent text selection on UI elements */
+.phone .mobile-nav,
+.phone .mobile-header,
+.tablet .mobile-nav,
+.tablet .mobile-header {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Responsive font sizes */
+.phone {
+  font-size: 14px;
+}
+
+.tablet {
+  font-size: 15px;
+}
+
+/* Mobile-optimized spacing */
+.phone .panel-content {
+  padding: 12px;
+}
+
+.tablet .panel-content {
+  padding: 16px;
+}
+
+/* Prevent iOS zoom on inputs */
+.phone input,
+.phone textarea,
+.phone select,
+.tablet input,
+.tablet textarea,
+.tablet select {
+  font-size: 16px;
+}
+
+/* Better mobile modals */
+@media (max-width: 768px) {
+  .modal-content {
+    margin: 10px;
+    max-height: calc(100vh - 20px);
+  }
+}
+
+/* Landscape adjustments */
+@media (max-height: 500px) and (orientation: landscape) {
+  .mobile-nav {
+    padding: 4px 0;
+  }
+  
+  .mobile-nav button {
+    padding: 4px;
+  }
+  
+  .mobile-header {
+    padding: 8px 16px;
+  }
+}

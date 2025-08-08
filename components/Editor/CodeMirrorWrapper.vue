@@ -197,9 +197,17 @@ const createEditorExtensions = (filename?: string): any[] => {
         // Set loading state
         autocompleteStore.setGhostTextLoading(true);
         
-        // Check if ghost text is enabled in settings
-        // Since we don't have the autocomplete store here, we'll let the ghost text service handle the check
-        const result = await window.electronAPI.autocomplete.getGhostText({ prefix, suffix });
+        let result;
+        
+        // Check for desktop mode first
+        if (window.electronAPI?.autocomplete?.getGhostText) {
+          result = await window.electronAPI.autocomplete.getGhostText({ prefix, suffix });
+        } else {
+          // Remote mode - use Socket.IO
+          const { useRemoteAI } = await import('~/composables/useRemoteAI');
+          const { getGhostText } = useRemoteAI();
+          result = await getGhostText({ prefix, suffix });
+        }
         
         // Clear loading state
         autocompleteStore.setGhostTextLoading(false);

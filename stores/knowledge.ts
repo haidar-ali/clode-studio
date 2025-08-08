@@ -5,6 +5,7 @@ import lunr from 'lunr';
 
 export interface KnowledgeEntry {
   id: string;
+  filename?: string; // Actual filename on disk
   title: string;
   content: string;
   markdown: string; // Full markdown with frontmatter
@@ -112,7 +113,51 @@ export const useKnowledgeStore = defineStore('knowledge', {
         this.isLoading = true;
         this.error = null;
 
+        // Check if we're in remote mode
+        const isRemoteMode = !window.electronAPI;
+        
+        if (isRemoteMode) {
+          // Use API to fetch knowledge entries
+          try {
+            const response = await fetch('/api/knowledge/list');
+            const data = await response.json();
+            
+            if (data.entries && Array.isArray(data.entries)) {
+              this.entries = data.entries.map((entry: any) => ({
+                ...entry,
+                metadata: {
+                  ...entry.metadata,
+                  created: new Date(entry.metadata.created),
+                  updated: new Date(entry.metadata.updated)
+                }
+              }));
+              
+              // Update category counts
+              this.updateCategoryCounts();
+              
+              // Build search index
+              await this.buildSearchIndex();
+            } else {
+              this.entries = [];
+            }
+            
+            return;
+          } catch (error) {
+            console.error('Failed to fetch knowledge entries via API:', error);
+            this.entries = [];
+            return;
+          }
+        }
+
+        // Desktop mode - use electron API
         const knowledgePath = `${this.workspacePath}/.claude/knowledge`;
+        
+        // Check if we have file system access
+        if (!window.electronAPI?.fs) {
+          // Knowledge entries are desktop-only for now
+          this.entries = [];
+          return;
+        }
         
         // Check if knowledge directory exists
         const exists = await window.electronAPI.fs.exists(knowledgePath);
@@ -152,6 +197,7 @@ export const useKnowledgeStore = defineStore('knowledge', {
           
           const entry: KnowledgeEntry = {
             id: data.id || file.name.replace('.md', ''),
+            filename: file.name, // Store actual filename
             title: data.title || file.name.replace('.md', ''),
             content: markdownContent,
             markdown: content,
@@ -192,6 +238,35 @@ export const useKnowledgeStore = defineStore('knowledge', {
       priority?: 'high' | 'medium' | 'low';
     }) {
       try {
+        const isRemoteMode = !window.electronAPI;
+        
+        if (isRemoteMode) {
+          // Use API to create entry
+          const response = await fetch('/api/knowledge/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+          });
+          
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.statusMessage || 'Failed to create entry');
+          }
+          
+          const entry = await response.json();
+          
+          // Convert dates
+          entry.metadata.created = new Date(entry.metadata.created);
+          entry.metadata.updated = new Date(entry.metadata.updated);
+          
+          this.entries.push(entry);
+          this.updateCategoryCounts();
+          await this.buildSearchIndex();
+          
+          return entry;
+        }
+        
+        // Desktop mode - existing logic
         const id = uuidv4();
         const now = new Date().toISOString();
         
@@ -222,6 +297,7 @@ export const useKnowledgeStore = defineStore('knowledge', {
         // Add to store
         const entry: KnowledgeEntry = {
           id,
+          filename: `${id}.md`, // Store the filename
           title: data.title,
           content: data.content,
           markdown,
@@ -230,7 +306,9 @@ export const useKnowledgeStore = defineStore('knowledge', {
             category: data.category,
             created: new Date(now),
             updated: new Date(now),
-            priority: data.priority
+            priority: data.priority,
+            relatedFiles: [],
+            aliases: []
           },
           frontmatter
         };
@@ -257,6 +335,35 @@ export const useKnowledgeStore = defineStore('knowledge', {
         const entryIndex = this.entries.findIndex(e => e.id === id);
         if (entryIndex === -1) throw new Error('Entry not found');
         
+        const isRemoteMode = !window.electronAPI;
+        
+        if (isRemoteMode) {
+          // Use API to update entry
+          const response = await fetch('/api/knowledge/update', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, ...updates })
+          });
+          
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.statusMessage || 'Failed to update entry');
+          }
+          
+          const updatedEntry = await response.json();
+          
+          // Convert dates
+          updatedEntry.metadata.created = new Date(updatedEntry.metadata.created);
+          updatedEntry.metadata.updated = new Date(updatedEntry.metadata.updated);
+          
+          this.entries[entryIndex] = updatedEntry;
+          this.updateCategoryCounts();
+          await this.buildSearchIndex();
+          
+          return updatedEntry;
+        }
+        
+        // Desktop mode - existing logic
         const entry = this.entries[entryIndex];
         const now = new Date().toISOString();
         
@@ -321,6 +428,32 @@ export const useKnowledgeStore = defineStore('knowledge', {
         const index = this.entries.findIndex(e => e.id === id);
         if (index === -1) throw new Error('Entry not found');
         
+        const isRemoteMode = !window.electronAPI;
+        
+        if (isRemoteMode) {
+          // Use API to delete entry
+          const response = await fetch(`/api/knowledge/delete?id=${id}`, {
+            method: 'DELETE'
+          });
+          
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.statusMessage || 'Failed to delete entry');
+          }
+          
+          // Remove from store
+          this.entries.splice(index, 1);
+          
+          if (this.selectedEntryId === id) {
+            this.selectedEntryId = null;
+          }
+          
+          this.updateCategoryCounts();
+          await this.buildSearchIndex();
+          return;
+        }
+        
+        // Desktop mode - existing logic
         // Delete file
         const filePath = `${this.workspacePath}/.claude/knowledge/${id}.md`;
         const deleteResult = await window.electronAPI.fs.delete(filePath);

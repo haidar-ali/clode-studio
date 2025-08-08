@@ -1,0 +1,26 @@
+{
+  "// This is an example Claude Desktop configuration for using Clode Studio remote features": "",
+  "// Copy the mcpServers section to your Claude Desktop config": "",
+  "// On macOS: ~/Library/Application Support/Claude/claude_desktop_config.json": "",
+  "// On Windows: %APPDATA%/Claude/claude_desktop_config.json": "",
+  
+  "mcpServers": {
+    "clode-remote": {
+      "command": "node",
+      "args": ["PATH_TO_CLODE_STUDIO/mcp-servers/clode-remote/index.js"],
+      "env": {
+        "// Optional: Set default server URL": "",
+        "CLODE_REMOTE_URL": "http://localhost:3789",
+        
+        "// Optional: Set authentication token": "",
+        "CLODE_REMOTE_TOKEN": "your-auth-token-here"
+      }
+    },
+    
+    "// You can also include other MCP servers": "",
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/Users/username"]
+    }
+  }
+}

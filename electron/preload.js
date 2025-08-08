@@ -2,6 +2,67 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const electron_1 = require("electron");
 const electronAPI = {
+    // General IPC send for specific allowed channels
+    send: (channel, data) => {
+        const allowedChannels = [
+            'forward-terminal-data',
+            'forward-claude-output',
+            'forward-claude-response-complete',
+            'claude-instances-updated',
+            'snapshots-list-response',
+            'snapshots-capture-response',
+            'snapshots-restore-response',
+            'snapshots-delete-response',
+            'snapshots-update-response',
+            'snapshots-content-response',
+            'snapshots-getDiff-response',
+            'snapshots-scanProjectFiles-response',
+            'worktree-list-response',
+            'worktree-sessions-response',
+            'worktree-switch-response',
+            'worktree-remove-response',
+            'worktree-lock-response',
+            'worktree-compare-response',
+            'worktree-createSession-response',
+            'worktree-deleteSession-response'
+        ];
+        if (allowedChannels.includes(channel)) {
+            electron_1.ipcRenderer.send(channel, data);
+        }
+    },
+    // Expose ipcRenderer for remote snapshot handlers
+    ipcRenderer: {
+        on: (channel, listener) => {
+            const allowedChannels = [
+                'remote-snapshot-list',
+                'remote-snapshot-capture',
+                'remote-snapshot-restore',
+                'remote-snapshot-delete',
+                'remote-snapshot-update',
+                'remote-snapshot-content',
+                'remote-snapshot-getDiff',
+                'remote-snapshot-scanProjectFiles',
+                'remote-worktree-list',
+                'remote-worktree-sessions',
+                'remote-worktree-switch',
+                'remote-worktree-remove',
+                'remote-worktree-lock',
+                'remote-worktree-compare',
+                'remote-worktree-createSession',
+                'remote-worktree-deleteSession',
+                'tunnel:status-updated',
+                'relay:connected',
+                'relay:reconnected',
+                'relay:disconnected'
+            ];
+            if (allowedChannels.includes(channel)) {
+                electron_1.ipcRenderer.on(channel, listener);
+            }
+        },
+        removeListener: (channel, listener) => {
+            electron_1.ipcRenderer.removeListener(channel, listener);
+        }
+    },
     claude: {
         start: (instanceId, workingDirectory, instanceName, runConfig) => electron_1.ipcRenderer.invoke('claude:start', instanceId, workingDirectory, instanceName, runConfig),
         detectInstallation: () => electron_1.ipcRenderer.invoke('claude:detectInstallation'),
@@ -40,6 +101,10 @@ const electronAPI = {
         onTodosUpdated: (callback) => {
             electron_1.ipcRenderer.on('claude:todos:updated', (_, todos) => callback(todos));
         },
+        onInstancesUpdated: (callback) => {
+            electron_1.ipcRenderer.on('claude:instances:updated', () => callback());
+        },
+        checkForwarding: (instanceId) => electron_1.ipcRenderer.invoke('check-claude-forwarding', instanceId),
         // Hook management
         getHooks: () => electron_1.ipcRenderer.invoke('claude:getHooks'),
         addHook: (hook) => electron_1.ipcRenderer.invoke('claude:addHook', hook),
@@ -197,6 +262,36 @@ const electronAPI = {
         setPath: (workspacePath) => electron_1.ipcRenderer.invoke('workspace:setPath', workspacePath),
         getCurrentPath: () => electron_1.ipcRenderer.invoke('workspace:getCurrentPath')
     },
+    // App operations
+    app: {
+        getMode: () => electron_1.ipcRenderer.invoke('app:getMode'),
+        getStatus: () => electron_1.ipcRenderer.invoke('app:status'),
+        getPlatform: () => process.platform,
+        getVersion: () => process.versions.electron
+    },
+    // Remote server operations
+    remote: {
+        storeToken: (args) => electron_1.ipcRenderer.invoke('remote:store-token', args),
+        getConnections: () => electron_1.ipcRenderer.invoke('remote:get-connections'),
+        getActiveTokens: () => electron_1.ipcRenderer.invoke('remote:get-active-tokens'),
+        revokeToken: (token) => electron_1.ipcRenderer.invoke('remote:revoke-token', token),
+        disconnectDevice: (sessionId) => electron_1.ipcRenderer.invoke('remote:disconnect-device', sessionId),
+        loadPersistedToken: () => electron_1.ipcRenderer.invoke('remote:load-persisted-token'),
+        persistToken: (tokenData) => electron_1.ipcRenderer.invoke('remote:persist-token', tokenData)
+    },
+    // Cloudflare tunnel operations
+    tunnel: {
+        getInfo: () => electron_1.ipcRenderer.invoke('tunnel:getInfo'),
+        start: () => electron_1.ipcRenderer.invoke('tunnel:start'),
+        stop: () => electron_1.ipcRenderer.invoke('tunnel:stop')
+    },
+    // Relay client operations
+    relay: {
+        getInfo: () => electron_1.ipcRenderer.invoke('relay:getInfo'),
+        connect: () => electron_1.ipcRenderer.invoke('relay:connect'),
+        disconnect: () => electron_1.ipcRenderer.invoke('relay:disconnect')
+    },
+    // Local database removed - SQLite not actively used
     snapshots: {
         save: (snapshot) => electron_1.ipcRenderer.invoke('snapshots:save', snapshot),
         list: (options) => electron_1.ipcRenderer.invoke('snapshots:list', options),

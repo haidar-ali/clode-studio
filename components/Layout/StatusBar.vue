@@ -31,6 +31,7 @@
     </div> -->
     
     <div class="status-bar-right">
+      <ConnectionStatus @view-logs="$emit('view-logs')" />
       <SnapshotButton />
       <QuickAccessToolbar />
       <span class="status-item" v-if="activeTab">
@@ -49,9 +50,11 @@ import { useLayoutStore } from '~/stores/layout';
 import QuickAccessToolbar from '~/components/Layout/QuickAccessToolbar.vue';
 import SnapshotButton from '~/components/Snapshots/SnapshotButton.vue';
 import AutocompleteStatus from '~/components/Editor/AutocompleteStatus.vue';
+import ConnectionStatus from '~/components/Layout/ConnectionStatus.vue';
 
 const emit = defineEmits<{
   'show-autocomplete-settings': [];
+  'view-logs': [];
 }>();
 
 const editorStore = useEditorStore();

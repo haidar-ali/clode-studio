@@ -1,21 +1,15 @@
 # Project Tasks
 
 *This file is synced with Clode Studio and Claude's native TodoWrite system.*  
-*Last updated: 2025-07-28*
+*Last updated: 2025-08-03*
 
-## Backlog (16)
+## Backlog (31)
 
 - [ ] **Replace remaining alert/confirm dialogs throughout the app**
   - Type: refactor
   - Priority: medium
   - Description: Multiple components still use browser dialogs that need to be replaced with Electron-compatible dialogs
   - Files: Multiple components listed in grep results
-
-- [ ] **Remove old checkpoint system and backends**
-  - Type: cleanup
-  - Priority: low
-  - Description: Clean up deprecated checkpoint code after new system is stable
-  - Files: electron/checkpoint-service.ts, stores/checkpoint-v2.ts, components/Checkpoint/*
 
 - [ ] **Implement Autonomous Multi-File Editing (Agent Mode)**
   - Assignee: Claude
@@ -119,11 +113,6 @@
   - Priority: high
   - Description: Enable viewing two ClaudeTerminalTabs components simultaneously
   - Resources: File: components/Terminal/ClaudeTerminalTabs.vue, Task: LAYOUT-OLD-003
-
-
-
-
-## To Do (16)
 
 - [ ] **Build dual Claude terminal support in right sidebar**
   - ID: LAYOUT-003
@@ -260,17 +249,230 @@
   - Description: Configure electron-builder and create installers for macOS, Windows, and Linux platforms
   - Resources: File: package.json, File: electron-builder.yml (new), File: .github/workflows/build.yml (new)
 
-## In Progress (1)
 
-- [ ] **Build dual Claude terminal support in right sidebar** ⏳
-  - ID: LAYOUT-003
+## To Do (9)
+
+
+- [ ] **Add authentication system**
+  - ID: REMOTE-016
+  - Assignee: Both
+  - Type: feature
+  - Priority: medium
+  - Description: Implement progressive authentication (device tokens for personal use, simple team auth later)
+  - Resources: File: services/auth/auth-service.ts (new), File: services/device-auth.ts (created), Knowledge: Security best practices
+
+- [ ] **Add terminal state preservation UI**
+  - ID: REMOTE-019
   - Assignee: Claude
   - Type: feature
-  - Priority: high
-  - Description: Enable split view in right sidebar to show two ClaudeTerminalTabs instances simultaneously with independent tab groups
-  - Resources: File: components/Layout/RightSidebar.vue, File: components/Terminal/ClaudeTerminalTabs.vue, Task: LAYOUT-002
+  - Priority: low
+  - Description: Add UI indicator for restored terminal sessions (backend already preserves state)
+  - Resources: File: services/terminal/terminal-state.ts (new), Task: REMOTE-010, Task: REMOTE-018
 
-## Completed (72)
+- [ ] **Create workspace collaboration features**
+  - ID: REMOTE-020
+  - Assignee: Claude
+  - Type: feature
+  - Priority: low
+  - Description: Implement presence and shared resources (not real-time collaboration)
+  - Resources: File: services/collaboration/workspace-sharing.ts (new), Task: REMOTE-012, Knowledge: Collaboration model
+
+- [ ] **Add presence indicators**
+  - ID: REMOTE-021
+  - Assignee: Claude
+  - Type: feature
+  - Priority: low
+  - Description: Show which users are working on which files without screen sharing
+  - Resources: File: components/FileExplorer/UserPresence.vue (new), Task: REMOTE-020, File: stores/presence.ts (new)
+
+- [ ] **Implement performance optimizations**
+  - ID: REMOTE-022
+  - Assignee: Claude
+  - Type: feature
+  - Priority: medium
+  - Description: Optimize for speed with smart caching, predictive loading, and delta sync
+  - Resources: File: services/optimization/cache-manager.ts (new), Task: REMOTE-014, Knowledge: Performance best practices
+
+- [ ] **Create deployment configurations**
+  - ID: REMOTE-023
+  - Assignee: Both
+  - Type: documentation
+  - Priority: low
+  - Description: Set up Docker, Kubernetes, and cloud deployment configurations
+  - Resources: File: docker-compose.yml (new), File: k8s/deployment.yaml (new), Task: REMOTE-007
+
+- [ ] **Add comprehensive testing suite**
+  - ID: REMOTE-024
+  - Assignee: Both
+  - Type: feature
+  - Priority: medium
+  - Description: Focus on critical paths: device switching, performance cache, connection recovery
+  - Resources: File: tests/remote-access.spec.ts (new), Task: REMOTE-001 through REMOTE-023
+
+- [ ] **Create Performance Dashboard**
+  - ID: REMOTE-026
+  - Assignee: Claude
+  - Type: feature
+  - Priority: low
+  - Description: Visualize cache effectiveness and connection health metrics
+  - Resources: File: components/Layout/PerformanceDashboard.vue (new), Task: REMOTE-022
+
+
+## In Progress (0)
+
+
+## Completed (92)
+
+- [x] ~~Create service abstraction interfaces~~
+  - ~~ID: REMOTE-001~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Define TypeScript interfaces for all services (File, Claude, Git, MCP, Terminal) to enable provider pattern~~
+  - ~~Resources: File: services/interfaces/*.ts (created), Knowledge: FINAL_REMOTE.md~~
+
+- [x] ~~Implement desktop service provider~~
+  - ~~ID: REMOTE-002~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Wrap existing Electron IPC APIs in service classes without changing current functionality~~
+  - ~~Resources: File: services/providers/DesktopServiceProvider.ts (created), File: services/providers/desktop/*.ts (created), Task: REMOTE-001~~
+
+- [x] ~~Create service factory and mode detection~~
+  - ~~ID: REMOTE-003~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Implement factory pattern to return appropriate service provider based on app mode (desktop/remote/hybrid)~~
+  - ~~Resources: File: services/ServiceFactory.ts (created), Task: REMOTE-002~~
+
+- [x] ~~Update composables to use service abstraction~~
+  - ~~ID: REMOTE-004~~
+  - ~~Assignee: Claude~~
+  - ~~Type: refactor~~
+  - ~~Priority: high~~
+  - ~~Description: Refactor all composables to use service interfaces instead of direct electronAPI calls~~
+  - ~~Resources: File: composables/useServices.ts (created), File: composables/useWorkspaceManager.new.ts (example created), Task: REMOTE-003~~
+
+- [x] ~~Add SQLite local database support~~
+  - ~~ID: REMOTE-005~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Integrate better-sqlite3 for local state caching and offline support~~
+  - ~~Resources: File: electron/services/local-database.ts (created), File: electron/main.ts (updated), File: electron/preload.ts (updated)~~
+
+- [x] ~~Implement offline queue system~~
+  - ~~ID: REMOTE-006~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Create queue system to store operations when offline and sync when connected~~
+  - ~~Resources: File: services/interfaces/IQueueManager.ts (created), File: services/providers/desktop/DesktopQueueManager.ts (created)~~
+
+- [x] ~~Create dual-mode Electron main process~~
+  - ~~ID: REMOTE-007~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Modify electron main.ts to support desktop-only, server-only, and hybrid modes based on launch flags~~
+  - ~~Resources: File: electron/services/mode-config.ts (created), File: electron/main.ts (updated), File: electron/services/remote-server.ts (created)~~
+
+- [x] ~~Implement Socket.IO server for remote access~~
+  - ~~ID: REMOTE-008~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Create Socket.IO server with binary streaming support for PTY data~~
+  - ~~Resources: File: electron/services/remote-server.ts (created), File: electron/services/remote-protocol.ts (created), File: electron/services/remote-session-manager.ts (created)~~
+
+- [x] ~~Implement remote file operations~~
+  - ~~ID: REMOTE-009~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Implement file operations (read, write, list, delete) through Socket.IO~~
+  - ~~Resources: File: electron/services/remote-handlers/RemoteFileHandler.ts (created), File: services/remote-client/RemoteClient.ts (created), File: test-remote-client.html (created)~~
+
+- [x] ~~Implement remote terminal with PTY streaming~~
+  - ~~ID: REMOTE-010~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Implement binary protocol for streaming terminal data with perfect control sequence preservation~~
+  - ~~Resources: File: electron/services/remote-handlers/RemoteTerminalHandler.ts (created), File: test-remote-client.html (updated)~~
+
+- [x] ~~Implement remote Claude instance management~~
+  - ~~ID: REMOTE-011~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Create Claude instance spawning and management for remote clients~~
+  - ~~Resources: File: electron/services/remote-handlers/RemoteClaudeHandler.ts (created), File: test-remote-client.html (updated)~~
+
+- [x] ~~Add user isolation for Claude instances~~
+  - ~~ID: REMOTE-012~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Implement user-scoped Claude instances so each user gets their own terminals~~
+  - ~~Resources: File: electron/services/user-isolation.ts (created), File: electron/services/remote-handlers/RemoteClaudeHandler.ts (updated)~~
+
+- [x] **Create connection state management**
+  - ~~ID: REMOTE-013~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: medium~~
+  - ~~Description: Implement state machine for managing connection states (offline, connecting, connected, syncing)~~
+  - ~~Resources: File: services/connection-manager.ts (new), Task: REMOTE-008, Knowledge: FINAL_REMOTE.md~~
+
+- [x] **Build sync engine for state synchronization**
+  - ~~ID: REMOTE-014~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: medium~~
+  - ~~Description: Create intelligent sync system with priority-based synchronization using JSON patches~~
+  - ~~Resources: File: services/sync/sync-engine.ts (new), Task: REMOTE-006, Task: REMOTE-013~~
+
+- [x] **Implement MCP server for remote features**
+  - ~~ID: REMOTE-015~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: medium~~
+  - ~~Description: Create custom MCP server to expose remote collaboration features to Claude~~
+  - ~~Resources: File: mcp-servers/clode-remote-mcp.ts (new), Knowledge: MCP documentation, Task: REMOTE-011~~
+
+- [x] ~~Create connection status UI component~~
+  - ~~ID: REMOTE-017~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Built visual indicator for connection state with performance metrics and modal interface~~
+  - ~~Resources: File: components/Layout/ConnectionStatus.vue (created), File: components/Layout/ConnectionStatusModal.vue (created), Task: REMOTE-013~~
+
+- [x] ~~Implement device switching functionality~~
+  - ~~ID: REMOTE-018~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Created system to checkpoint state on one device and restore on another with UI~~
+  - ~~Resources: File: services/device-switching.ts (created), File: composables/useConnectionManager.ts (updated), Task: REMOTE-011, Task: REMOTE-014~~
+
+- [x] ~~Add Quick Connect UI~~
+  - ~~ID: REMOTE-025~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: QR code and pairing code for easy mobile device connection~~
+  - ~~Resources: File: components/Layout/QuickConnectSection.vue (created), File: services/device-auth.ts (created), Task: REMOTE-016~~
+- [x] ~~Create Remote Web Client~~
+  - ~~ID: REMOTE-027~~
+  - ~~Assignee: Claude~~
+  - ~~Type: feature~~
+  - ~~Priority: high~~
+  - ~~Description: Build responsive web client for mobile/browser access with seamless cross-platform experience~~
+  - ~~Resources: File: components/Remote/RemoteApp.vue (created), File: components/Remote/*.vue (created), File: composables/useRemoteConnection.ts (created), File: composables/useResponsive.ts (created)~~
 
 - [x] ~~Create activity bar component with icon navigation~~
   - ~~ID: LAYOUT-001~~

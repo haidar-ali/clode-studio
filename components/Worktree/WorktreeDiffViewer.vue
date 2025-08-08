@@ -152,10 +152,10 @@ function closeModal() {
   emit('update:modelValue', false);
 }
 
-function toggleViewMode() {
+async function toggleViewMode() {
   viewMode.value = viewMode.value === 'split' ? 'unified' : 'split';
   if (content1.value && content2.value) {
-    nextTick(() => setupMergeView());
+    await setupMergeView();
   }
 }
 
@@ -167,19 +167,79 @@ async function loadDiff() {
   diffContent.value = null;
 
   try {
-    // Construct proper file paths using path.join equivalent
+    // Construct proper file paths
     // Remove leading slash if present to avoid double slashes
     const cleanFile = props.file.startsWith('/') ? props.file.substring(1) : props.file;
     const file1Path = `${props.worktree1.path}/${cleanFile}`.replace(/\/\/+/g, '/');
     const file2Path = `${props.worktree2.path}/${cleanFile}`.replace(/\/\/+/g, '/');
     
-  
+    console.log('Worktree comparison paths:', {
+      file: props.file,
+      cleanFile,
+      worktree1: props.worktree1.path,
+      worktree2: props.worktree2.path,
+      file1Path,
+      file2Path
+    });
     
     // Load file content from both worktrees
-    const [result1, result2] = await Promise.all([
-      window.electronAPI.fs.readFile(file1Path),
-      window.electronAPI.fs.readFile(file2Path)
-    ]);
+    let result1, result2;
+    
+    if (window.electronAPI) {
+      // Desktop mode - use Electron API
+      [result1, result2] = await Promise.all([
+        window.electronAPI.fs.readFile(file1Path),
+        window.electronAPI.fs.readFile(file2Path)
+      ]);
+    } else {
+      // Remote mode - detect if this is main repo vs separate worktree
+      // For main repo, use relative paths; for worktrees, we need a different approach
+      const workspacePath = '/Users/alihaidar/we-convert/WE-nodejs-email-ts'; // TODO: Get from store
+      
+      const isMainRepo1 = props.worktree1.path === workspacePath;
+      const isMainRepo2 = props.worktree2.path === workspacePath;
+      
+      console.log('Path analysis:', {
+        workspacePath,
+        isMainRepo1,
+        isMainRepo2,
+        worktree1Path: props.worktree1.path,
+        worktree2Path: props.worktree2.path
+      });
+      
+      [result1, result2] = await Promise.all([
+        isMainRepo1 
+          ? $fetch('/api/files/read', { query: { path: cleanFile } }).then(response => ({
+              success: true,
+              content: response.content || ''
+            })).catch(error => ({
+              success: false,
+              error: error.message || 'Failed to read file'
+            }))
+          : $fetch('/api/worktree/files/read', { query: { path: file1Path } }).then(response => ({
+              success: true,
+              content: response.content || ''
+            })).catch(error => ({
+              success: false,
+              error: error.message || 'Failed to read file'
+            })),
+        isMainRepo2
+          ? $fetch('/api/files/read', { query: { path: cleanFile } }).then(response => ({
+              success: true,
+              content: response.content || ''
+            })).catch(error => ({
+              success: false,
+              error: error.message || 'Failed to read file'
+            }))
+          : $fetch('/api/worktree/files/read', { query: { path: file2Path } }).then(response => ({
+              success: true,
+              content: response.content || ''
+            })).catch(error => ({
+              success: false,
+              error: error.message || 'Failed to read file'
+            }))
+      ]);
+    }
     
     console.log('File read results:', { 
       result1: { success: result1.success, hasContent: !!result1.content, contentLength: result1.content?.length },
@@ -224,8 +284,7 @@ async function loadDiff() {
       generateDiffContent();
       
       // Setup merge view
-      await nextTick();
-      setupMergeView();
+      await setupMergeView();
     } else {
       console.error('Content is null:', { content1: content1.value, content2: content2.value });
     }
@@ -320,8 +379,11 @@ function generateDiffContent() {
   diffContent.value = diff;
 }
 
-function setupMergeView() {
+async function setupMergeView() {
   cleanupMergeView();
+  
+  // Wait for DOM to be ready
+  await nextTick();
   
   if (!mergeContainer.value) {
     console.error('No merge container found');
@@ -474,7 +536,23 @@ async function applyChanges() {
   try {
     // Copy the file from worktree2 to worktree1
     const targetPath = `${props.worktree1.path}/${props.file}`;
-    const result = await window.electronAPI.fs.writeFile(targetPath, content2.value);
+    let result;
+    
+    if (window.electronAPI) {
+      // Desktop mode
+      result = await window.electronAPI.fs.writeFile(targetPath, content2.value);
+    } else {
+      // Remote mode - use $fetch API like other parts of the platform
+      try {
+        await $fetch('/api/files/write', {
+          method: 'POST',
+          body: { path: targetPath, content: content2.value }
+        });
+        result = { success: true };
+      } catch (error: any) {
+        result = { success: false, error: error.message || 'Failed to write file' };
+      }
+    }
     
     if (result.success) {
       closeModal();

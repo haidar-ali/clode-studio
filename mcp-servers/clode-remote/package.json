@@ -1,0 +1,30 @@
+{
+  "name": "@clode-studio/mcp-remote",
+  "version": "1.0.0",
+  "description": "MCP server for Clode Studio remote collaboration features",
+  "type": "module",
+  "main": "index.js",
+  "bin": {
+    "clode-remote-mcp": "./index.js"
+  },
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.17.1",
+    "socket.io-client": "^4.7.2",
+    "zod": "^3.22.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "clode-studio",
+    "remote",
+    "collaboration"
+  ],
+  "author": "Clode Studio Team",
+  "license": "MIT"
+}

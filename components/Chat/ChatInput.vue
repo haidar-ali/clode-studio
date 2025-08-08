@@ -45,7 +45,7 @@ const inputValue = computed({
 });
 
 const placeholder = computed(() => 
-  props.placeholder || (props.disabled ? 'Claude is not connected...' : 'Type a message...')
+  props.placeholder || (props.disabled ? 'Claude is not connected...' : 'Type a message.')
 );
 
 const handleKeydown = (event: KeyboardEvent) => {

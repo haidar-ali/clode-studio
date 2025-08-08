@@ -221,6 +221,11 @@ export const useTasksStore = defineStore('tasks', {
     async loadTasksFromProject() {
       if (!this.projectPath) return;
       
+      // Skip if not in desktop mode (remote mode loads through service layer)
+      if (!window.electronAPI?.fs) {
+        return;
+      }
+      
       const filePath = joinPath(this.projectPath, '.claude', 'simple-tasks.json');
       
       try {
@@ -259,6 +264,11 @@ export const useTasksStore = defineStore('tasks', {
     // Save tasks to project JSON only
     async saveTasksToProjectJSON() {
       if (!this.projectPath) return;
+      
+      // Skip if not in desktop mode (remote mode saves through service layer)
+      if (!window.electronAPI?.fs) {
+        return;
+      }
       
       try {
         // Ensure .claude directory exists
@@ -359,6 +369,11 @@ ${this.completedTasks.map(task => formatTask(task, true)).join('\n')}
 ---
 *To update tasks, use the Kanban board in Clode Studio, ask Claude to modify this file, or use Claude's native TodoWrite system.*
 `;
+      
+      // Skip if not in desktop mode (remote mode saves through service layer)
+      if (!window.electronAPI?.fs) {
+        return;
+      }
       
       try {
         await window.electronAPI.fs.writeFile(this.tasksMarkdownPath, markdown);

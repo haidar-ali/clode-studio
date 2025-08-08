@@ -6,12 +6,14 @@ import { useSourceControlStore } from './source-control';
 import { useClaudeInstancesStore } from './claude-instances';
 import { useTasksStore } from './tasks';
 import { useFileContentManager } from '~/composables/useFileContentManager';
+import { remoteConnection } from '~/services/remote-client/RemoteConnectionSingleton';
 
 export const useSnapshotsStore = defineStore('snapshots', () => {
   // State
   const snapshots = ref<ClaudeSnapshot[]>([]);
   const isCapturing = ref(false);
   const isRestoring = ref(false);
+  const isLoading = ref(false);
   const lastSnapshotTime = ref<Date | null>(null);
   const selectedSnapshotId = ref<string | null>(null);
   
@@ -67,20 +69,91 @@ export const useSnapshotsStore = defineStore('snapshots', () => {
       const gitStore = useSourceControlStore();
       const claudeStore = useClaudeInstancesStore();
       const tasksStore = useTasksStore();
+      
+      const isRemoteMode = !window.electronAPI;
 
       // Get current workspace path
       let currentPath = '';
-      try {
-        currentPath = await window.electronAPI.workspace.getCurrentPath();
-      } catch (error) {
-        console.warn('Failed to get current workspace path:', error);
+      if (isRemoteMode) {
+        // In remote mode, get from remote workspace
+        const remoteWorkspace = (window as any).__remoteWorkspace;
+        currentPath = remoteWorkspace?.path || '';
+      } else {
+        try {
+          currentPath = await window.electronAPI.workspace.getCurrentPath();
+        } catch (error) {
+          console.warn('Failed to get current workspace path:', error);
+        }
       }
 
       if (!currentPath) {
         throw new Error('No workspace path available for snapshot');
       }
+      
+      // In remote mode, delegate to desktop for full snapshot capture
+      if (isRemoteMode) {
+        if (!remoteConnection.isConnected()) {
+          throw new Error('Remote connection not available');
+        }
+        
+        const socket = remoteConnection.getSocket();
+        if (!socket) {
+          throw new Error('Socket not available');
+        }
+        
+        try {
+          const desktopSnapshot = await new Promise((resolve, reject) => {
+            const request = {
+              id: `req-${Date.now()}`,
+              payload: {
+                name: name || `${gitStore.currentBranch || 'main'} - ${new Date().toLocaleString()}`,
+                trigger,
+                ideState: {
+                  openFiles: editorStore.tabs.map(t => t.path),
+                  activeFile: editorStore.activeTab?.path || null,
+                  cursorPositions: editorStore.getCursorPositions(),
+                  claudeInstances: claudeStore.instancesList.map(instance => ({
+                    id: instance.id,
+                    personality: instance.personalityId || 'default',
+                    lastMessageCount: 0
+                  })),
+                  activeTaskIds: tasksStore.allTasks?.filter?.(t => t.status === 'in_progress')?.map(t => t.id) || [],
+                  taskCounts: {
+                    todo: tasksStore.todoTasks?.length || 0,
+                    inProgress: tasksStore.inProgressTasks?.length || 0,
+                    done: tasksStore.doneTasks?.length || 0
+                  }
+                }
+              }
+            };
+            
+            socket.emit('snapshot:capture', request, (response: any) => {
+              if (response.success) {
+                resolve(response);
+              } else {
+                reject(new Error(response.error || 'Request failed'));
+              }
+            });
+          });
+          
+          if (desktopSnapshot.success && desktopSnapshot.data) {
+            snapshots.value.push(desktopSnapshot.data);
+            lastSnapshotTime.value = new Date();
+            await cleanupSnapshots();
+            return desktopSnapshot.data;
+          } else {
+            throw new Error(desktopSnapshot.error || 'Failed to capture snapshot');
+          }
+        } catch (error) {
+          console.error('📸 Failed to capture snapshot:', error);
+          throw error;
+        } finally {
+          isCapturing.value = false;
+        }
+        return; // Exit early for remote mode
+      }
 
-      // Initialize file content manager
+      // Desktop mode - Initialize file content manager
       const fileContentManager = useFileContentManager(currentPath);
       
       // Get previous snapshot for comparison (most recent from same branch)
@@ -169,20 +242,40 @@ export const useSnapshotsStore = defineStore('snapshots', () => {
 
     
 
-      // Save via electron API - convert to serializable format
+      // Save via appropriate API
       const serializableSnapshot = JSON.parse(JSON.stringify(snapshot));
-      const result = await window.electronAPI.snapshots.save(serializableSnapshot);
       
-      if (result.success) {
-        snapshots.value.push(snapshot);
-        lastSnapshotTime.value = new Date();
+      if (isRemoteMode) {
+        // Remote mode - use API
+        const response = await window.fetch('/api/snapshots/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ snapshot: serializableSnapshot })
+        });
+        const result = await response.json();
         
-        // Cleanup if needed
-        await cleanupSnapshots();
-        
-      
+        if (result.success) {
+          snapshots.value.push(snapshot);
+          lastSnapshotTime.value = new Date();
+          
+          // Cleanup if needed
+          await cleanupSnapshots();
+        } else {
+          console.error('📸 Failed to save enhanced snapshot:', result.error);
+        }
       } else {
-        console.error('📸 Failed to save enhanced snapshot:', result.error);
+        // Desktop mode - use electron API
+        const result = await window.electronAPI.snapshots.save(serializableSnapshot);
+        
+        if (result.success) {
+          snapshots.value.push(snapshot);
+          lastSnapshotTime.value = new Date();
+          
+          // Cleanup if needed
+          await cleanupSnapshots();
+        } else {
+          console.error('📸 Failed to save enhanced snapshot:', result.error);
+        }
       }
       
       return snapshot;
@@ -210,7 +303,59 @@ export const useSnapshotsStore = defineStore('snapshots', () => {
     };
     
     isRestoring.value = true;
+    const isRemoteMode = !window.electronAPI;
+    
     try {
+      // In remote mode, delegate restoration to desktop
+      if (isRemoteMode) {
+        if (!remoteConnection.isConnected()) {
+          throw new Error('Remote connection not available');
+        }
+        
+        const socket = remoteConnection.getSocket();
+        if (!socket) {
+          throw new Error('Socket not available');
+        }
+        
+        try {
+          const result = await new Promise((resolve, reject) => {
+            const request = {
+              id: `req-${Date.now()}`,
+              payload: {
+                snapshotId,
+                options: opts
+              }
+            };
+            
+            socket.emit('snapshot:restore', request, (response: any) => {
+              if (response.success) {
+                resolve(response);
+              } else {
+                reject(new Error(response.error || 'Request failed'));
+              }
+            });
+          });
+          
+          if ((result as any).success) {
+            // Update local IDE state if needed
+            if (opts.restoreIdeState && (result as any).ideState) {
+              const editorStore = useEditorStore();
+              // Could update editor tabs, etc. based on returned state
+            }
+            return true;
+          } else {
+            throw new Error((result as any).error || 'Failed to restore snapshot');
+          }
+        } catch (error) {
+          console.error('🔄 Failed to restore snapshot:', error);
+          throw error;
+        } finally {
+          isRestoring.value = false;
+        }
+        return;
+      }
+      
+      // Desktop mode continues below
     
       
       // Check if this is an enhanced snapshot with file content
@@ -321,26 +466,115 @@ export const useSnapshotsStore = defineStore('snapshots', () => {
     if (index === -1) return;
     
     const snapshot = snapshots.value[index];
-    const result = await window.electronAPI.snapshots.delete(snapshotId, snapshot.gitBranch);
-    if (result.success) {
-      snapshots.value.splice(index, 1);
+    const isRemoteMode = !window.electronAPI;
+    
+    if (isRemoteMode) {
+      // Remote mode - use Socket.IO
+      if (!remoteConnection.isConnected()) {
+        throw new Error('Remote connection not available');
+      }
+      
+      const socket = remoteConnection.getSocket();
+      if (!socket) {
+        throw new Error('Socket not available');
+      }
+      
+      try {
+        const result = await new Promise<any>((resolve, reject) => {
+          const request = {
+            id: `req-${Date.now()}`,
+            payload: {
+              snapshotId,
+              branch: snapshot.gitBranch
+            }
+          };
+          
+          socket.emit('snapshot:delete', request, (response: any) => {
+            if (response.success) {
+              resolve(response);
+            } else {
+              reject(new Error(response.error || 'Request failed'));
+            }
+          });
+        });
+        
+        if (result.success) {
+          snapshots.value.splice(index, 1);
+        }
+      } catch (error) {
+        console.error('Failed to delete snapshot:', error);
+        throw error;
+      }
+    } else {
+      // Desktop mode - use electron API
+      const result = await window.electronAPI.snapshots.delete(snapshotId, snapshot.gitBranch);
+      if (result.success) {
+        snapshots.value.splice(index, 1);
+      }
     }
   }
 
   async function loadSnapshots(allBranches: boolean = false) {
     const gitStore = useSourceControlStore();
     const currentBranch = gitStore.currentBranch || 'main';
+    const isRemoteMode = !window.electronAPI;
     
-    // Update the current branch in the snapshot service
-    await window.electronAPI.snapshots.setCurrentBranch(currentBranch);
+    isLoading.value = true;
     
-    const options = allBranches 
-      ? { allBranches: true }
-      : { branch: currentBranch };
-    
-    const result = await window.electronAPI.snapshots.list(options);
-    if (result.success && result.data) {
-      snapshots.value = result.data;
+    try {
+      if (isRemoteMode) {
+        // Remote mode - use Socket.IO
+        if (!remoteConnection.isConnected()) {
+          console.warn('Remote connection not available for loading snapshots');
+          return;
+        }
+        
+        const socket = remoteConnection.getSocket();
+        if (!socket) {
+          console.warn('Socket not available for loading snapshots');
+          return;
+        }
+        
+        try {
+          const result = await new Promise<any>((resolve, reject) => {
+            const request = {
+              id: `req-${Date.now()}`,
+              payload: {
+                allBranches,
+                branch: currentBranch
+              }
+            };
+            
+            socket.emit('snapshot:list', request, (response: any) => {
+              if (response.success) {
+                resolve(response);
+              } else {
+                reject(new Error(response.error || 'Request failed'));
+              }
+            });
+          });
+          
+          if (result.data) {
+            snapshots.value = result.data;
+          }
+        } catch (error) {
+          console.error('Failed to load snapshots:', error);
+        }
+      } else {
+        // Desktop mode - update the current branch in the snapshot service
+        await window.electronAPI.snapshots.setCurrentBranch(currentBranch);
+        
+        const options = allBranches 
+          ? { allBranches: true }
+          : { branch: currentBranch };
+        
+        const result = await window.electronAPI.snapshots.list(options);
+        if (result.success && result.data) {
+          snapshots.value = result.data;
+        }
+      }
+    } finally {
+      isLoading.value = false;
     }
   }
 
@@ -391,12 +625,38 @@ export const useSnapshotsStore = defineStore('snapshots', () => {
     };
   }
 
-  function addTag(snapshotId: string, tag: string) {
+  async function addTag(snapshotId: string, tag: string) {
     const snapshot = snapshots.value.find(s => s.id === snapshotId);
     if (snapshot && !snapshot.tags?.includes(tag)) {
       if (!snapshot.tags) snapshot.tags = [];
       snapshot.tags.push(tag);
-      window.electronAPI.snapshots.update(snapshot);
+      
+      const isRemoteMode = !window.electronAPI;
+      if (isRemoteMode) {
+        // Remote mode - trigger desktop update via Socket.IO
+        if (remoteConnection.isConnected()) {
+          const socket = remoteConnection.getSocket();
+          if (socket) {
+            await new Promise<void>((resolve, reject) => {
+              const request = {
+                id: `req-${Date.now()}`,
+                payload: { snapshot }
+              };
+              
+              socket.emit('snapshot:update', request, (response: any) => {
+                if (response.success) {
+                  resolve();
+                } else {
+                  reject(new Error(response.error || 'Request failed'));
+                }
+              });
+            });
+          }
+        }
+      } else {
+        // Desktop mode
+        await window.electronAPI.snapshots.update(snapshot);
+      }
     }
   }
 
@@ -568,6 +828,7 @@ export const useSnapshotsStore = defineStore('snapshots', () => {
     snapshots,
     isCapturing,
     isRestoring,
+    isLoading,
     lastSnapshotTime,
     selectedSnapshotId,
     config,

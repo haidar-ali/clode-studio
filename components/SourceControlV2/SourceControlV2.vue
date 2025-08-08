@@ -338,9 +338,29 @@ const expandedSections = ref({
 });
 
 // Computed
-const workspaceName = computed(() => workspace.workspaceName || 'No workspace');
+const workspaceName = computed(() => {
+  // In remote mode, use the remote workspace info
+  const isRemoteMode = !window.electronAPI;
+  if (isRemoteMode) {
+    const remoteWorkspace = (window as any).__remoteWorkspace;
+    if (remoteWorkspace?.name) {
+      return remoteWorkspace.name;
+    } else if (remoteWorkspace?.path) {
+      return remoteWorkspace.path.split('/').pop() || 'Workspace';
+    }
+  }
+  return workspace.workspaceName || 'No workspace';
+});
 const currentBranch = computed(() => sourceControl.currentBranch || 'No branch');
-const currentWorkspace = computed(() => workspace.currentPath);
+const currentWorkspace = computed(() => {
+  // In remote mode, use the remote workspace path
+  const isRemoteMode = !window.electronAPI;
+  if (isRemoteMode) {
+    const remoteWorkspace = (window as any).__remoteWorkspace;
+    return remoteWorkspace?.path || null;
+  }
+  return workspace.currentPath;
+});
 const isLoading = computed(() => sourceControl.isLoading);
 const hasChanges = computed(() => 
   sourceControl.stagedFiles.length > 0 || 
@@ -762,25 +782,52 @@ watch(() => workspace.currentPath, async (newPath) => {
 watch(() => workspaceManager.activeWorktreePath.value, async (newWorktreePath) => {
   if (newWorktreePath) {
     await sourceControl.initialize(newWorktreePath);
-    // Reload snapshots for the new branch
-    await snapshots.loadSnapshots(false);
+    // Reload snapshots for the new branch PUT BACK WHEN SNAPSHOTS ARE MIGRATED
+    // await snapshots.loadSnapshots(false);
   }
 });
 
 // Watch for branch changes
 watch(() => sourceControl.currentBranch, async (newBranch, oldBranch) => {
   if (newBranch && newBranch !== oldBranch) {
-    // Reload snapshots for the new branch
-    await snapshots.loadSnapshots(false);
+    // Reload snapshots for the new branch PUT BACK WHEN SNAPSHOTS ARE MIGRATED
+    // await snapshots.loadSnapshots(false);
   }
 });
 
 // Initialize
 onMounted(async () => {
-  // Use active worktree path if available, otherwise use workspace path
-  const pathToUse = workspaceManager.activeWorktreePath.value || workspace.currentPath;
-  if (pathToUse) {
-    await sourceControl.initialize(pathToUse);
+  // In remote mode, we need to get the workspace from the remote connection
+  const isRemoteMode = !window.electronAPI;
+  
+  if (isRemoteMode) {
+    // Wait a bit for the workspace to be set from Socket.IO
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // Get workspace from remote connection or API
+    const remoteWorkspace = (window as any).__remoteWorkspace;
+    if (remoteWorkspace?.path) {
+      console.log('[SourceControlV2] Initializing with remote workspace:', remoteWorkspace.path);
+      await sourceControl.initialize(remoteWorkspace.path);
+    } else {
+      // Try to get it from the API
+      try {
+        const response = await window.fetch('/api/workspace/current');
+        const data = await response.json();
+        if (data.path) {
+          console.log('[SourceControlV2] Initializing with workspace from API:', data.path);
+          await sourceControl.initialize(data.path);
+        }
+      } catch (error) {
+        console.error('[SourceControlV2] Failed to get workspace:', error);
+      }
+    }
+  } else {
+    // Desktop mode - use active worktree path if available, otherwise use workspace path
+    const pathToUse = workspaceManager.activeWorktreePath.value || workspace.currentPath;
+    if (pathToUse) {
+      await sourceControl.initialize(pathToUse);
+    }
   }
 });
 </script>

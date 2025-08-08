@@ -169,7 +169,7 @@ const caseSensitive = ref(false);
 const wholeWord = ref(false);
 const useRegex = ref(false);
 const includePattern = ref('');
-const excludePattern = ref('node_modules/**, dist/**, .git/**, .nuxt/**, .claude/**, .claude-checkpoints/**, .worktrees/**, build/**, .output/**, coverage/**, .nyc_output/**, tmp/**, temp/**, .cache/**, .parcel-cache/**, .vscode/**, .idea/**, __pycache__/**, *.pyc, .DS_Store, *.log, *.min.js, *.map, package-lock.json, yarn.lock, *.bundle.js, vendor/**, .next/**, out/**');
+const excludePattern = ref('node_modules/**, dist/**, .git/**, .nuxt/**, .claude/**, .clode/** .claude-checkpoints/**, .worktrees/**, build/**, .output/**, coverage/**, .nyc_output/**, tmp/**, temp/**, .cache/**, .parcel-cache/**, .vscode/**, .idea/**, __pycache__/**, *.pyc, .DS_Store, *.log, *.min.js, *.map, package-lock.json, yarn.lock, *.bundle.js, vendor/**, .next/**, out/**');
 
 const searchResults = ref<FileResult[]>([]);
 const expandedFiles = ref(new Set<string>());

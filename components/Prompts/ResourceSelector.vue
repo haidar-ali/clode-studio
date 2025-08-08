@@ -1,5 +1,10 @@
 <template>
   <div class="resource-selector">
+    <!-- Debug button for testing -->
+    <button @click="debugCheckLocalStorage" style="position: absolute; top: 5px; right: 5px; z-index: 100; font-size: 10px;">
+      Check LS
+    </button>
+    
     <!-- Resource type tabs -->
     <div class="resource-tabs">
       <button 
@@ -223,6 +228,7 @@ import { useHooksStore } from '~/stores/hooks';
 import { useProjectContextStore } from '~/stores/project-context';
 import { useTasksStore } from '~/stores/tasks';
 import type { ResourceReference } from '~/stores/prompt-engineering';
+import { useServices } from '~/composables/useServices';
 
 const emit = defineEmits<{
   add: [resource: ResourceReference];
@@ -235,6 +241,7 @@ const commandsStore = useClaudeCommandsStore();
 const hooksStore = useHooksStore();
 const contextStore = useProjectContextStore();
 const tasksStore = useTasksStore();
+const { services, initialize } = useServices();
 
 const activeTab = ref<'file' | 'knowledge' | 'hook' | 'mcp' | 'command' | 'task'>('file');
 const fileSearch = ref('');
@@ -254,10 +261,51 @@ const loadWorkspaceFiles = async (workspacePath: string) => {
     
     try {
       if (depth === 0) {
-        
+        console.log('[ResourceSelector] Starting directory walk from:', dir);
       }
       
-      const result = await window.electronAPI.fs.readDir(dir);
+      let result;
+      // In hybrid mode, check for Electron API first for desktop operations
+      if (window.electronAPI?.fs?.readDir) {
+        // Desktop mode - use Electron API directly
+        result = await window.electronAPI.fs.readDir(dir);
+      } else {
+        // Remote mode - use API
+        try {
+          // Convert absolute path to relative path for API
+          const relativePath = dir.replace(baseDir, '').replace(/^\//, '') || '.';
+          console.log('[ResourceSelector] Fetching files from API, relative path:', relativePath);
+          const response = await $fetch('/api/files/list', {
+            query: { path: relativePath }
+          });
+          
+          console.log('[ResourceSelector] API response:', response);
+          
+          // The API returns { entries: [...], currentPath, workspacePath }
+          if (response && response.entries) {
+            result = { 
+              success: true, 
+              files: response.entries.map((f: any) => ({
+                name: f.name,
+                isDirectory: f.type === 'directory'
+              }))
+            };
+          } else if (response && Array.isArray(response)) {
+            // Fallback if API returns array directly
+            result = { 
+              success: true, 
+              files: response.map((f: any) => ({
+                name: f.name,
+                isDirectory: f.type === 'directory'
+              }))
+            };
+          } else {
+            result = { success: false, error: 'No files returned' };
+          }
+        } catch (err) {
+          result = { success: false, error: err.message };
+        }
+      }
       
       if (!result || !result.success || !result.files) {
         console.warn(`Failed to read directory: ${dir}`, result?.error);
@@ -340,9 +388,10 @@ const filteredKnowledge = computed(() => {
 
 const availableHooks = computed(() => {
   const hooks = hooksStore.hooks || [];
+  console.log('[ResourceSelector] Computing availableHooks, store hooks:', hooks.length);
   if (!Array.isArray(hooks)) return [];
   
-  return hooks.map(hook => ({
+  const result = hooks.map(hook => ({
     id: hook.id,
     name: hook.description || hook.command.slice(0, 30) + '...',
     event: hook.event,
@@ -350,6 +399,9 @@ const availableHooks = computed(() => {
     command: hook.command,
     disabled: hook.disabled
   })).filter(hook => !hook.disabled);
+  
+  console.log('[ResourceSelector] Available hooks computed:', result.length);
+  return result;
 });
 
 const connectedServers = computed(() => {
@@ -367,7 +419,9 @@ const connectedServers = computed(() => {
 });
 
 const availableCommands = computed(() => {
-  return commandsStore.allCommands || [];
+  const commands = commandsStore.allCommands || [];
+  console.log('[ResourceSelector] Available commands computed:', commands.length);
+  return commands;
 });
 
 const filteredTasks = computed(() => {
@@ -531,7 +585,9 @@ const initializeData = async () => {
   if (!workspace) {
     
     try {
-      workspace = await window.electronAPI.store.get('workspacePath') || '';
+      workspace = await (window.electronAPI?.store?.get ? 
+        window.electronAPI.store.get('workspacePath') :
+        services.value?.storage?.get('workspacePath').then(val => val || '')) || '';
       if (workspace) {
         
         // Initialize the tasks store with this path
@@ -549,22 +605,32 @@ const initializeData = async () => {
   
   // Check if the workspace exists
   if (workspace) {
-    const exists = await window.electronAPI.fs.exists(workspace);
+    let exists = false;
     
+    // Check workspace existence based on mode
+    if (window.electronAPI?.fs?.exists) {
+      exists = await window.electronAPI.fs.exists(workspace);
+    } else if (!window.electronAPI) {
+      // In remote mode, if we have a workspace path from the API, assume it exists
+      exists = true;
+    }
     
     if (exists) {
       // Load all workspace files
+      console.log('[ResourceSelector] Loading files from workspace:', workspace);
       isLoadingFiles.value = true;
       try {
         const files = await loadWorkspaceFiles(workspace);
-        
+        console.log('[ResourceSelector] Loaded files:', files.length);
         
         allFiles.value = files;
       } catch (error) {
-        console.error('Failed to load workspace files:', error);
+        console.error('[ResourceSelector] Failed to load workspace files:', error);
       } finally {
         isLoadingFiles.value = false;
       }
+    } else {
+      console.log('[ResourceSelector] Workspace does not exist or cannot be checked');
     }
   } else {
     console.warn('ResourceSelector: No workspace path available');
@@ -573,19 +639,42 @@ const initializeData = async () => {
 
 // Load data on mount
 onMounted(async () => {
+  console.log('[ResourceSelector] Mounting component...');
   try {
+    // Initialize services first (for desktop mode)
+    if (window.electronAPI) {
+      await initialize();
+    }
     await initializeData();
     
-    // Get the workspace path after initialization
-    const workspace = tasksStore.projectPath || contextStore.currentWorkspace || '';
+    // Get the workspace path
+    let workspace = tasksStore.projectPath || contextStore.currentWorkspace || '';
     
-    // Load hooks if not already loaded (hooks are global, not project-specific)
+    // In remote mode, get workspace from API if not already set
+    if (!workspace && !window.electronAPI) {
+      try {
+        const response = await $fetch('/api/workspace/current');
+        if (response.path) {
+          workspace = response.path;
+          if (!tasksStore.projectPath) {
+            tasksStore.setProjectPath(workspace);
+          }
+        }
+      } catch (error) {
+        console.error('[ResourceSelector] Failed to get workspace from API:', error);
+      }
+    }
     
+    console.log('[ResourceSelector] Workspace:', workspace);
+    
+    // Load hooks
+    console.log('[ResourceSelector] Loading hooks, current:', hooksStore.hooks?.length || 0);
     if (!hooksStore.hooks || hooksStore.hooks.length === 0) {
+      // Load hooks through store (handles both desktop and remote)
       await hooksStore.loadHooks();
-      
+      console.log('[ResourceSelector] Hooks after load:', hooksStore.hooks?.length || 0);
     } else {
-      
+      console.log('[ResourceSelector] Hooks already loaded:', hooksStore.hooks.length);
     }
     
     // Initialize context search to get files
@@ -593,40 +682,46 @@ onMounted(async () => {
       await contextStore.initialize(contextStore.currentWorkspace);
     }
     
-    // Load knowledge entries if not already loaded
-    
-    if (!knowledgeStore.entries || knowledgeStore.entries.length === 0) {
+    // Load knowledge entries
+    if (!window.electronAPI) {
+      // Remote mode - load from API
+      try {
+        const response = await $fetch('/api/knowledge/list');
+        // Use store's patch method to avoid proxy issues
+        knowledgeStore.$patch({ entries: response.entries || [] });
+        console.log('[ResourceSelector] Knowledge loaded from API:', knowledgeStore.entries?.length || 0);
+      } catch (error) {
+        console.error('[ResourceSelector] Failed to load knowledge from API:', error);
+      }
+    } else if (!knowledgeStore.entries || knowledgeStore.entries.length === 0) {
+      // Desktop mode - use store
       if (workspace) {
         await knowledgeStore.initialize(workspace);
         await knowledgeStore.loadEntries();
-        
-      } else {
-        
       }
-    } else {
-      
     }
     
-    // Load MCP servers if needed (MCP is global, not project-specific)
-    
+    // Load MCP servers
+    console.log('[ResourceSelector] Loading MCP servers, current:', mcpStore.servers?.length || 0);
     if (!mcpStore.servers || mcpStore.servers.length === 0) {
+      // Load servers through store (handles both desktop and remote)
       await mcpStore.loadServers();
-      
+      console.log('[ResourceSelector] MCP servers after load:', mcpStore.servers?.length || 0);
     } else {
-      
+      console.log('[ResourceSelector] MCP servers already loaded:', mcpStore.servers.length);
     }
     
-    // Load commands if not already loaded
-    
+    // Load commands
+    console.log('[ResourceSelector] Loading commands, current:', commandsStore.allCommands?.length || 0);
     if (!commandsStore.allCommands || commandsStore.allCommands.length === 0) {
+      // Load commands through store (handles both desktop and remote)
       if (workspace) {
         await commandsStore.initialize(workspace);
-        
-      } else {
-        
       }
+      await commandsStore.loadCommands();
+      console.log('[ResourceSelector] Commands after load:', commandsStore.allCommands?.length || 0);
     } else {
-      
+      console.log('[ResourceSelector] Commands already loaded:', commandsStore.allCommands.length);
     }
   } catch (error) {
     console.error('Error loading resource data:', error);
@@ -667,6 +762,42 @@ watch(() => allFiles.value.length, (newLength) => {
     }
   }
 });
+
+// Debug function to manually check localStorage
+const debugCheckLocalStorage = async () => {
+  console.log('=== Manual localStorage Check ===');
+  
+  // Check localStorage
+  const hooksStr = localStorage.getItem('desktop:hooks:items');
+  const commandsStr = localStorage.getItem('desktop:commands:all');
+  const mcpStr = localStorage.getItem('desktop:mcp:servers');
+  
+  console.log('localStorage keys:', {
+    hooks: hooksStr ? `Found (${hooksStr.length} chars)` : 'Not found',
+    commands: commandsStr ? `Found (${commandsStr.length} chars)` : 'Not found',
+    mcp: mcpStr ? `Found (${mcpStr.length} chars)` : 'Not found'
+  });
+  
+  if (hooksStr) {
+    const hooks = JSON.parse(hooksStr);
+    console.log('Hooks data:', hooks);
+  }
+  
+  if (commandsStr) {
+    const commands = JSON.parse(commandsStr);
+    console.log('Commands data:', commands);
+  }
+  
+  // Try reloading stores
+  console.log('Reloading stores...');
+  await hooksStore.loadHooks();
+  await commandsStore.loadCommands();
+  
+  console.log('After reload:', {
+    hooks: hooksStore.hooks?.length || 0,
+    commands: commandsStore.allCommands?.length || 0
+  });
+};
 </script>
 
 <style scoped>

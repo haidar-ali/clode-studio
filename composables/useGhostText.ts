@@ -286,6 +286,7 @@ const ghostTextKeymap = Prec.highest(
             // Set loading state
             autocompleteStore.setGhostTextLoading(true);
             
+            // Check for desktop mode first
             if (window.electronAPI?.autocomplete?.getGhostText) {
               const result = await window.electronAPI.autocomplete.getGhostText({ 
                 prefix, 
@@ -294,8 +295,12 @@ const ghostTextKeymap = Prec.highest(
               });
               return result.success ? result.suggestion : '';
             }
-            // Fallback to regular fetch if not using electron API
-            return config.fetchFn(prefix, suffix);
+            
+            // Remote mode - use Socket.IO
+            const { useRemoteAI } = await import('~/composables/useRemoteAI');
+            const { getGhostText } = useRemoteAI();
+            const result = await getGhostText({ prefix, suffix, forceManual: true });
+            return result.success ? result.suggestion : '';
           } finally {
             // Clear loading state
             autocompleteStore.setGhostTextLoading(false);

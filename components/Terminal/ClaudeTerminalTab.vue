@@ -60,6 +60,7 @@
 import { ref, onMounted, onUnmounted, computed, watch, provide, nextTick, watchEffect } from 'vue';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
+import { SerializeAddon } from '@xterm/addon-serialize';
 import type { ClaudeInstance } from '~/stores/claude-instances';
 import { useClaudeInstancesStore } from '~/stores/claude-instances';
 import { useContextManager } from '~/composables/useContextManager';
@@ -91,12 +92,9 @@ const selectedRunConfig = ref<ClaudeRunConfig | null>(null);
 provide('workingDirectory', props.instance.workingDirectory);
 
 // Terminal state
-
-
-
-
 let terminal: Terminal | null = null;
 let fitAddon: FitAddon | null = null;
+let serializeAddon: SerializeAddon | null = null;
 let isAtBottom = true;
 let lastDataTime = 0;
 let pendingPromptScroll = false;
@@ -107,6 +105,7 @@ let cleanupOutputListener: (() => void) | null = null;
 let cleanupErrorListener: (() => void) | null = null;
 let cleanupExitListener: (() => void) | null = null;
 let emergencyCleanupListener: (() => void) | null = null;
+let isReconnecting = false; // Prevent multiple simultaneous reconnections
 
 const personality = computed(() => {
   return props.instance.personalityId
@@ -185,9 +184,19 @@ const initTerminal = () => {
 
   fitAddon = new FitAddon();
   terminal.loadAddon(fitAddon);
+  
+  serializeAddon = new SerializeAddon();
+  terminal.loadAddon(serializeAddon);
 
   terminal.open(terminalElement.value);
   fitAddon.fit();
+  
+  // Expose terminal and serialize addon for remote access
+  if (terminalElement.value) {
+    (terminalElement.value as any).__terminal = terminal;
+    (terminalElement.value as any).__serializeAddon = serializeAddon;
+    (terminalElement.value as any).__instanceId = props.instance.id;
+  }
 
   terminal.attachCustomKeyEventHandler((event: KeyboardEvent) => {
 
@@ -360,6 +369,9 @@ const setupClaudeListeners = () => {
       } else if (!pendingPromptScroll) {
         autoScrollIfNeeded();
       }
+      
+      // Note: Completion detection is now handled by the JSON detector in main process
+      // No need for brittle ANSI parsing here anymore!
     }
   });
 
@@ -409,13 +421,41 @@ const removeClaudeListeners = () => {
 
 // Reconnect to existing Claude process
 const reconnectToExistingProcess = async () => {
-  if (!terminal || props.instance.status !== 'connected') return;
+  if (!terminal || props.instance.status !== 'connected' || isReconnecting) return;
   
-  // Attempting to reconnect to Claude process
+  // Prevent multiple simultaneous reconnections
+  isReconnecting = true;
   
-  // Re-setup listeners if not already setup
-  if (!listenersSetup) {
+  try {
+    // Check if this instance is being forwarded from remote
+    let isBeingForwarded = false;
+    try {
+      isBeingForwarded = await window.electronAPI.claude.checkForwarding(props.instance.id);
+    } catch (error) {
+      // If check fails, assume not forwarded
+      console.warn('Failed to check Claude forwarding status');
+    }
+    
+    if (isBeingForwarded) {
+      // For forwarded instances, just ensure listeners are set up
+      if (!listenersSetup) {
+        setupClaudeListeners();
+      }
+      return;
+    }
+    
+    // Attempting to reconnect to Claude process
+    
+    // Always clean up existing listeners first to avoid conflicts
+    removeClaudeListeners();
+    
+    // Small delay to ensure cleanup is complete
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    // Re-setup listeners
     setupClaudeListeners();
+  } finally {
+    isReconnecting = false;
   }
   
   // Sync terminal size
@@ -692,13 +732,28 @@ watchEffect(() => {
 });
 
 // Watch for external status changes
-watch(() => props.instance.status, (newStatus, oldStatus) => {
+watch(() => props.instance.status, async (newStatus, oldStatus) => {
   if (oldStatus === 'connected' && newStatus === 'disconnected' && terminal) {
     // Instance was disconnected externally
     removeClaudeListeners();
     terminal.writeln('\r\n\x1b[33mClaude process disconnected.\x1b[0m');
   } else if (oldStatus === 'disconnected' && newStatus === 'connected' && terminal && isVisible.value) {
-    // Instance was reconnected externally while visible
+    // Instance was connected externally
+    // Clear any existing content first
+    terminal.clear();
+    
+    // Check if being forwarded and show appropriate message
+    window.electronAPI.claude.checkForwarding(props.instance.id).then(isForwarded => {
+      if (isForwarded) {
+        terminal.writeln('\x1b[32mClaude instance started from remote device\x1b[0m');
+        terminal.writeln('\x1b[90mThis terminal is mirroring the remote session\x1b[0m');
+        terminal.writeln('');
+      }
+    }).catch(() => {
+      // Ignore errors
+    });
+    
+    // Use reconnectToExistingProcess which checks for forwarding
     reconnectToExistingProcess();
   }
 });

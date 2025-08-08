@@ -61,31 +61,45 @@ export const useProjectContextStore = defineStore('projectContext', () => {
   });
 
   // Actions
-  const initialize = async (workspacePath: string) => {
+  const initialize = async (workspacePath?: string) => {
     try {
       isScanning.value = true;
-      currentWorkspace.value = workspacePath;
       
-      const result = await window.electronAPI.context.initialize(workspacePath);
+      const isRemoteMode = !window.electronAPI;
       
-      if (result.success) {
+      if (isRemoteMode) {
+        // In remote mode, we don't need to initialize with electron API
+        currentWorkspace.value = workspacePath || (window as any).__remoteWorkspace?.path || '/';
         isInitialized.value = true;
         
-        // Load persisted workspace data
-        const persistedData = await window.electronAPI.workspace.loadContext(workspacePath);
-        if (persistedData.success && persistedData.data) {
-          // Restore working files
-          if (persistedData.data.workingFiles && persistedData.data.workingFiles.length > 0) {
-            workingFiles.value = persistedData.data.workingFiles;
-            
-          }
-        }
-        
+        // Load statistics and recent files via API
         await refreshStatistics();
         await refreshRecentFiles();
-        await startFileWatching();
+        
       } else {
-        throw new Error(result.error || 'Failed to initialize context');
+        // Desktop mode - use electron API
+        currentWorkspace.value = workspacePath || '';
+        
+        const result = await window.electronAPI.context.initialize(workspacePath);
+        
+        if (result.success) {
+          isInitialized.value = true;
+          
+          // Load persisted workspace data
+          const persistedData = await window.electronAPI.workspace.loadContext(workspacePath);
+          if (persistedData.success && persistedData.data) {
+            // Restore working files
+            if (persistedData.data.workingFiles && persistedData.data.workingFiles.length > 0) {
+              workingFiles.value = persistedData.data.workingFiles;
+            }
+          }
+          
+          await refreshStatistics();
+          await refreshRecentFiles();
+          await startFileWatching();
+        } else {
+          throw new Error(result.error || 'Failed to initialize context');
+        }
       }
     } catch (error) {
       console.error('Failed to initialize context:', error);
@@ -100,18 +114,35 @@ export const useProjectContextStore = defineStore('projectContext', () => {
       throw new Error('Context not initialized');
     }
 
+    const isRemoteMode = !window.electronAPI;
+
     try {
-      const result = await window.electronAPI.context.searchFiles(query, limit);
-      
-      if (result.success) {
+      if (isRemoteMode) {
+        // Use API in remote mode
+        const response = await fetch(`/api/context/search?q=${encodeURIComponent(query)}&limit=${limit}`);
+        const data = await response.json();
+        
+        const results = data.results || [];
         lastSearchResults.value = {
-          files: result.results,
+          files: results,
           query,
           timestamp: Date.now()
         };
-        return result.results;
+        return results;
       } else {
-        throw new Error(result.error || 'Failed to search files');
+        // Desktop mode
+        const result = await window.electronAPI.context.searchFiles(query, limit);
+        
+        if (result.success) {
+          lastSearchResults.value = {
+            files: result.results,
+            query,
+            timestamp: Date.now()
+          };
+          return result.results;
+        } else {
+          throw new Error(result.error || 'Failed to search files');
+        }
       }
     } catch (error) {
       console.error('Failed to search files:', error);
@@ -157,14 +188,33 @@ export const useProjectContextStore = defineStore('projectContext', () => {
 
   const refreshStatistics = async () => {
     if (!isInitialized.value) return;
+    
+    const isRemoteMode = !window.electronAPI;
 
     try {
-      const result = await window.electronAPI.context.getStatistics();
-      
-      if (result.success) {
-        projectInfo.value = result.statistics;
+      if (isRemoteMode) {
+        // Use API in remote mode
+        const response = await fetch('/api/context/statistics');
+        const data = await response.json();
+        
+        projectInfo.value = {
+          type: data.type || 'Unknown',
+          framework: data.framework,
+          languages: data.languages,
+          entryPoints: data.entryPoints || [],
+          configFiles: data.configFiles || [],
+          totalFiles: data.totalFiles,
+          languageDistribution: data.languageDistribution
+        };
       } else {
-        console.warn('Failed to get statistics:', result.error);
+        // Desktop mode
+        const result = await window.electronAPI.context.getStatistics();
+        
+        if (result.success) {
+          projectInfo.value = result.statistics;
+        } else {
+          console.warn('Failed to get statistics:', result.error);
+        }
       }
     } catch (error) {
       console.error('Failed to refresh statistics:', error);
@@ -173,14 +223,25 @@ export const useProjectContextStore = defineStore('projectContext', () => {
 
   const refreshRecentFiles = async (hours: number = 24) => {
     if (!isInitialized.value) return;
+    
+    const isRemoteMode = !window.electronAPI;
 
     try {
-      const result = await window.electronAPI.context.getRecentFiles(hours);
-      
-      if (result.success) {
-        recentFiles.value = result.files;
+      if (isRemoteMode) {
+        // Use API in remote mode
+        const response = await fetch('/api/context/recent-files');
+        const data = await response.json();
+        
+        recentFiles.value = data.files || [];
       } else {
-        console.warn('Failed to get recent files:', result.error);
+        // Desktop mode
+        const result = await window.electronAPI.context.getRecentFiles(hours);
+        
+        if (result.success) {
+          recentFiles.value = result.files;
+        } else {
+          console.warn('Failed to get recent files:', result.error);
+        }
       }
     } catch (error) {
       console.error('Failed to get recent files:', error);

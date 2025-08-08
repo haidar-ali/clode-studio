@@ -466,6 +466,7 @@ export class WorktreeManager {
             '.git',
             'node_modules',
             '.claude',
+            '.clode',
             '.claude-checkpoints',
             '.worktrees',
             'dist',

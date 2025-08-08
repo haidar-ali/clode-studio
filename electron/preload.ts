@@ -1,6 +1,67 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 const electronAPI = {
+  // General IPC send for specific allowed channels
+  send: (channel: string, data: any) => {
+    const allowedChannels = [
+      'forward-terminal-data', 
+      'forward-claude-output', 
+      'forward-claude-response-complete', 
+      'claude-instances-updated',
+      'snapshots-list-response',
+      'snapshots-capture-response', 
+      'snapshots-restore-response',
+      'snapshots-delete-response',
+      'snapshots-update-response',
+      'snapshots-content-response',
+      'snapshots-getDiff-response',
+      'snapshots-scanProjectFiles-response',
+      'worktree-list-response',
+      'worktree-sessions-response',
+      'worktree-switch-response',
+      'worktree-remove-response',
+      'worktree-lock-response',
+      'worktree-compare-response',
+      'worktree-createSession-response',
+      'worktree-deleteSession-response'
+    ];
+    if (allowedChannels.includes(channel)) {
+      ipcRenderer.send(channel, data);
+    }
+  },
+  // Expose ipcRenderer for remote snapshot handlers
+  ipcRenderer: {
+    on: (channel: string, listener: (...args: any[]) => void) => {
+      const allowedChannels = [
+        'remote-snapshot-list',
+        'remote-snapshot-capture', 
+        'remote-snapshot-restore',
+        'remote-snapshot-delete',
+        'remote-snapshot-update',
+        'remote-snapshot-content',
+        'remote-snapshot-getDiff',
+        'remote-snapshot-scanProjectFiles',
+        'remote-worktree-list',
+        'remote-worktree-sessions',
+        'remote-worktree-switch',
+        'remote-worktree-remove',
+        'remote-worktree-lock',
+        'remote-worktree-compare',
+        'remote-worktree-createSession',
+        'remote-worktree-deleteSession',
+        'tunnel:status-updated',
+        'relay:connected',
+        'relay:reconnected',
+        'relay:disconnected'
+      ];
+      if (allowedChannels.includes(channel)) {
+        ipcRenderer.on(channel, listener);
+      }
+    },
+    removeListener: (channel: string, listener: (...args: any[]) => void) => {
+      ipcRenderer.removeListener(channel, listener);
+    }
+  },
   claude: {
     start: (instanceId: string, workingDirectory: string, instanceName?: string, runConfig?: { command?: string; args?: string[] }): Promise<{
       success: boolean;
@@ -59,6 +120,11 @@ const electronAPI = {
     onTodosUpdated: (callback: (todos: any[]) => void) => {
       ipcRenderer.on('claude:todos:updated', (_, todos) => callback(todos));
     },
+    onInstancesUpdated: (callback: () => void) => {
+      ipcRenderer.on('claude:instances:updated', () => callback());
+    },
+    checkForwarding: (instanceId: string): Promise<boolean> =>
+      ipcRenderer.invoke('check-claude-forwarding', instanceId),
     // Hook management
     getHooks: () => ipcRenderer.invoke('claude:getHooks'),
     addHook: (hook: {
@@ -298,6 +364,47 @@ const electronAPI = {
     getCurrentPath: () => 
       ipcRenderer.invoke('workspace:getCurrentPath')
   },
+  
+  // App operations
+  app: {
+    getMode: () => ipcRenderer.invoke('app:getMode'),
+    getStatus: () => ipcRenderer.invoke('app:status'),
+    getPlatform: () => process.platform,
+    getVersion: () => process.versions.electron
+  },
+  
+  // Remote server operations
+  remote: {
+    storeToken: (args: {
+      token: string;
+      deviceId: string;
+      deviceName: string;
+      pairingCode: string;
+      expiresAt?: Date;
+    }) => ipcRenderer.invoke('remote:store-token', args),
+    getConnections: () => ipcRenderer.invoke('remote:get-connections'),
+    getActiveTokens: () => ipcRenderer.invoke('remote:get-active-tokens'),
+    revokeToken: (token: string) => ipcRenderer.invoke('remote:revoke-token', token),
+    disconnectDevice: (sessionId: string) => ipcRenderer.invoke('remote:disconnect-device', sessionId),
+    loadPersistedToken: () => ipcRenderer.invoke('remote:load-persisted-token'),
+    persistToken: (tokenData: any) => ipcRenderer.invoke('remote:persist-token', tokenData)
+  },
+
+  // Cloudflare tunnel operations
+  tunnel: {
+    getInfo: () => ipcRenderer.invoke('tunnel:getInfo'),
+    start: () => ipcRenderer.invoke('tunnel:start'),
+    stop: () => ipcRenderer.invoke('tunnel:stop')
+  },
+  
+  // Relay client operations
+  relay: {
+    getInfo: () => ipcRenderer.invoke('relay:getInfo'),
+    connect: () => ipcRenderer.invoke('relay:connect'),
+    disconnect: () => ipcRenderer.invoke('relay:disconnect')
+  },
+  
+  // Local database removed - SQLite not actively used
   snapshots: {
     save: (snapshot: any) =>
       ipcRenderer.invoke('snapshots:save', snapshot),

@@ -131,6 +131,7 @@ import { ref, onMounted, computed, watch } from 'vue';
 import { useWorkspaceStore } from '~/stores/workspace';
 import { useWorkspaceManager } from '~/composables/useWorkspaceManager';
 import { useSourceControlStore } from '~/stores/source-control';
+import { useWorktreeStore } from '~/stores/worktree';
 import WorktreeCard from './WorktreeCard.vue';
 import WorktreeSessionCard from './WorktreeSessionCard.vue';
 import WorktreeCreateDialog from './WorktreeCreateDialog.vue';
@@ -168,23 +169,42 @@ const workspaceStore = useWorkspaceStore();
 const workspaceManager = useWorkspaceManager();
 const { changeWorkspace } = workspaceManager;
 const sourceControlStore = useSourceControlStore();
+const worktreeStore = useWorktreeStore();
 
 // State
 const initialized = ref(false);
-const isLoading = ref(false);
-const worktrees = ref<Worktree[]>([]);
-const sessions = ref<WorktreeSession[]>([]);
 const showCreateDialog = ref(false);
 const showSessionDialog = ref(false);
 const sessionDialogWorktree = ref<Worktree | null>(null);
 const compareData = ref<{ worktree1: Worktree; worktree2: Worktree } | null>(null);
 const showSessionComparison = ref(false);
 
+// Use store state directly (don't destructure to avoid reactivity issues)
+const worktrees = computed(() => worktreeStore.worktrees);
+const sessions = computed(() => worktreeStore.sessions);
+const isLoading = computed(() => worktreeStore.isLoading);
+
 // Computed
 const isGitRepository = computed(() => sourceControlStore.isGitRepository);
-const activeWorktreePath = computed(() => workspaceManager.activeWorktreePath.value || '');
+const activeWorktreePath = computed(() => {
+  // In remote mode, get active worktree from store data
+  if (!window.electronAPI) {
+    const activeWorktree = worktrees.value?.find(w => w.isActive);
+    return activeWorktree?.path || '';
+  }
+  // In desktop mode, use workspace manager
+  return workspaceManager.activeWorktreePath.value || '';
+});
 const activeWorktreeBranch = computed(() => {
   if (!activeWorktreePath.value) return null;
+  
+  // In remote mode, get from store data
+  if (!window.electronAPI) {
+    const activeWorktree = worktrees.value?.find(w => w.isActive);
+    return activeWorktree?.branch || null;
+  }
+  
+  // In desktop mode, use workspace manager
   const activeWorktree = Array.from(workspaceManager.activeWorktrees.value.values())
     .find(w => w.path === activeWorktreePath.value);
   return activeWorktree?.branch || null;
@@ -192,7 +212,7 @@ const activeWorktreeBranch = computed(() => {
 
 // Helper function to find session for a worktree
 function findSessionForWorktree(worktreePath: string): WorktreeSession | undefined {
-  return sessions.value.find(session => session.worktree.path === worktreePath);
+  return sessions.value?.find(session => session.worktree.path === worktreePath);
 }
 
 // Initialize
@@ -204,7 +224,7 @@ onMounted(async () => {
   
   // Now load worktrees if it's a git repository
   if (sourceControlStore.isGitRepository) {
-    await loadWorktrees();
+    await worktreeStore.refreshWorktrees();
   }
   
   initialized.value = true;
@@ -216,7 +236,7 @@ watch(() => workspaceStore.currentPath, async (newPath) => {
     await sourceControlStore.initialize(newPath);
     
     if (sourceControlStore.isGitRepository) {
-      await loadWorktrees();
+      await worktreeStore.refreshWorktrees();
     }
   }
 });
@@ -225,45 +245,10 @@ watch(() => workspaceStore.currentPath, async (newPath) => {
 watch(() => workspaceManager.activeWorktreePath.value, async (newPath, oldPath) => {
   if (newPath !== oldPath && sourceControlStore.isGitRepository) {
     
-    await loadWorktrees();
+    await worktreeStore.refreshWorktrees();
   }
 });
 
-// Load worktrees and sessions
-async function loadWorktrees() {
-  if (!workspaceStore.currentPath) return;
-  
-  
-  
-  isLoading.value = true;
-  try {
-    // Don't set workspace path here as it might trigger reloads
-    // The workspace should already be set
-    
-    // Load worktrees
-    const worktreeResult = await window.electronAPI.worktree.list();
-    
-    if (worktreeResult.success && worktreeResult.worktrees) {
-      worktrees.value = worktreeResult.worktrees;
-    } else if (worktreeResult.error && worktreeResult.error.includes('not a git repository')) {
-      // Clear worktrees if not a git repository
-      worktrees.value = [];
-      sessions.value = [];
-      
-      return;
-    }
-    
-    // Load sessions
-    const sessionResult = await window.electronAPI.worktree.sessions();
-    if (sessionResult.success && sessionResult.sessions) {
-      sessions.value = sessionResult.sessions;
-    }
-  } catch (error) {
-    console.error('Failed to load worktrees:', error);
-  } finally {
-    isLoading.value = false;
-  }
-}
 
 // Handlers
 async function handleRefresh() {
@@ -273,34 +258,33 @@ async function handleRefresh() {
   }
   
   if (sourceControlStore.isGitRepository) {
-    await loadWorktrees();
+    await worktreeStore.refreshWorktrees();
   }
 }
 
 async function handleCreate(branchName: string, sessionName?: string, description?: string) {
-  isLoading.value = true;
   try {
     // Use workspace manager to create worktree to ensure proper handling
     const newWorktree = await workspaceManager.createWorktree(branchName, sessionName, description);
-    await loadWorktrees();
+    await worktreeStore.refreshWorktrees();
     showCreateDialog.value = false;
   } catch (error) {
     console.error('Failed to create worktree:', error);
     alert(`Failed to create worktree: ${error}`);
-  } finally {
-    isLoading.value = false;
   }
 }
 
 async function handleSwitch(worktreePath: string) {
-  const result = await window.electronAPI.worktree.switch(worktreePath);
-  if (result.success) {
-    // Use the new worktree switching logic that preserves workspace state
-    await workspaceManager.switchWorktreeWithinWorkspace(worktreePath);
-    // Reload worktrees to update UI
-    await loadWorktrees();
-    // Refresh workspace manager's worktree list
-    await workspaceManager.refreshWorktreeStatus();
+  const result = await worktreeStore.switchToWorktree(worktreePath);
+  if (result) {
+    // Only handle workspace switching in desktop mode
+    if (window.electronAPI) {
+      // Use the new worktree switching logic that preserves workspace state
+      await workspaceManager.switchWorktreeWithinWorkspace(worktreePath);
+      // Refresh workspace manager's worktree list
+      await workspaceManager.refreshWorktreeStatus();
+    }
+    // In remote mode, the desktop handles the switching entirely
   }
 }
 
@@ -309,23 +293,24 @@ async function handleRemove(worktree: Worktree, force: boolean = false) {
     return;
   }
   
-  const result = await window.electronAPI.worktree.remove(worktree.path, force);
-  if (result.success) {
-    await loadWorktrees();
+  try {
+    await worktreeStore.removeWorktree(worktree.path, force);
     // Remove the worktree from the active list without reinitializing everything
     await workspaceManager.removeWorktreeFromList(worktree.path);
-  } else if (!force && result.error?.includes('locked')) {
-    if (confirm('Worktree is locked. Force remove?')) {
-      await handleRemove(worktree, true);
+  } catch (error: any) {
+    if (!force && error.message?.includes('locked')) {
+      if (confirm('Worktree is locked. Force remove?')) {
+        await handleRemove(worktree, true);
+      }
+    } else {
+      console.error('Failed to remove worktree:', error);
+      alert(`Failed to remove worktree: ${error.message || error}`);
     }
   }
 }
 
 async function handleLock(worktree: Worktree, lock: boolean) {
-  const result = await window.electronAPI.worktree.lock(worktree.path, lock);
-  if (result.success) {
-    await loadWorktrees();
-  }
+  await worktreeStore.lockWorktree(worktree.path, lock);
 }
 
 async function handleCreateSession(worktree: Worktree) {
@@ -336,32 +321,50 @@ async function handleCreateSession(worktree: Worktree) {
 async function handleSessionCreate(data: { name: string; description?: string }) {
   if (!sessionDialogWorktree.value) return;
   
-  const result = await window.electronAPI.worktree.createSession({
-    name: data.name,
-    worktreePath: sessionDialogWorktree.value.path,
-    branchName: sessionDialogWorktree.value.branch,
-    metadata: {
-      description: data.description
+  try {
+    // Note: createSession is not implemented in the store yet
+    // For now, fall back to direct service call
+    const { useWorktreeService } = await import('~/composables/useWorktreeService');
+    const worktreeService = useWorktreeService();
+    
+    const result = await worktreeService.createSession({
+      name: data.name,
+      worktreePath: sessionDialogWorktree.value.path,
+      branchName: sessionDialogWorktree.value.branch,
+      metadata: {
+        description: data.description
+      }
+    });
+    
+    if (result.success) {
+      await worktreeStore.refreshWorktrees();
+      showSessionDialog.value = false;
+      sessionDialogWorktree.value = null;
+    } else {
+      console.error('Failed to create session:', result.error);
+      alert(result.error || 'Failed to create session');
     }
-  });
-  
-  if (result.success) {
-    await loadWorktrees();
-    showSessionDialog.value = false;
-    sessionDialogWorktree.value = null;
-  } else {
-    console.error('Failed to create session:', result.error);
-    // Show user-friendly error message
-    alert(result.error || 'Failed to create session');
+  } catch (error) {
+    console.error('Failed to create session:', error);
+    alert('Failed to create session');
   }
 }
 
 async function handleDeleteSession(sessionId: string) {
   if (!confirm('Delete this session?')) return;
   
-  const result = await window.electronAPI.worktree.deleteSession(sessionId);
-  if (result.success) {
-    await loadWorktrees();
+  try {
+    // Note: deleteSession is not implemented in the store yet
+    // For now, fall back to direct service call
+    const { useWorktreeService } = await import('~/composables/useWorktreeService');
+    const worktreeService = useWorktreeService();
+    
+    const result = await worktreeService.deleteSession(sessionId);
+    if (result.success) {
+      await worktreeStore.refreshWorktrees();
+    }
+  } catch (error) {
+    console.error('Failed to delete session:', error);
   }
 }
 

@@ -48,28 +48,66 @@ export const useMCPStore = defineStore('mcp', {
         this.isLoading = true;
         this.error = null;
 
-        // Use claude mcp list to get all configured servers
-        // Get current workspace path from editor store
-        const { useEditorStore } = await import('~/stores/editor');
-        const editorStore = useEditorStore();
-        const workspacePath = editorStore.workspacePath;
-        
-        const result = await window.electronAPI.mcp.list(workspacePath);
-        if (result.success && result.servers) {
-          this.servers = result.servers.map((server: any) => ({
-            name: server.name,
-            type: server.transport?.toLowerCase() || 'stdio',
-            command: server.command,
-            url: server.url,
-            status: 'connected', // Claude CLI manages connections
-            capabilities: server.capabilities || {},
-            args: server.args,
-            env: server.env,
-          }));
+        if (window.electronAPI?.mcp?.list) {
+          // Desktop mode - direct access
+          const { useEditorStore } = await import('~/stores/editor');
+          const editorStore = useEditorStore();
+          const workspacePath = editorStore.workspacePath;
+          
+          const result = await window.electronAPI.mcp.list(workspacePath);
+          if (result.success && result.servers) {
+            this.servers = result.servers.map((server: any) => ({
+              name: server.name,
+              type: server.transport?.toLowerCase() || 'stdio',
+              command: server.command,
+              url: server.url,
+              status: 'connected', // Claude CLI manages connections
+              capabilities: server.capabilities || {},
+              args: server.args,
+              env: server.env,
+            }));
+          } else {
+            this.servers = [];
+            if (result.error) {
+              this.error = result.error;
+            }
+          }
         } else {
-          this.servers = [];
-          if (result.error) {
-            this.error = result.error;
+          // Remote mode - get from desktop via Socket.IO
+          const { remoteConnection } = await import('~/services/remote-client/RemoteConnectionSingleton');
+          const socket = remoteConnection.getSocket();
+          
+          if (socket?.connected) {
+            try {
+              const features = await new Promise<any>((resolve, reject) => {
+                const request = {
+                  id: `mcp-store-${Date.now()}`,
+                  payload: {}
+                };
+                
+                const timeout = setTimeout(() => {
+                  reject(new Error('Request timeout'));
+                }, 5000);
+                
+                socket.emit('desktop:features:get', request, (response: any) => {
+                  clearTimeout(timeout);
+                  if (response.success) {
+                    resolve(response.data);
+                  } else {
+                    reject(new Error(response.error?.message || 'Request failed'));
+                  }
+                });
+              });
+              
+              // Extract MCP servers from features
+              this.servers = features?.mcp?.servers || [];
+            } catch (error) {
+              console.error('Failed to load MCP servers from remote:', error);
+              this.servers = [];
+            }
+          } else {
+            console.debug('No remote connection available');
+            this.servers = [];
           }
         }
       } catch (error) {

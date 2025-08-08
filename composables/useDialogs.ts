@@ -75,9 +75,8 @@ export const useDialogs = createSharedComposable(() => {
       }
     }
     
-    // Fallback - for now just return false to be safe
-    console.warn('No confirmation dialog available, defaulting to false');
-    return false;
+    // Fallback to browser's native confirm dialog
+    return window.confirm(message);
   }
   
   // Show info/error message
@@ -97,12 +96,8 @@ export const useDialogs = createSharedComposable(() => {
       }
     }
     
-    // Fallback - just log to console
-    if (type === 'error') {
-      console.error(message);
-    } else {
-      console.info(message);
-    }
+    // Fallback to browser's native alert
+    window.alert(`${title || (type === 'error' ? 'Error' : 'Information')}: ${message}`);
   }
   
   // Handle modal submit
@@ -119,6 +114,18 @@ export const useDialogs = createSharedComposable(() => {
     submitModal(null);
   }
   
+  // Convenience methods with additional fallbacks
+  const prompt = async (options: string | { message: string; defaultValue?: string; placeholder?: string; title?: string }) => {
+    const opts = typeof options === 'string' ? { message: options } : options;
+    const result = await showInputDialog(opts);
+    
+    // If Vue modal was cancelled, use browser prompt as final fallback
+    if (result === null && !window.electronAPI) {
+      return window.prompt(opts.message, opts.defaultValue || '');
+    }
+    return result;
+  };
+  
   return {
     // State for Vue modal fallback
     isModalOpen,
@@ -127,9 +134,10 @@ export const useDialogs = createSharedComposable(() => {
     cancelModal,
     
     // Dialog methods
-    prompt: showInputDialog,
+    prompt,
     confirm: showConfirmDialog,
     alert: (message: string, title?: string) => showMessageDialog(message, 'info', title),
-    error: (message: string, title?: string) => showMessageDialog(message, 'error', title)
+    error: (message: string, title?: string) => showMessageDialog(message, 'error', title),
+    info: (message: string, title?: string) => showMessageDialog(message, 'info', title)
   };
 });

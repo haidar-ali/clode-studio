@@ -4,14 +4,27 @@ import { useEditorStore } from '~/stores/editor';
 
 export function useLSPDiagnostics() {
   const editorStore = useEditorStore();
+  const isRemoteMode = !window.electronAPI;
 
   // Create linter extension for LSP diagnostics
   const createLSPDiagnostics = () => {
+    // In remote mode, skip diagnostics for now (could be implemented via Socket.IO)
+    if (isRemoteMode) {
+      return linter(async () => []);
+    }
+    
+    // Original desktop implementation
     return linter(async (view: EditorView) => {
       try {
         // Get the active tab to determine file path
         const activeTab = editorStore.activeTab;
         if (!activeTab?.path) {
+          return [];
+        }
+
+        // Check if we're in remote mode (no electronAPI)
+        if (!window.electronAPI?.lsp) {
+          // In remote mode, skip LSP diagnostics
           return [];
         }
 

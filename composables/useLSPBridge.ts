@@ -1,11 +1,20 @@
 import type { CompletionContext, CompletionResult } from '@codemirror/autocomplete';
 import { useEditorStore } from '~/stores/editor';
+import { useRemoteLSP } from '~/composables/useRemoteLSP';
 
 export function useLSPBridge() {
   const editorStore = useEditorStore();
+  const isRemoteMode = !window.electronAPI;
 
   // Create a direct CodeMirror completion source
   const createLSPCompletionSource = () => {
+    // Use remote LSP if in browser mode
+    if (isRemoteMode) {
+      const { createRemoteLSPCompletionSource } = useRemoteLSP();
+      return createRemoteLSPCompletionSource();
+    }
+    
+    // Original desktop implementation
     return async (context: CompletionContext): Promise<CompletionResult | null> => {
       try {
         // Get the active tab to determine file path
@@ -26,6 +35,12 @@ export function useLSPBridge() {
         const line = doc.lineAt(context.pos);
         const lineNumber = line.number; // 1-based
         const character = context.pos - line.from; // 0-based
+        
+        // Check if we're in remote mode (no electronAPI)
+        if (!window.electronAPI?.lsp) {
+          // In remote mode, return basic completions or skip LSP
+          return null;
+        }
 
         // Call our LSP service through IPC
         const response = await window.electronAPI.lsp.getCompletions({

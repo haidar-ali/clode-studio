@@ -319,3 +319,39 @@ export const useTerminalInstancesStore = defineStore('terminalInstances', {
     }
   }
 });
+
+// Export a global function for accessing terminal instances from Electron
+if (typeof window !== 'undefined') {
+  (window as any).__getTerminalInstances = () => {
+    const store = useTerminalInstancesStore();
+    // Return only serializable properties
+    return Array.from(store.instances.values()).map(instance => ({
+      id: instance.id,
+      name: instance.name,
+      workingDirectory: instance.workingDirectory,
+      ptyProcessId: instance.ptyProcessId,
+      createdAt: instance.createdAt,
+      lastActiveAt: instance.lastActiveAt,
+      savedBuffer: instance.savedBuffer || null
+    }));
+  };
+  
+  // Function to get current terminal buffer from active xterm instance
+  (window as any).__getTerminalBuffer = (terminalId: string) => {
+    // Try to find the terminal component and serialize its content
+    const terminalElements = document.querySelectorAll(`[data-terminal-id="${terminalId}"]`);
+    if (terminalElements.length > 0) {
+      const terminalEl = terminalElements[0] as any;
+      if (terminalEl.__terminal && terminalEl.__serializeAddon) {
+        try {
+          return terminalEl.__serializeAddon.serialize();
+        } catch (e) {
+          console.error('Failed to serialize terminal:', e);
+        }
+      }
+    }
+    // Fall back to saved buffer if available
+    const store = useTerminalInstancesStore();
+    return store.getTerminalBuffer(terminalId) || '';
+  };
+}

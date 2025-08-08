@@ -173,7 +173,9 @@ const selectedFile = ref<string | null>(null);
 // Load comparison on mount
 onMounted(async () => {
   try {
-    const result = await window.electronAPI.worktree.compare(
+    const { useWorktreeService } = await import('~/composables/useWorktreeService');
+    const worktreeService = useWorktreeService();
+    const result = await worktreeService.compare(
       props.worktree1.path,
       props.worktree2.path
     );

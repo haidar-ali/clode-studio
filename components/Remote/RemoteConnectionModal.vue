@@ -1,0 +1,348 @@
+<template>
+  <div v-if="show" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Connecting to Clode Studio</h2>
+      </div>
+      
+      <div class="modal-body">
+        <div v-if="connecting" class="connecting-state">
+          <div class="spinner"></div>
+          <p>Establishing connection...</p>
+        </div>
+        
+        <div v-else-if="connectionError || validationError" class="error-state">
+          <Icon name="mdi:alert-circle" />
+          <p>Connection failed</p>
+          <p class="error-message">{{ validationError || connectionError }}</p>
+          <div class="debug-info">
+            <p>Device ID: {{ deviceId || 'None' }}</p>
+            <p>Has Token: {{ !!deviceToken }}</p>
+            <p>Has Pairing: {{ !!pairingCode }}</p>
+            <p>Server URL: {{ debugInfo.serverUrl || 'Not set' }}</p>
+            <p>Transport: {{ debugInfo.transport || 'None' }}</p>
+            <p>Error Type: {{ debugInfo.errorType || 'Unknown' }}</p>
+            <p>User Agent: {{ debugInfo.userAgent }}</p>
+            <p>Protocol: {{ debugInfo.protocol }}</p>
+            <p>Host: {{ debugInfo.host }}</p>
+          </div>
+          <button @click="retry" class="retry-btn">
+            Retry Connection
+          </button>
+        </div>
+        
+        <div v-else-if="!hasCredentials" class="no-credentials">
+          <Icon name="mdi:qrcode" />
+          <p>No connection credentials found</p>
+          <p class="hint">Please scan the QR code from your desktop Clode Studio</p>
+        </div>
+        
+        <div v-else class="ready-state">
+          <Icon name="mdi:check-circle" />
+          <p>Ready to connect</p>
+          <p class="device-info">Device ID: {{ deviceId }}</p>
+          <p v-if="pairingCode" class="device-info">Pairing: {{ pairingCode }}</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, onMounted, computed, watch, nextTick } from 'vue';
+import { useRemoteConnection } from '~/composables/useRemoteConnection';
+
+interface Props {
+  show: boolean;
+}
+
+const props = defineProps<Props>();
+
+const emit = defineEmits<{
+  connected: [];
+}>();
+
+const { connect, connected, connecting, error: connectionError, debugInfo: connectionDebugInfo } = useRemoteConnection();
+
+const deviceId = ref<string>('');
+const deviceToken = ref<string>('');
+const pairingCode = ref<string>('');
+const validationError = ref<string | null>(null);
+
+const debugInfo = ref({
+  serverUrl: '',
+  transport: '',
+  errorType: '',
+  userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'Unknown',
+  protocol: typeof window !== 'undefined' ? window.location.protocol : 'Unknown',
+  host: typeof window !== 'undefined' ? window.location.host : 'Unknown'
+});
+
+const hasCredentials = computed(() => !!(deviceId.value && deviceToken.value));
+
+async function attemptConnection() {
+  console.log('[RemoteConnection] attemptConnection called');
+  if (!hasCredentials.value) {
+    console.log('[RemoteConnection] No credentials, aborting');
+    return;
+  }
+  
+  console.log('[RemoteConnection] Starting connection with:', {
+    deviceId: deviceId.value,
+    tokenLength: deviceToken.value?.length,
+    pairingCode: pairingCode.value
+  });
+  
+  try {
+    // Update debug info with connection details
+    debugInfo.value = {
+      ...debugInfo.value,
+      serverUrl: connectionDebugInfo.value.serverUrl || 'Not set',
+      transport: connectionDebugInfo.value.transport || 'None',
+      errorType: connectionDebugInfo.value.errorType || 'None'
+    };
+    
+    // Start the connection
+    await connect({
+      deviceId: deviceId.value,
+      deviceToken: deviceToken.value,
+      pairingCode: pairingCode.value
+    });
+    
+    // Wait for connection to complete (max 10 seconds)
+    let attempts = 0;
+    const maxAttempts = 20;
+    
+    while (attempts < maxAttempts && connecting.value && !connected.value && !connectionError.value) {
+      console.log(`[RemoteConnection] Waiting for connection... attempt ${attempts + 1}/${maxAttempts}`);
+      await new Promise(resolve => setTimeout(resolve, 500));
+      attempts++;
+    }
+    
+    console.log('[RemoteConnection] Final connection result:', {
+      connected: connected.value,
+      connecting: connecting.value,
+      error: connectionError.value
+    });
+    
+    if (connected.value) {
+      console.log('[RemoteConnection] Connected! Emitting event');
+      emit('connected');
+    } else if (connectionError.value) {
+      console.log('[RemoteConnection] Connection failed with error:', connectionError.value);
+    } else {
+      console.log('[RemoteConnection] Connection timed out');
+      validationError.value = 'Connection timed out. Please try again.';
+    }
+  } catch (err) {
+    console.error('Connection failed:', err);
+    // Update debug info with error details
+    debugInfo.value = {
+      ...debugInfo.value,
+      serverUrl: connectionDebugInfo.value.serverUrl || 'Not set',
+      transport: connectionDebugInfo.value.transport || 'None',
+      errorType: connectionDebugInfo.value.errorType || err.message
+    };
+  }
+}
+
+async function retry() {
+  await attemptConnection();
+}
+
+// Watch for debug info changes
+watch([connectionDebugInfo, connectionError], () => {
+  if (connectionDebugInfo.value.serverUrl) {
+    debugInfo.value = {
+      ...debugInfo.value,
+      serverUrl: connectionDebugInfo.value.serverUrl,
+      transport: connectionDebugInfo.value.transport || 'None',
+      errorType: connectionDebugInfo.value.errorType || 'None'
+    };
+  }
+});
+
+onMounted(() => {
+  // Validate URL format and extract credentials
+  const urlParams = new URLSearchParams(window.location.search);
+  
+  // Required parameters
+  const extractedDeviceId = urlParams.get('deviceId');
+  const extractedToken = urlParams.get('token');
+  const extractedPairing = urlParams.get('pairing');
+  
+  // Validate URL has all required parameters
+  if (!extractedDeviceId || !extractedToken) {
+    console.error('[RemoteConnection] Invalid URL format - missing required parameters');
+    validationError.value = 'Invalid connection URL. Please use a valid QR code or connection link.';
+    return;
+  }
+  
+  // Validate token format (should be 64 hex characters)
+  if (!/^[a-f0-9]{64}$/i.test(extractedToken)) {
+    console.error('[RemoteConnection] Invalid token format');
+    validationError.value = 'Invalid authentication token format.';
+    return;
+  }
+  
+  // Validate deviceId format (either 32 hex chars OR device-timestamp-random format)
+  const isHexFormat = /^[a-f0-9]{32}$/i.test(extractedDeviceId);
+  const isTimestampFormat = /^device-\d+-[a-z0-9]+$/i.test(extractedDeviceId);
+  
+  if (!isHexFormat && !isTimestampFormat) {
+    console.error('[RemoteConnection] Invalid device ID format:', extractedDeviceId);
+    validationError.value = 'Invalid device ID format.';
+    return;
+  }
+  
+  // Validate pairing code if present (6 uppercase alphanumeric, no confusing chars)
+  if (extractedPairing && !/^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{6}$/.test(extractedPairing)) {
+    console.error('[RemoteConnection] Invalid pairing code format');
+    validationError.value = 'Invalid pairing code format.';
+    return;
+  }
+  
+  // All validations passed, set the values
+  deviceId.value = extractedDeviceId;
+  deviceToken.value = extractedToken;
+  pairingCode.value = extractedPairing || '';
+  
+  console.log('[RemoteConnection] URL validated successfully');
+  console.log('[RemoteConnection] Credentials:', {
+    deviceId: deviceId.value,
+    hasToken: !!deviceToken.value,
+    hasPairing: !!pairingCode.value,
+    hasCredentials: hasCredentials.value
+  });
+  
+  // Auto-connect if credentials exist
+  if (hasCredentials.value) {
+    console.log('[RemoteConnection] Auto-connecting...');
+    // Use nextTick to ensure DOM is updated
+    nextTick(() => {
+      attemptConnection();
+    });
+  }
+});
+</script>
+
+<style scoped>
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 20px;
+}
+
+.modal-content {
+  background: var(--color-bg-primary);
+  border-radius: 8px;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--color-border);
+}
+
+.modal-header {
+  padding: 20px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 20px;
+  text-align: center;
+}
+
+.modal-body {
+  padding: 40px 20px;
+  text-align: center;
+}
+
+.connecting-state,
+.error-state,
+.no-credentials,
+.ready-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.spinner {
+  width: 48px;
+  height: 48px;
+  border: 3px solid var(--color-border);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.error-state svg {
+  width: 48px;
+  height: 48px;
+  color: var(--color-error);
+}
+
+.no-credentials svg,
+.ready-state svg {
+  width: 48px;
+  height: 48px;
+  color: var(--color-primary);
+}
+
+.error-message {
+  color: var(--color-error);
+  font-size: 14px;
+}
+
+.hint {
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  max-width: 300px;
+}
+
+.device-info {
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  font-family: monospace;
+}
+
+.retry-btn {
+  padding: 8px 16px;
+  background: var(--color-primary);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.retry-btn:hover {
+  opacity: 0.9;
+}
+
+.debug-info {
+  background: rgba(0, 0, 0, 0.2);
+  padding: 8px;
+  margin: 12px 0;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: monospace;
+}
+
+.debug-info p {
+  margin: 2px 0;
+}
+</style>

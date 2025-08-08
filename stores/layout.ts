@@ -30,6 +30,9 @@ export const useLayoutStore = defineStore('layout', {
     activeBottomModule: 'terminal' as ModuleId,
     secondaryRightModule: null as ModuleId | null,
     
+    // Mobile navigation state
+    activeDock: 'explorer-editor' as ModuleId,
+    
     // Right sidebar state
     rightSidebarVisible: true,
     rightSidebarSplitView: false,
@@ -52,6 +55,11 @@ export const useLayoutStore = defineStore('layout', {
 
   actions: {
     // Layout mode methods removed - always using full IDE mode
+    
+    // Mobile navigation
+    setActiveDock(moduleId: ModuleId) {
+      this.activeDock = moduleId;
+    },
     
     // Activity bar actions
     setActiveModule(moduleId: ModuleId) {

@@ -1,0 +1,28 @@
+{
+  "name": "@clode/relay-server",
+  "version": "1.0.0",
+  "description": "Smart relay server for Clode Studio remote access",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "docker:build": "docker build -t clode-relay .",
+    "docker:run": "docker run -p 3790:3790 --env-file .env clode-relay"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.6.1",
+    "ioredis": "^5.3.2",
+    "nanoid": "^4.0.2",
+    "jsonwebtoken": "^9.0.2",
+    "cors": "^2.8.5",
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -1,10 +1,12 @@
 import { app, BrowserWindow, ipcMain, shell, dialog } from 'electron';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import * as path from 'path';
 import { spawn } from 'child_process';
 import Store from 'electron-store';
 import * as pty from 'node-pty';
 import { existsSync } from 'fs';
+import * as fs from 'fs';
 import { readFile, mkdir } from 'fs/promises';
 import { watch as chokidarWatch } from 'chokidar';
 import { homedir } from 'os';
@@ -13,7 +15,7 @@ import { lightweightContext } from './lightweight-context.js';
 import { contextOptimizer } from './context-optimizer.js';
 import { workspacePersistence } from './workspace-persistence.js';
 import { searchWithRipgrep } from './search-ripgrep.js';
-import { claudeSettingsManager } from './claude-settings-manager.js';
+import { claudeSettingsManager as importedClaudeSettingsManager } from './claude-settings-manager.js';
 import { ClaudeDetector } from './claude-detector.js';
 import { fileWatcherService } from './file-watcher.js';
 import { createKnowledgeCache } from './knowledge-cache.js';
@@ -23,6 +25,11 @@ import { GitHooksManagerGlobal } from './git-hooks-manager-global.js';
 import { SnapshotService } from './snapshot-service.js';
 import { setupGitTimelineHandlers } from './git-timeline-handlers.js';
 import { ghostTextService } from './ghost-text-service.js';
+// LocalDatabase removed - SQLite not actively used
+import { getModeManager } from './services/mode-config.js';
+import { RemoteServer } from './services/remote-server.js';
+import { CloudflareTunnel } from './services/cloudflare-tunnel.js';
+import { RelayClient } from './services/relay-client.js';
 // Load environment variables from .env file
 import { config } from 'dotenv';
 config();
@@ -33,6 +40,13 @@ const store = new Store();
 const fileWatchers = new Map();
 // Multi-instance Claude support
 const claudeInstances = new Map();
+// Mode manager and remote server
+const modeManager = getModeManager();
+let remoteServer = null;
+let cloudflareTunnel = null;
+let relayClient = null;
+// Claude settings manager
+const claudeSettingsManager = importedClaudeSettingsManager;
 // Knowledge cache instances per workspace
 const knowledgeCaches = new Map();
 // Git service instances per workspace
@@ -69,6 +83,10 @@ function createWindow() {
         if (isDev) {
             mainWindow?.webContents.openDevTools();
         }
+        // Update remote server with new window reference if it exists
+        if (remoteServer && mainWindow) {
+            remoteServer.updateMainWindow(mainWindow);
+        }
     });
     mainWindow.on('closed', () => {
         mainWindow = null;
@@ -80,18 +98,193 @@ function createWindow() {
     });
 }
 app.whenReady().then(async () => {
+    // Log the current mode
     // Initialize all service managers (singletons)
     GitServiceManager.getInstance();
     WorktreeManagerGlobal.getInstance();
     GitHooksManagerGlobal.getInstance();
+    // LocalDatabase removed - SQLite not actively used
+    const workspacePath = store.get('workspacePath');
     // Initialize autocomplete services
     await ghostTextService.initialize();
     // Setup Git Timeline handlers
     setupGitTimelineHandlers();
     createWindow();
+    // Initialize remote server if in hybrid mode
+    if (modeManager.isHybridMode() && mainWindow) {
+        const config = modeManager.getConfig();
+        remoteServer = new RemoteServer({
+            config,
+            mainWindow
+        });
+        try {
+            await remoteServer.start();
+            // Make remote server globally accessible for handlers
+            global.__remoteServer = remoteServer;
+            // Set up IPC handler for terminal data forwarding
+            ipcMain.on('forward-terminal-data', (event, data) => {
+                if (remoteServer && data.socketId && data.terminalId) {
+                    remoteServer.forwardTerminalData(data.socketId, data.terminalId, data.data);
+                }
+            });
+            // Set up IPC handler for Claude output forwarding
+            ipcMain.on('forward-claude-output', (event, data) => {
+                if (remoteServer && data.socketId && data.instanceId) {
+                    remoteServer.forwardClaudeOutput(data.socketId, data.instanceId, data.data);
+                }
+            });
+            // Set up IPC handler for Claude response complete forwarding
+            ipcMain.on('forward-claude-response-complete', (event, data) => {
+                if (remoteServer && data.socketId && data.instanceId) {
+                    remoteServer.forwardClaudeResponseComplete(data.socketId, data.instanceId);
+                }
+                else {
+                    console.log('[Main] ❌ Missing requirements for forwarding:', {
+                        remoteServer: !!remoteServer,
+                        socketId: !!data.socketId,
+                        instanceId: !!data.instanceId
+                    });
+                }
+            });
+            // Set up IPC handler for Claude instance updates
+            ipcMain.on('claude-instances-updated', () => {
+                if (remoteServer) {
+                    remoteServer.broadcastClaudeInstancesUpdate();
+                }
+                // Also notify the desktop UI
+                mainWindow?.webContents.send('claude:instances:updated');
+            });
+            // Initialize tunnel/relay based on RELAY_TYPE environment variable
+            // Options: CLODE (default), CLOUDFLARE, CUSTOM
+            const relayType = (process.env.RELAY_TYPE || process.env.USE_RELAY || 'CLODE').toUpperCase();
+            console.log(`[Main] Using relay type: ${relayType}`);
+            switch (relayType) {
+                case 'CLODE':
+                case 'TRUE': // Backward compatibility with USE_RELAY=true
+                    // Use Clode relay server (default behavior)
+                    relayClient = new RelayClient(process.env.RELAY_URL || 'wss://relay.clode.studio');
+                    relayClient.on('registered', (info) => {
+                        console.log(`[Main] Clode Relay registered: ${info.url}`);
+                        mainWindow?.webContents.send('relay:connected', info);
+                    });
+                    relayClient.on('reconnected', () => {
+                        console.log('[Main] Clode Relay reconnected');
+                        mainWindow?.webContents.send('relay:reconnected');
+                    });
+                    relayClient.on('connection_lost', () => {
+                        console.log('[Main] Clode Relay connection lost');
+                        mainWindow?.webContents.send('relay:disconnected');
+                    });
+                    // Connect to relay after server is ready
+                    setTimeout(async () => {
+                        try {
+                            const info = await relayClient.connect();
+                            console.log(`[Main] Connected to Clode Relay: ${info.url}`);
+                            global.__relayClient = relayClient;
+                        }
+                        catch (error) {
+                            console.error('[Main] Failed to connect to Clode Relay:', error);
+                            // Continue without relay - fallback to local network
+                        }
+                    }, 2000);
+                    break;
+                case 'CLOUDFLARE':
+                    // Use Cloudflare tunnel
+                    console.log('[Main] Initializing Cloudflare tunnel...');
+                    cloudflareTunnel = new CloudflareTunnel();
+                    // Set up tunnel status updates
+                    cloudflareTunnel.onStatusUpdated((tunnelInfo) => {
+                        // Send tunnel info to renderer process
+                        mainWindow?.webContents.send('tunnel:status-updated', tunnelInfo);
+                        console.log('[Main] Cloudflare tunnel status:', tunnelInfo);
+                    });
+                    // Start tunnel (wait a bit for Nuxt to be ready)
+                    setTimeout(async () => {
+                        try {
+                            await cloudflareTunnel?.start();
+                            console.log('[Main] Cloudflare tunnel started successfully');
+                        }
+                        catch (tunnelError) {
+                            console.error('[Main] Failed to start Cloudflare tunnel:', tunnelError);
+                            // Tunnel failure shouldn't break the app, just log it
+                        }
+                    }, 2000); // Wait 2 seconds for Nuxt server to be ready
+                    break;
+                case 'CUSTOM':
+                    // User will provide their own tunnel solution (ngrok, serveo, etc.)
+                    // Custom tunnels should expose port 3000 (Nuxt UI), not 3789 (remote server)
+                    const uiPort = 3000;
+                    console.log('[Main] Custom tunnel mode - user will provide their own tunnel');
+                    console.log('[Main] UI server running on port:', uiPort);
+                    console.log('[Main] Remote server running on port:', config.serverPort);
+                    console.log('[Main] To expose your app, use one of these commands:');
+                    console.log(`[Main]   tunnelmole: npx tunnelmole@latest ${uiPort}`);
+                    console.log(`[Main]   localtunnel: npx localtunnel --port ${uiPort}`);
+                    console.log(`[Main]   ngrok: ngrok http ${uiPort}`);
+                    console.log(`[Main]   serveo: ssh -R 80:localhost:${uiPort} serveo.net`);
+                    console.log(`[Main]   bore: bore local ${uiPort} --to bore.pub`);
+                    // Send a message to the renderer that custom mode is active
+                    setTimeout(() => {
+                        mainWindow?.webContents.send('tunnel:custom-mode', {
+                            port: uiPort,
+                            message: 'Please set up your own tunnel solution for port 3000',
+                            suggestions: [
+                                `npx tunnelmole@latest ${uiPort}`,
+                                `npx localtunnel --port ${uiPort}`,
+                                `ngrok http ${uiPort}`,
+                                `ssh -R 80:localhost:${uiPort} serveo.net`,
+                                `bore local ${uiPort} --to bore.pub`
+                            ]
+                        });
+                    }, 2000);
+                    break;
+                case 'FALSE':
+                case 'NONE':
+                    // No tunnel/relay - local network only
+                    console.log('[Main] No tunnel/relay - local network access only');
+                    console.log('[Main] UI available at http://localhost:3000');
+                    console.log('[Main] Remote server available at http://localhost:' + config.serverPort);
+                    setTimeout(() => {
+                        mainWindow?.webContents.send('tunnel:local-only', {
+                            port: 3000,
+                            serverPort: config.serverPort,
+                            message: 'Local network access only'
+                        });
+                    }, 2000);
+                    break;
+                default:
+                    console.warn(`[Main] Unknown RELAY_TYPE: ${relayType}, falling back to CLODE`);
+                    // Fall back to CLODE relay
+                    relayClient = new RelayClient(process.env.RELAY_URL || 'wss://relay.clode.studio');
+                    setTimeout(async () => {
+                        try {
+                            const info = await relayClient.connect();
+                            console.log(`[Main] Connected to relay: ${info.url}`);
+                            global.__relayClient = relayClient;
+                        }
+                        catch (error) {
+                            console.error('[Main] Failed to connect to relay:', error);
+                        }
+                    }, 2000);
+            }
+        }
+        catch (error) {
+            console.error('Failed to start remote server:', error);
+            dialog.showErrorBox('Remote Server Error', `Failed to start remote server: ${error.message}`);
+        }
+    }
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {
             createWindow();
+            // After creating new window, update remote server reference
+            if (remoteServer && mainWindow) {
+                // Give window time to be ready
+                setTimeout(() => {
+                    if (remoteServer && mainWindow) {
+                        remoteServer.updateMainWindow(mainWindow);
+                    }
+                }, 100);
+            }
         }
     });
 });
@@ -103,9 +296,21 @@ app.on('window-all-closed', () => {
 // Claude Process Management using PTY with multi-instance support
 ipcMain.handle('claude:start', async (event, instanceId, workingDirectory, instanceName, runConfig) => {
     if (claudeInstances.has(instanceId)) {
-        return { success: false, error: 'Claude instance already running' };
+        // Instance already running - return success with existing PID
+        const existingPty = claudeInstances.get(instanceId);
+        const pid = existingPty?.pid || -1;
+        // Get Claude info for response
+        const claudeInfo = await ClaudeDetector.detectClaude(workingDirectory);
+        return {
+            success: true,
+            pid,
+            claudeInfo,
+            alreadyRunning: true
+        };
     }
     try {
+        // Configure MCP server for this Claude instance
+        await claudeSettingsManager.configureClodeIntegration(instanceId, workingDirectory);
         // Detect Claude installation
         const claudeInfo = await ClaudeDetector.detectClaude(workingDirectory);
         // Get the command configuration
@@ -159,10 +364,27 @@ ipcMain.handle('claude:start', async (event, instanceId, workingDirectory, insta
             mainWindow?.webContents.send(`claude:output:${instanceId}`, data);
         });
         // Handle exit
-        claudePty.onExit(({ exitCode, signal }) => {
+        claudePty.onExit(async ({ exitCode, signal }) => {
             mainWindow?.webContents.send(`claude:exit:${instanceId}`, exitCode);
             claudeInstances.delete(instanceId);
+            // Clean up MCP server configuration
+            try {
+                await claudeSettingsManager.cleanupClodeIntegration();
+            }
+            catch (error) {
+                console.error('Failed to clean up MCP server configuration:', error);
+            }
+            // Notify all clients about instance update
+            mainWindow?.webContents.send('claude:instances:updated');
+            if (remoteServer) {
+                remoteServer.broadcastClaudeInstancesUpdate();
+            }
         });
+        // Notify all clients about instance update
+        mainWindow?.webContents.send('claude:instances:updated');
+        if (remoteServer) {
+            remoteServer.broadcastClaudeInstancesUpdate();
+        }
         return {
             success: true,
             pid: claudePty.pid,
@@ -198,9 +420,35 @@ ipcMain.handle('claude:stop', async (event, instanceId) => {
     if (claudePty) {
         claudePty.kill();
         claudeInstances.delete(instanceId);
+        // Notify all clients about instance update
+        mainWindow?.webContents.send('claude:instances:updated');
+        if (remoteServer) {
+            remoteServer.broadcastClaudeInstancesUpdate();
+        }
         return { success: true };
     }
     return { success: false, error: `No Claude PTY running for instance ${instanceId}` };
+});
+// Check if a Claude instance is being forwarded from remote
+ipcMain.handle('check-claude-forwarding', async (event, instanceId) => {
+    if (!mainWindow)
+        return false;
+    try {
+        // Check if the instance is in the forwarding map on the renderer side
+        const isForwarded = await mainWindow.webContents.executeJavaScript(`
+      (() => {
+        if (window.__remoteClaudeForwarding) {
+          return window.__remoteClaudeForwarding.has('${instanceId}');
+        }
+        return false;
+      })()
+    `);
+        return isForwarded;
+    }
+    catch (error) {
+        console.error('Failed to check Claude forwarding:', error);
+        return false;
+    }
 });
 ipcMain.handle('claude:resize', async (event, instanceId, cols, rows) => {
     const claudePty = claudeInstances.get(instanceId);
@@ -1063,6 +1311,10 @@ ipcMain.handle('terminal:create', async (event, options) => {
         terminals.set(id, ptyProcess);
         ptyProcess.onData((data) => {
             mainWindow?.webContents.send(`terminal:data:${id}`, data);
+            // Also forward to remote clients if in hybrid mode
+            if (remoteServer) {
+                remoteServer.forwardDesktopTerminalData(id, data);
+            }
         });
         ptyProcess.onExit(({ exitCode, signal }) => {
             terminals.delete(id);
@@ -1185,7 +1437,8 @@ ipcMain.handle('autocomplete:getLSPStatus', async () => {
 ipcMain.handle('lsp:getCompletions', async (event, params) => {
     try {
         const { lspManager } = await import('./lsp-manager.js');
-        const completions = await lspManager.getCompletions(params.filepath, params.content, params.position, params.context?.triggerCharacter);
+        const completions = await lspManager.getCompletions(params.filepath, params.content, params.position, params.context // Pass the full context object
+        );
         // Return in LSP format expected by codemirror-languageservice
         return {
             success: true,
@@ -1249,7 +1502,6 @@ ipcMain.handle('lsp:getDiagnostics', async (event, params) => {
 ipcMain.handle('lsp:install', async (event, params) => {
     try {
         const { id, command, packageManager } = params;
-      
         return new Promise((resolve) => {
             // Parse the command into executable and arguments
             const commandParts = command.split(' ');
@@ -1269,7 +1521,6 @@ ipcMain.handle('lsp:install', async (event, params) => {
             });
             installProcess.on('close', (code) => {
                 if (code === 0) {
-                  
                     resolve({ success: true, output: stdout });
                 }
                 else {
@@ -1310,7 +1561,6 @@ ipcMain.handle('lsp:install', async (event, params) => {
 ipcMain.handle('lsp:uninstall', async (event, params) => {
     try {
         const { id, packageManager } = params;
-      
         // Define uninstall commands for different package managers
         const uninstallCommands = {
             npm: ['npm', 'uninstall', '-g'],
@@ -1359,7 +1609,6 @@ ipcMain.handle('lsp:uninstall', async (event, params) => {
             });
             uninstallProcess.on('close', (code) => {
                 if (code === 0) {
-                  
                     resolve({ success: true, output: stdout });
                 }
                 else {
@@ -1469,11 +1718,9 @@ ${resourceContext}
 Request: ${prompt}
 
 Remember: Return ONLY the complete code for the file. No explanations. No markdown. Just the raw code.`;
-      
         // Create an AbortController for timeout
         const abortController = new AbortController();
         const timeoutId = setTimeout(() => {
-          
             abortController.abort();
         }, 60000); // 60 second timeout
         try {
@@ -1500,13 +1747,11 @@ Remember: Return ONLY the complete code for the file. No explanations. No markdo
                     }
                 }
                 else if (message.type === 'result') {
-                  
                     break;
                 }
             }
             clearTimeout(timeoutId);
             if (generatedCode) {
-              
                 // Clean the response - remove any markdown code blocks if present
                 generatedCode = generatedCode.trim();
                 // Remove markdown code blocks if they exist
@@ -2163,8 +2408,169 @@ ipcMain.handle('git:checkIgnore', async (event, workspacePath, paths) => {
         return { success: true, results, gitAvailable: false };
     }
 });
-// Clean up git services on app quit
-app.on('before-quit', () => {
+// Mode and remote server status
+ipcMain.handle('app:getMode', async () => {
+    return {
+        mode: modeManager.getMode(),
+        config: modeManager.getConfig(),
+        remoteServerRunning: remoteServer?.isRunning() || false,
+        remoteConnections: remoteServer?.getActiveConnectionCount() || 0
+    };
+});
+// App status (same as getMode but following the naming convention)
+ipcMain.handle('app:status', async () => {
+    return {
+        mode: modeManager.getMode(),
+        config: modeManager.getConfig(),
+        remoteServerRunning: remoteServer?.isRunning() || false,
+        remoteConnections: remoteServer?.getActiveConnectionCount() || 0,
+        remoteStats: remoteServer?.getStats(),
+        tunnel: cloudflareTunnel?.getInfo() || null
+    };
+});
+// Cloudflare tunnel handlers
+ipcMain.handle('tunnel:getInfo', async () => {
+    return cloudflareTunnel?.getInfo() || { url: '', status: 'stopped' };
+});
+ipcMain.handle('tunnel:start', async () => {
+    if (!cloudflareTunnel) {
+        cloudflareTunnel = new CloudflareTunnel();
+        cloudflareTunnel.onStatusUpdated((tunnelInfo) => {
+            mainWindow?.webContents.send('tunnel:status-updated', tunnelInfo);
+        });
+    }
+    try {
+        return await cloudflareTunnel.start();
+    }
+    catch (error) {
+        return {
+            url: '',
+            status: 'error',
+            error: error instanceof Error ? error.message : 'Unknown error'
+        };
+    }
+});
+ipcMain.handle('tunnel:stop', async () => {
+    if (cloudflareTunnel) {
+        cloudflareTunnel.stop();
+        return { success: true };
+    }
+    return { success: false };
+});
+// Relay client handlers
+ipcMain.handle('relay:getInfo', async () => {
+    if (!relayClient)
+        return null;
+    return relayClient.getInfo();
+});
+ipcMain.handle('relay:connect', async () => {
+    if (!relayClient) {
+        relayClient = new RelayClient(process.env.RELAY_URL || 'wss://relay.clode.studio');
+    }
+    try {
+        const info = await relayClient.connect();
+        global.__relayClient = relayClient;
+        return info;
+    }
+    catch (error) {
+        return {
+            error: error instanceof Error ? error.message : 'Failed to connect to relay'
+        };
+    }
+});
+ipcMain.handle('relay:disconnect', async () => {
+    if (relayClient) {
+        relayClient.disconnect();
+    }
+    return { success: true };
+});
+// Store token when QR code is generated
+ipcMain.handle('remote:store-token', async (event, args) => {
+    if (!remoteServer) {
+        throw new Error('Remote server not initialized');
+    }
+    const { token, deviceId, deviceName, pairingCode, expiresAt } = args;
+    remoteServer.storeToken(token, deviceId, deviceName, pairingCode, expiresAt);
+    return { success: true };
+});
+// Get active remote connections
+ipcMain.handle('remote:get-connections', async () => {
+    if (!remoteServer) {
+        return [];
+    }
+    return remoteServer.getConnections();
+});
+// Get active tokens
+ipcMain.handle('remote:get-active-tokens', async () => {
+    if (!remoteServer) {
+        return [];
+    }
+    return remoteServer.getActiveTokens();
+});
+// Revoke a token
+ipcMain.handle('remote:revoke-token', async (event, token) => {
+    if (!remoteServer) {
+        throw new Error('Remote server not initialized');
+    }
+    return remoteServer.revokeToken(token);
+});
+// Disconnect a specific device
+ipcMain.handle('remote:disconnect-device', async (event, sessionId) => {
+    if (!remoteServer) {
+        throw new Error('Remote server not initialized');
+    }
+    return remoteServer.disconnectDevice(sessionId);
+});
+// Load persisted token from workspace
+ipcMain.handle('remote:load-persisted-token', async () => {
+    const workspacePath = store.get('workspacePath');
+    if (!workspacePath)
+        return null;
+    const tokenFile = path.join(workspacePath, '.clode', 'remote-token.json');
+    try {
+        if (fs.existsSync(tokenFile)) {
+            const data = fs.readFileSync(tokenFile, 'utf-8');
+            return JSON.parse(data);
+        }
+    }
+    catch (error) {
+        console.error('Failed to load persisted token:', error);
+    }
+    return null;
+});
+// Persist token to workspace
+ipcMain.handle('remote:persist-token', async (event, tokenData) => {
+    const workspacePath = store.get('workspacePath');
+    if (!workspacePath)
+        return false;
+    const clodeDir = path.join(workspacePath, '.clode');
+    const tokenFile = path.join(clodeDir, 'remote-token.json');
+    try {
+        // Create .clode directory if it doesn't exist
+        if (!fs.existsSync(clodeDir)) {
+            fs.mkdirSync(clodeDir, { recursive: true });
+        }
+        // Write token data
+        fs.writeFileSync(tokenFile, JSON.stringify(tokenData, null, 2));
+        return true;
+    }
+    catch (error) {
+        console.error('Failed to persist token:', error);
+        return false;
+    }
+});
+// Local Database handlers removed - SQLite not actively used
+// Clean up on app quit
+app.on('before-quit', async () => {
+    // Stop remote server if running
+    if (remoteServer && remoteServer.isRunning()) {
+        await remoteServer.stop();
+    }
+    // Stop Cloudflare tunnel if running
+    if (cloudflareTunnel && cloudflareTunnel.isRunning()) {
+        cloudflareTunnel.stop();
+    }
+    // Database cleanup removed - SQLite not actively used
     for (const [path, service] of gitServices) {
         service.cleanup();
     }

@@ -109,7 +109,13 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
 
   actions: {
     async init() {
-    
+      // Set up listener for instance updates from desktop
+      if (typeof window !== 'undefined' && window.electronAPI?.claude?.onInstancesUpdated) {
+        window.electronAPI.claude.onInstancesUpdated(() => {
+          // Reload instances when desktop notifies us of changes
+          this.reloadInstances();
+        });
+      }
       
       // Load default personalities
       this.$state.defaultPersonalities.forEach(personality => {
@@ -156,9 +162,8 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
         }
       }
 
-      // Create default instance if none exist
-      if (this.instances.size === 0) {
-      
+      // Create default instance if none exist (only on desktop)
+      if (this.instances.size === 0 && typeof window !== 'undefined' && window.electronAPI?.claude) {
         await this.createInstance('Claude 1');
       }
     },
@@ -358,6 +363,11 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
           color: inst.color
         }));
         await window.electronAPI.store.set('claudeInstances', serializableInstances);
+        
+        // Notify remote clients about instance updates
+        if (window.electronAPI?.send) {
+          window.electronAPI.send('claude-instances-updated', {});
+        }
       } catch (error) {
         console.error('Failed to save instances:', error);
       }
@@ -527,6 +537,47 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
         await this.saveWorkspaceConfiguration(path);
       }
     },
+
+    async reloadInstances() {
+     
+      
+      if (typeof window === 'undefined' || !window.electronAPI?.store) {
+        return;
+      }
+
+      try {
+        // Load saved instances from storage
+        const savedInstances = await window.electronAPI.store.get('claudeInstances');
+        
+        if (savedInstances && Array.isArray(savedInstances)) {
+          // Create a new Map to trigger Vue reactivity
+          const newInstances = new Map<string, ClaudeInstance>();
+          
+          // Reload all instances
+          savedInstances.forEach((instance: ClaudeInstance) => {
+            // Ensure dates are strings
+            if (instance.createdAt && typeof instance.createdAt !== 'string') {
+              instance.createdAt = new Date(instance.createdAt).toISOString();
+            }
+            if (instance.lastActiveAt && typeof instance.lastActiveAt !== 'string') {
+              instance.lastActiveAt = new Date(instance.lastActiveAt).toISOString();
+            }
+            newInstances.set(instance.id, instance);
+          });
+          
+          // Replace the entire instances Map to trigger reactivity
+          this.instances = newInstances;
+          
+          // Ensure active instance is still valid
+          if (this.activeInstanceId && !this.instances.has(this.activeInstanceId)) {
+            const firstId = Array.from(this.instances.keys())[0];
+            this.activeInstanceId = firstId || null;
+          }
+        }
+      } catch (error) {
+        console.error('Failed to reload instances:', error);
+      }
+    },
     
     // Methods for checkpoint system
     restoreInstances(instances: Array<{ id: string; personality: string; messages: any[] }>) {
@@ -556,3 +607,50 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
     }
   }
 });
+
+// Export global functions for accessing Claude instances from Electron
+if (typeof window !== 'undefined') {
+  (window as any).__getClaudeInstances = () => {
+    const store = useClaudeInstancesStore();
+    // Return only serializable properties
+    return Array.from(store.instances.values()).map(instance => ({
+      id: instance.id,
+      name: instance.name,
+      status: instance.status,
+      personalityId: instance.personalityId,
+      workingDirectory: instance.workingDirectory,
+      createdAt: instance.createdAt,
+      lastActiveAt: instance.lastActiveAt,
+      color: instance.color,
+      pid: instance.pid,
+      sessionId: instance.sessionId
+    }));
+  };
+  
+  (window as any).__getClaudeStore = () => {
+    return useClaudeInstancesStore();
+  };
+  
+  // Function to get Claude terminal buffer
+  (window as any).__getClaudeTerminalBuffer = (instanceId: string) => {
+    // Find all terminal elements
+    const allElements = document.querySelectorAll('*');
+    
+    for (const el of allElements) {
+      const terminalEl = el as any;
+      // Check if this element has our terminal data
+      if (terminalEl.__instanceId === instanceId && terminalEl.__serializeAddon && terminalEl.__terminal) {
+        try {
+          const buffer = terminalEl.__serializeAddon.serialize();
+         
+          return buffer;
+        } catch (e) {
+          console.error('Failed to serialize Claude terminal:', e);
+        }
+      }
+    }
+    
+   
+    return null;
+  };
+}

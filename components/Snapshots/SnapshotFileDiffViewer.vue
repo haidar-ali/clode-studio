@@ -240,11 +240,8 @@ async function loadDiff() {
   try {
     const fileContentManager = useFileContentManager(props.snapshot.projectPath);
     
-    // Get the diff object via IPC
-    const result = await window.electronAPI.snapshots.getDiff({
-      hash: props.file.diffHash,
-      projectPath: props.snapshot.projectPath
-    });
+    // Get the diff object via FileContentManager (handles remote mode)
+    const result = await fileContentManager.getDiff(props.file.diffHash);
     
     if (!result.success || !result.diffObject) {
       throw new Error(result.error || 'Failed to load diff');

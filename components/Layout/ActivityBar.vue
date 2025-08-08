@@ -17,7 +17,7 @@
         @dragend="handleDragEnd"
         @contextmenu.prevent="showModuleMenu($event, item.id)"
       >
-        <Icon :name="item.icon" size="24" />
+        <Icon :name="item.icon" size="24" :style="{ color: getIconColor(item.id) }" />
         <span v-if="item.badge" class="activity-badge">{{ formatBadge(item.badge) }}</span>
         <span v-if="isInHiddenRightDock(item.id)" class="hidden-dock-indicator">
           <Icon name="mdi:dock-right" size="12" />
@@ -200,6 +200,40 @@ const openLayoutSettings = () => {
 
 const openSettings = () => {
   window.dispatchEvent(new Event('open-settings'));
+};
+
+// Get icon color based on module type
+const getIconColor = (moduleId: string): string => {
+  // Return white for active module for better visibility
+  if (activeModule.value === moduleId) {
+    return '#ffffff';
+  }
+  
+  switch (moduleId) {
+    case 'claude':
+      return '#ff8c42'; // Orange for Anthropic/Claude
+    case 'context':
+      return '#ff69b4'; // Pink for brain/context
+    case 'explorer':
+    case 'explorer-editor':
+      return '#42a5f5'; // Blue for file explorer
+    case 'tasks':
+      return '#66bb6a'; // Green for tasks
+    case 'knowledge':
+      return '#ab47bc'; // Purple for knowledge
+    case 'source-control':
+      return '#4caf50'; // Git green
+    case 'snapshots':
+      return '#ffca28'; // Yellow for camera/snapshots
+    case 'worktrees':
+      return '#26a69a'; // Teal for worktrees
+    case 'prompts':
+      return '#ef5350'; // Red for prompts
+    case 'terminal':
+      return '#78909c'; // Blue-grey for terminal
+    default:
+      return '#858585'; // Default grey
+  }
 };
 
 const handleDragStart = (event: DragEvent, moduleId: string) => {

@@ -232,6 +232,18 @@ echo ""
 echo "✅ Hook test completed"
 `.trim();
   }
+  
+  async configureClodeIntegration(instanceId: string, workingDirectory: string): Promise<void> {
+    // Configure Claude to work with Clode Studio
+   
+    // Implementation would go here if needed
+  }
+  
+  async cleanupClodeIntegration(): Promise<void> {
+    // Clean up Claude integration
+   
+    // Implementation would go here if needed
+  }
 }
 
 export const claudeSettingsManager = new ClaudeSettingsManager();
