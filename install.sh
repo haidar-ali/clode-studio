@@ -258,7 +258,12 @@ if [ "$DEV" = true ]; then
     npm run electron:dev
 else
     echo "Starting Clode Studio (${MODE} mode)..."
-    npm run electron:prod 2>/dev/null || npm run electron:dev
+    # Use optimized mode for hybrid/remote, dev mode for desktop
+    if [ "$MODE" = "hybrid" ]; then
+        npm run electron:remote
+    else
+        npm run electron:dev
+    fi
 fi
 EOF
     
@@ -309,6 +314,12 @@ configure_env() {
 # Default mode: desktop or hybrid
 CLODE_MODE=desktop
 
+# Relay/Tunnel type: CLODE, CLOUDFLARE, CUSTOM, NONE
+RELAY_TYPE=CLODE
+
+# Custom relay server (when RELAY_TYPE=CLODE)
+# RELAY_URL=wss://your-relay.example.com
+
 # Remote server settings (for hybrid mode)
 CLODE_SERVER_PORT=3789
 CLODE_SERVER_HOST=0.0.0.0
@@ -340,8 +351,13 @@ print_success() {
     
     echo ""
     echo -e "${BOLD}Remote Access (hybrid mode):${NC}"
-    echo -e "  When running in hybrid mode, access from other devices at:"
-    echo -e "  ${BLUE}http://$(hostname -I 2>/dev/null | awk '{print $1}' || echo "your-ip"):3789${NC}"
+    echo -e "  When running in hybrid mode, Clode Studio will show:"
+    echo -e "  • QR code for mobile connection"
+    echo -e "  • Relay URL for remote access"
+    echo -e "  • Local network URL for same WiFi"
+    echo ""
+    echo -e "  Custom tunnels (ngrok, etc) use port ${BLUE}3000${NC}"
+    echo -e "  Relay server listens on port ${BLUE}3789${NC}"
     echo ""
     echo -e "${BOLD}Configuration:${NC}"
     echo -e "  Edit ${BLUE}$INSTALL_DIR/.env${NC} to change settings"
