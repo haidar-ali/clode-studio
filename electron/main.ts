@@ -1958,8 +1958,8 @@ Remember: Return ONLY the complete code for the file. No explanations. No markdo
       // Use Claude SDK to generate code
       const response = query({
         prompt: userPrompt,
-        abortController,
         options: {
+          abortController,
           model: 'claude-sonnet-4-20250514', // Fast model for code generation
           maxTurns: 1,
           allowedTools: [],

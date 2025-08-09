@@ -18,8 +18,8 @@
     "dist": "npm run generate && npm run electron:compile && electron-builder"
   },
   "dependencies": {
-    "@anthropic-ai/claude-code": "^1.0.63",
-    "@anthropic-ai/sdk": "^0.57.0",
+    "@anthropic-ai/claude-code": "^1.0.72",
+    "@anthropic-ai/sdk": "^0.59.0",
     "@codemirror/autocomplete": "^6.18.6",
     "@codemirror/commands": "^6.8.1",
     "@codemirror/lang-cpp": "^6.0.3",
