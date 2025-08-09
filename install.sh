@@ -137,7 +137,11 @@ check_optional() {
         echo -e "${GREEN}✓ Ripgrep found (faster search)${NC}"
     else
         echo -e "${YELLOW}○ Ripgrep not found (search will be slower)${NC}"
-        echo -e "  Install with: ${OS == 'macos' && echo 'brew install ripgrep' || echo 'sudo apt install ripgrep'}"
+        if [[ "$OS" == "macos" ]]; then
+            echo -e "  Install with: brew install ripgrep"
+        else
+            echo -e "  Install with: sudo apt install ripgrep"
+        fi
     fi
     
     # Check Claude CLI
