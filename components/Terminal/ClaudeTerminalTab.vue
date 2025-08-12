@@ -11,7 +11,7 @@
           @update="updatePersonality"
         />
         <button
-          v-if="instance.status === 'disconnected'"
+          v-if="currentInstance.status === 'disconnected'"
           @click="startClaude"
           class="icon-button start-button"
           title="Start Claude"
@@ -20,7 +20,7 @@
           <span>Start</span>
         </button>
         <button
-          v-else-if="instance.status === 'connected'"
+          v-else-if="currentInstance.status === 'connected'"
           @click="stopClaude"
           class="icon-button stop-button"
           title="Stop Claude"
@@ -28,8 +28,17 @@
           <Icon name="mdi:stop" size="16" />
           <span>Stop</span>
         </button>
+        <button
+          v-else-if="currentInstance.status === 'connecting'"
+          disabled
+          class="icon-button connecting-button"
+          title="Connecting..."
+        >
+          <Icon name="mdi:loading" size="16" class="spin" />
+          <span>Connecting...</span>
+        </button>
         <ClaudeRunConfigSelector
-          v-if="instance.status === 'disconnected'"
+          v-if="currentInstance.status === 'disconnected'"
           @config-changed="onConfigChanged"
         />
       </div>
@@ -88,6 +97,17 @@ const terminalElement = ref<HTMLElement>();
 const showChatInput = ref(false);
 const selectedRunConfig = ref<ClaudeRunConfig | null>(null);
 
+// Get reactive instance from store - ALWAYS use store, ignore prop for status
+const currentInstance = computed(() => {
+  // Always get the instance from the store for reactivity
+  const storeInstance = instancesStore.instancesList.find(inst => inst.id === props.instance.id);
+  if (!storeInstance) {
+    console.warn(`Instance ${props.instance.id} not found in store, using prop`);
+    return props.instance;
+  }
+  return storeInstance;
+});
+
 // Provide working directory for child components
 provide('workingDirectory', props.instance.workingDirectory);
 
@@ -117,7 +137,7 @@ const updatePersonality = async (personalityId: string | undefined) => {
   instancesStore.updateInstancePersonality(props.instance.id, personalityId);
 
   // If Claude is running, send the new personality instructions
-  if (props.instance.status === 'connected' && personalityId) {
+  if (currentInstance.value.status === 'connected' && personalityId) {
     const newPersonality = instancesStore.getPersonalityById(personalityId);
     if (newPersonality && terminal) {
       terminal.writeln('\r\n\x1b[36m[Personality Changed: ' + newPersonality.name + ']\x1b[0m');
@@ -127,7 +147,7 @@ const updatePersonality = async (personalityId: string | undefined) => {
       const instructions = `System: Your personality has been changed. ${newPersonality.instructions}`;
       await window.electronAPI.claude.send(props.instance.id, instructions + '\n');
     }
-  } else if (!personalityId && props.instance.status === 'connected' && terminal) {
+  } else if (!personalityId && currentInstance.value.status === 'connected' && terminal) {
     terminal.writeln('\r\n\x1b[36m[Personality Removed]\x1b[0m');
     terminal.writeln('\x1b[90mReverted to default Claude behavior\x1b[0m\r\n');
 
@@ -204,7 +224,7 @@ const initTerminal = () => {
     // Only handle on Mac
     if (navigator.platform.toLowerCase().indexOf('mac') !== -1) {
       // Only process if Claude is connected
-      if (props.instance.status === 'connected') {
+      if (currentInstance.value.status === 'connected') {
         try {
           // Cmd + Delete: Clear line before cursor
           if (event.metaKey && event.key === 'Backspace') {
@@ -277,14 +297,20 @@ const initTerminal = () => {
 
   // Send terminal input to Claude
   terminal.onData(async (data: string) => {
-    if (props.instance.status === 'connected') {
+    if (currentInstance.value.status === 'connected' || currentInstance.value.status === 'connecting') {
       // Send all data to Claude immediately for proper terminal handling
-      window.electronAPI.claude.send(props.instance.id, data);
+      try {
+        await window.electronAPI.claude.send(props.instance.id, data);
+      } catch (error) {
+        console.error(`Failed to send input to Claude for ${props.instance.id}:`, error);
+      }
       
       // Fire event when user presses Enter (sends a prompt)
       if (data === '\r' || data === '\n') {
         window.dispatchEvent(new CustomEvent(`claude-prompt-sent-${props.instance.id}`));
       }
+    } else {
+      console.warn(`Cannot send input - Claude not connected for ${props.instance.id}, status: ${currentInstance.value.status}`);
     }
   });
 
@@ -292,10 +318,10 @@ const initTerminal = () => {
   const resizeObserver = new ResizeObserver(() => {
     clearTimeout(resizeTimeout);
     resizeTimeout = setTimeout(async () => {
-      if (fitAddon && terminal) {
+      if (fitAddon && terminal && terminalElement.value) {
         try {
           fitAddon.fit();
-          if (props.instance.status === 'connected') {
+          if (currentInstance.value.status === 'connected' || currentInstance.value.status === 'connecting') {
             // Ensure we're passing plain values, not reactive objects
             const cols = terminal.cols;
             const rows = terminal.rows;
@@ -308,10 +334,14 @@ const initTerminal = () => {
       }
     }, 100);
   });
-  resizeObserver.observe(terminalElement.value);
+  if (terminalElement.value) {
+    resizeObserver.observe(terminalElement.value);
+  }
 
-  // Always show welcome message since we clear status/PID on load
-  showWelcomeMessage();
+  // Only show welcome message if Claude is not already connected
+  if (currentInstance.value.status !== 'connected') {
+    showWelcomeMessage();
+  }
 };
 
 const showWelcomeMessage = () => {
@@ -336,11 +366,27 @@ const setupClaudeListeners = () => {
   // Remove any existing listeners for this instance
   removeClaudeListeners();
 
-  // Setting up Claude listeners for instance
+  console.log(`Setting up Claude listeners for instance ${props.instance.id}, terminal ready: ${!!terminal}`);
 
   // Setup output listener
   cleanupOutputListener = window.electronAPI.claude.onOutput(props.instance.id, async (data: string) => {
-    if (terminal && props.instance.status === 'connected') {
+    console.log(`Received output for ${props.instance.id}, terminal exists: ${!!terminal}, length: ${data.length}`);
+    
+    // Wait for terminal if not ready yet
+    if (!terminal) {
+      console.warn('Terminal not ready, waiting...');
+      const waitForTerminal = setInterval(() => {
+        if (terminal) {
+          clearInterval(waitForTerminal);
+          terminal.write(data);
+          autoScrollIfNeeded();
+        }
+      }, 50);
+      setTimeout(() => clearInterval(waitForTerminal), 2000); // Give up after 2 seconds
+      return;
+    }
+    
+    if (terminal) {
       const currentTime = Date.now();
       const timeSinceLastData = currentTime - lastDataTime;
       lastDataTime = currentTime;
@@ -385,18 +431,22 @@ const setupClaudeListeners = () => {
 
   // Setup exit listener
   cleanupExitListener = window.electronAPI.claude.onExit(props.instance.id, (code: number | null) => {
-
+    console.log(`Claude process exited for ${props.instance.id} with code ${code}`);
     if (terminal) {
       terminal.writeln(`\r\n\x1b[33mClaude process exited with code ${code}\x1b[0m`);
       autoScrollIfNeeded();
     }
     emit('status-change', 'disconnected');
+    // Also directly update the store to ensure status is updated
+    instancesStore.updateInstanceStatus(props.instance.id, 'disconnected');
   });
 
   listenersSetup = true;
+  console.log(`Claude listeners setup complete for ${props.instance.id}`);
 };
 
 const removeClaudeListeners = () => {
+  console.log(`Removing Claude listeners for ${props.instance.id}, listenersSetup: ${listenersSetup}`);
   if (listenersSetup) {
     // Call cleanup functions
     if (cleanupOutputListener) {
@@ -421,7 +471,7 @@ const removeClaudeListeners = () => {
 
 // Reconnect to existing Claude process
 const reconnectToExistingProcess = async () => {
-  if (!terminal || props.instance.status !== 'connected' || isReconnecting) return;
+  if (!terminal || currentInstance.value.status !== 'connected' || isReconnecting) return;
   
   // Prevent multiple simultaneous reconnections
   isReconnecting = true;
@@ -446,14 +496,10 @@ const reconnectToExistingProcess = async () => {
     
     // Attempting to reconnect to Claude process
     
-    // Always clean up existing listeners first to avoid conflicts
-    removeClaudeListeners();
-    
-    // Small delay to ensure cleanup is complete
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    // Re-setup listeners
-    setupClaudeListeners();
+    // Only setup listeners if not already setup
+    if (!listenersSetup) {
+      setupClaudeListeners();
+    }
   } finally {
     isReconnecting = false;
   }
@@ -480,16 +526,22 @@ const onConfigChanged = (config: ClaudeRunConfig) => {
 };
 
 const startClaude = async () => {
-  if (!terminal) return;
+  if (!terminal) {
+    console.error('Cannot start Claude - terminal not initialized');
+    return;
+  }
 
   // Check if Claude is already running
-  if (props.instance.status === 'connected') {
+  if (currentInstance.value.status === 'connected') {
     terminal.writeln('\x1b[33mClaude CLI is already running\x1b[0m');
     terminal.writeln('You can continue your conversation.');
     terminal.writeln('');
     autoScrollIfNeeded();
     return;
   }
+
+  // Mark that we're starting Claude ourselves
+  startedByUs = true;
 
   terminal.clear();
   terminal.writeln('Starting Claude CLI...');
@@ -505,6 +557,8 @@ const startClaude = async () => {
   setupClaudeListeners();
 
   emit('status-change', 'connecting');
+  // Also directly update the store to ensure status is updated
+  instancesStore.updateInstanceStatus(props.instance.id, 'connecting');
 
   // Display the run configuration if it has special parameters
   if (selectedRunConfig.value && selectedRunConfig.value.args.length > 0) {
@@ -523,8 +577,14 @@ const startClaude = async () => {
     } : undefined
   );
 
+  console.log(`Claude start result for ${props.instance.id}:`, result);
+
   if (result.success) {
     emit('status-change', 'connected', result.pid);
+    
+    // Also directly update the store to ensure status is updated
+    instancesStore.updateInstanceStatus(props.instance.id, 'connected', result.pid);
+    
     terminal.writeln('Claude CLI started successfully!');
     if (result.claudeInfo) {
       terminal.writeln(`\x1b[90mUsing: ${result.claudeInfo.path} (${result.claudeInfo.source})\x1b[0m`);
@@ -552,20 +612,22 @@ const startClaude = async () => {
 
     // Terminal sizing fix
     const fixTerminalSize = async () => {
-      if (!fitAddon || !terminal) return;
+      if (!fitAddon || !terminal || !terminalElement.value) return;
 
       await new Promise(resolve => setTimeout(resolve, 100));
 
       for (let i = 0; i < 5; i++) {
         try {
-          fitAddon.fit();
+          if (fitAddon && terminal && terminalElement.value) {
+            fitAddon.fit();
 
-          if (props.instance.status === 'connected') {
-            // Ensure we're passing plain values
-            const instanceId = props.instance.id;
-            const cols = terminal.cols;
-            const rows = terminal.rows;
-            await window.electronAPI.claude.resize(instanceId, cols, rows);
+            if (currentInstance.value.status === 'connected' || currentInstance.value.status === 'connecting') {
+              // Ensure we're passing plain values
+              const instanceId = props.instance.id;
+              const cols = terminal.cols;
+              const rows = terminal.rows;
+              await window.electronAPI.claude.resize(instanceId, cols, rows);
+            }
           }
         } catch (error) {
           console.error('Terminal resize failed:', error);
@@ -574,7 +636,9 @@ const startClaude = async () => {
         await new Promise(resolve => setTimeout(resolve, 100 * (i + 1)));
       }
 
-      terminal.focus();
+      if (terminal) {
+        terminal.focus();
+      }
     };
 
     fixTerminalSize();
@@ -593,6 +657,8 @@ const startClaude = async () => {
     }
   } else {
     emit('status-change', 'disconnected');
+    // Also directly update the store to ensure status is updated
+    instancesStore.updateInstanceStatus(props.instance.id, 'disconnected');
     terminal.writeln('\x1b[31mFailed to start Claude CLI\x1b[0m');
     terminal.writeln('Check console for details and try again.');
     autoScrollIfNeeded();
@@ -613,6 +679,8 @@ const stopClaude = async () => {
   
   removeClaudeListeners();
   emit('status-change', 'disconnected');
+  // Also directly update the store to ensure status is updated
+  instancesStore.updateInstanceStatus(props.instance.id, 'disconnected');
 
   if (terminal) {
     terminal.clear();
@@ -622,7 +690,7 @@ const stopClaude = async () => {
 
 const clearTerminal = () => {
 
-  if (terminal && props.instance.status === 'connected') {
+  if (terminal && currentInstance.value.status === 'connected') {
     // In Claude interactive mode, send Ctrl+L to clear the screen
     // This clears the visible terminal but keeps history in scrollback
     window.electronAPI.claude.send(props.instance.id, '\x0C'); // Ctrl+L
@@ -642,6 +710,8 @@ const toggleChatInput = () => {
 // Handle chat sent event (no longer needed for input tracking)
 
 onMounted(async () => {
+  console.log(`ClaudeTerminalTab mounted for instance ${props.instance.id}, status: ${currentInstance.value.status}`);
+  
   // Initialize command store if not already done
   if (commandsStore.allCommands.length === 0) {
     await commandsStore.initialize();
@@ -651,6 +721,14 @@ onMounted(async () => {
   await nextTick();
   setTimeout(() => {
     initTerminal();
+    
+    // If Claude is already connected on mount, setup listeners after terminal init
+    if (currentInstance.value.status === 'connected') {
+      console.log('Claude already connected on mount, setting up listeners');
+      setTimeout(() => {
+        setupClaudeListeners();
+      }, 100);
+    }
   }, 100);
 
   // Set up event listeners for chat control
@@ -666,7 +744,7 @@ onMounted(async () => {
   // Set up event listener for starting Claude from tes
   startClaudeHandler = (event: Event) => {
     const customEvent = event as CustomEvent;
-    if (customEvent.detail.instanceId === props.instance.id && props.instance.status === 'disconnected') {
+    if (customEvent.detail.instanceId === props.instance.id && currentInstance.value.status === 'disconnected') {
       startClaude();
     }
   };
@@ -709,7 +787,7 @@ watchEffect(() => {
       const wasVisible = isVisible.value;
       isVisible.value = entry.isIntersecting;
       
-      if (!wasVisible && isVisible.value && terminal && props.instance.status === 'connected') {
+      if (!wasVisible && isVisible.value && terminal && currentInstance.value.status === 'connected') {
         // Component became visible and instance should be connected
         // Terminal became visible, reconnecting...
         
@@ -731,30 +809,43 @@ watchEffect(() => {
   };
 });
 
+// Track if we started Claude ourselves to avoid clearing terminal
+let startedByUs = false;
+
 // Watch for external status changes
-watch(() => props.instance.status, async (newStatus, oldStatus) => {
+watch(() => currentInstance.value.status, async (newStatus, oldStatus) => {
+  console.log(`Status watcher: ${props.instance.id} changed from ${oldStatus} to ${newStatus}, startedByUs: ${startedByUs}`);
   if (oldStatus === 'connected' && newStatus === 'disconnected' && terminal) {
     // Instance was disconnected externally
+    console.log(`Status changed to disconnected, removing listeners`);
     removeClaudeListeners();
     terminal.writeln('\r\n\x1b[33mClaude process disconnected.\x1b[0m');
+    startedByUs = false;
   } else if (oldStatus === 'disconnected' && newStatus === 'connected' && terminal && isVisible.value) {
-    // Instance was connected externally
-    // Clear any existing content first
-    terminal.clear();
-    
-    // Check if being forwarded and show appropriate message
-    window.electronAPI.claude.checkForwarding(props.instance.id).then(isForwarded => {
-      if (isForwarded) {
-        terminal.writeln('\x1b[32mClaude instance started from remote device\x1b[0m');
-        terminal.writeln('\x1b[90mThis terminal is mirroring the remote session\x1b[0m');
-        terminal.writeln('');
-      }
-    }).catch(() => {
-      // Ignore errors
-    });
+    // Instance was connected
+    // Don't clear terminal for any connection - let the output flow through
+    if (!startedByUs) {
+      // Don't clear terminal anymore - just add a connection notice
+      terminal.writeln('\x1b[32mClaude connected\x1b[0m');
+      terminal.writeln('');
+      
+      // Check if being forwarded and show appropriate message
+      window.electronAPI.claude.checkForwarding(props.instance.id).then(isForwarded => {
+        if (isForwarded) {
+          terminal.writeln('\x1b[32mClaude instance started from remote device\x1b[0m');
+          terminal.writeln('\x1b[90mThis terminal is mirroring the remote session\x1b[0m');
+          terminal.writeln('');
+        }
+      }).catch(() => {
+        // Ignore errors
+      });
+    }
     
     // Use reconnectToExistingProcess which checks for forwarding
     reconnectToExistingProcess();
+    
+    // Reset flag after handling
+    startedByUs = false;
   }
 });
 
@@ -880,6 +971,22 @@ onUnmounted(() => {
 
 .stop-button:hover {
   background: #e14444;
+}
+
+.connecting-button {
+  background: #f9c23c;
+  color: white;
+  cursor: not-allowed;
+  opacity: 0.8;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .terminal-content {

@@ -12,6 +12,89 @@
           
           <div class="modal-body">
             <div class="settings-sections">
+              <!-- Remote Access Section -->
+              <div class="settings-section">
+                <h3>Remote Access</h3>
+                <div class="settings-group">
+                  <div class="setting-item">
+                    <div class="setting-info">
+                      <h4>Hybrid Mode</h4>
+                      <p>Enable remote access to your desktop Clode Studio from any device</p>
+                      <div v-if="hybridModeEnabled" class="connection-info">
+                        <p v-if="relayUrl" class="relay-url">
+                          <Icon name="mdi:link" size="14" />
+                          <span>{{ relayUrl }}</span>
+                        </p>
+                        <p v-else class="connecting">
+                          <Icon name="mdi:loading" class="spin" size="14" />
+                          Connecting to relay server...
+                        </p>
+                      </div>
+                    </div>
+                    <button 
+                      class="toggle-button"
+                      :class="{ active: hybridModeEnabled }"
+                      @click="toggleHybridMode"
+                      :disabled="isToggling"
+                    >
+                      <span class="toggle-switch" :class="{ active: hybridModeEnabled }"></span>
+                      <span class="toggle-label">{{ hybridModeEnabled ? 'Enabled' : 'Disabled' }}</span>
+                    </button>
+                  </div>
+                  
+                  <div v-if="hybridModeEnabled" class="setting-item">
+                    <div class="setting-info">
+                      <h4>Relay Type</h4>
+                      <p>Choose how to expose your local app to the internet</p>
+                    </div>
+                    <div class="relay-type-selector">
+                      <label 
+                        v-for="type in relayTypes" 
+                        :key="type.value"
+                        class="relay-type-option"
+                        :class="{ active: selectedRelayType === type.value }"
+                      >
+                        <input 
+                          type="radio" 
+                          :value="type.value" 
+                          v-model="selectedRelayType"
+                          @change="onRelayTypeChange"
+                          :disabled="isChangingRelayType"
+                        />
+                        <div class="relay-type-content">
+                          <span class="relay-type-label">{{ type.label }}</span>
+                          <span class="relay-type-description">{{ type.description }}</span>
+                        </div>
+                      </label>
+                    </div>
+                    
+                    <div v-if="selectedRelayType === 'CLODE'" class="custom-relay-input">
+                      <label class="input-label">Custom Relay URL (optional)</label>
+                      <input 
+                        v-model="customRelayUrl" 
+                        type="text" 
+                        placeholder="wss://my-relay.example.com"
+                        class="relay-url-input"
+                      />
+                      <p class="input-hint">Leave empty to use default relay.clode.studio</p>
+                    </div>
+                    
+                    <div v-if="selectedRelayType === 'CUSTOM'" class="custom-relay-info">
+                      <p class="info-text">
+                        <Icon name="mdi:information" size="14" />
+                        Run one of these commands in a separate terminal:
+                      </p>
+                      <div class="command-examples">
+                        <code>npx tunnelmole@latest 3000</code>
+                        <code>npx localtunnel --port 3000</code>
+                        <code>ngrok http 3000</code>
+                        <code>ssh -R 80:localhost:3000 serveo.net</code>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <!-- Data Management Section -->
               <div class="settings-section">
                 <h3>Data Management</h3>
@@ -118,14 +201,44 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted, watchEffect } from 'vue';
 
 const isOpen = ref(false);
 const showClearWorkspaceDialog = ref(false);
 const showClearCacheDialog = ref(false);
+const hybridModeEnabled = ref(false);
+const isToggling = ref(false);
+const relayUrl = ref('');
+const selectedRelayType = ref('CLODE');
+const isChangingRelayType = ref(false);
+const customRelayUrl = ref('');
+
+const relayTypes = [
+  {
+    value: 'CLODE',
+    label: 'Clode Relay',
+    description: 'Managed relay server with automatic subdomain'
+  },
+  {
+    value: 'CLOUDFLARE',
+    label: 'Cloudflare Tunnel',
+    description: 'Free tunnel service (requires cloudflared)'
+  },
+  {
+    value: 'CUSTOM',
+    label: 'Custom Tunnel',
+    description: 'Use your own tunnel (ngrok, localtunnel, etc.)'
+  },
+  {
+    value: 'NONE',
+    label: 'Local Network Only',
+    description: 'No external access, LAN only'
+  }
+];
 
 const open = () => {
   isOpen.value = true;
+  checkHybridModeStatus();
 };
 
 const close = () => {
@@ -134,6 +247,104 @@ const close = () => {
 
 const handleOpenSettings = () => {
   open();
+};
+
+const checkHybridModeStatus = async () => {
+  try {
+    const status = await window.electronAPI.remote.getModeStatus();
+    hybridModeEnabled.value = status.isHybrid && status.serverRunning;
+    
+    // Get current relay type and custom URL from settings
+    const currentRelayType = await window.electronAPI.store.get('relayType') || 'CLODE';
+    selectedRelayType.value = currentRelayType;
+    const savedCustomUrl = await window.electronAPI.store.get('customRelayUrl') || '';
+    customRelayUrl.value = savedCustomUrl;
+    
+    // Get relay URL if hybrid mode is enabled
+    if (hybridModeEnabled.value) {
+      // Check relay type to get appropriate URL
+      if (selectedRelayType.value === 'CLOUDFLARE') {
+        // Get Cloudflare tunnel info
+        const tunnelInfo = await window.electronAPI.tunnel.getInfo();
+        if (tunnelInfo && tunnelInfo.url) {
+          relayUrl.value = tunnelInfo.url;
+        } else {
+          relayUrl.value = 'Starting Cloudflare tunnel...';
+        }
+      } else if (selectedRelayType.value === 'CLODE') {
+        // Get Clode relay info
+        const relayInfo = await window.electronAPI.relay.getInfo();
+        if (relayInfo && relayInfo.url) {
+          relayUrl.value = relayInfo.url;
+        } else {
+          relayUrl.value = 'Connecting to relay...';
+        }
+      } else if (selectedRelayType.value === 'CUSTOM') {
+        relayUrl.value = 'Custom tunnel (user-provided)';
+      } else if (selectedRelayType.value === 'NONE') {
+        relayUrl.value = 'http://localhost:3000 (Local Network)';
+      }
+    }
+  } catch (error) {
+    console.error('Failed to check hybrid mode status:', error);
+  }
+};
+
+const toggleHybridMode = async () => {
+  if (isToggling.value) return;
+  
+  isToggling.value = true;
+  try {
+    let result;
+    if (hybridModeEnabled.value) {
+      // Disable hybrid mode
+      result = await window.electronAPI.remote.disableHybridMode();
+      if (result.success) {
+        hybridModeEnabled.value = false;
+        relayUrl.value = '';
+        // Save the disabled state to workspace
+        await window.electronAPI.store.set('hybridModeEnabled', false);
+      }
+    } else {
+      // Enable hybrid mode with selected relay type
+      // Save the relay type, custom URL, and enabled state before enabling
+      await window.electronAPI.store.set('relayType', selectedRelayType.value);
+      if (selectedRelayType.value === 'CLODE' && customRelayUrl.value) {
+        await window.electronAPI.store.set('customRelayUrl', customRelayUrl.value);
+      }
+      await window.electronAPI.store.set('hybridModeEnabled', true);
+      
+      // Pass both relay type and custom URL
+      const options: any = { relayType: selectedRelayType.value };
+      if (selectedRelayType.value === 'CLODE' && customRelayUrl.value) {
+        options.customUrl = customRelayUrl.value;
+      }
+      result = await window.electronAPI.remote.enableHybridMode(options);
+      if (result.success) {
+        hybridModeEnabled.value = true;
+        // Wait a bit for relay to connect, then check status
+        setTimeout(async () => {
+          await checkHybridModeStatus();
+        }, 2000);
+      } else {
+        // If enabling failed, revert the saved state
+        await window.electronAPI.store.set('hybridModeEnabled', false);
+      }
+    }
+    
+    if (!result.success) {
+      alert(`Failed to ${hybridModeEnabled.value ? 'disable' : 'enable'} hybrid mode: ${result.error || 'Unknown error'}`);
+      // Revert the toggle if it failed
+      await checkHybridModeStatus();
+    }
+  } catch (error) {
+    console.error('Failed to toggle hybrid mode:', error);
+    alert('Failed to toggle hybrid mode. Please try again.');
+    // Revert the toggle
+    await checkHybridModeStatus();
+  } finally {
+    isToggling.value = false;
+  }
 };
 
 const clearWorkspace = async () => {
@@ -201,12 +412,69 @@ const clearAllCaches = async () => {
   }
 };
 
+// Handle relay type change
+const onRelayTypeChange = async () => {
+  if (isChangingRelayType.value) return;
+  
+  isChangingRelayType.value = true;
+  try {
+    // Save the new relay type and custom URL if applicable
+    await window.electronAPI.store.set('relayType', selectedRelayType.value);
+    if (selectedRelayType.value === 'CLODE' && customRelayUrl.value) {
+      await window.electronAPI.store.set('customRelayUrl', customRelayUrl.value);
+    }
+    
+    // Restart hybrid mode with new relay type
+    if (hybridModeEnabled.value) {
+      // Disable first
+      await window.electronAPI.remote.disableHybridMode();
+      
+      // Wait a bit
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Re-enable with new type and options
+      const options: any = { relayType: selectedRelayType.value };
+      if (selectedRelayType.value === 'CLODE' && customRelayUrl.value) {
+        options.customUrl = customRelayUrl.value;
+      }
+      const result = await window.electronAPI.remote.enableHybridMode(options);
+      if (result.success) {
+        // Wait for connection and update status
+        setTimeout(async () => {
+          await checkHybridModeStatus();
+        }, 2000);
+      } else {
+        alert(`Failed to switch relay type: ${result.error || 'Unknown error'}`);
+        // Revert selection
+        const previousType = await window.electronAPI.store.get('relayType') || 'CLODE';
+        selectedRelayType.value = previousType;
+      }
+    }
+  } catch (error) {
+    console.error('Failed to change relay type:', error);
+    alert('Failed to change relay type. Please try again.');
+  } finally {
+    isChangingRelayType.value = false;
+  }
+};
+
+// Listen for relay connection events
+const handleRelayConnected = async (event: CustomEvent) => {
+  if (hybridModeEnabled.value) {
+    // Update the relay URL when connected
+    await checkHybridModeStatus();
+  }
+};
+
 onMounted(() => {
   window.addEventListener('open-settings', handleOpenSettings);
+  // Listen for relay connection events
+  window.addEventListener('relay:connected', handleRelayConnected as EventListener);
 });
 
 onUnmounted(() => {
   window.removeEventListener('open-settings', handleOpenSettings);
+  window.removeEventListener('relay:connected', handleRelayConnected as EventListener);
 });
 </script>
 
@@ -349,6 +617,226 @@ onUnmounted(() => {
 .action-button.danger:hover {
   background: #5a1d1d;
   color: #f48771;
+}
+
+/* Toggle Button Styles */
+.toggle-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px;
+  background: #2d2d30;
+  border: 1px solid #3c3c3c;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.3s;
+  min-width: 100px;
+}
+
+.toggle-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.toggle-button.active {
+  background: #007acc;
+  border-color: #007acc;
+}
+
+.toggle-switch {
+  width: 32px;
+  height: 32px;
+  background: #858585;
+  border-radius: 50%;
+  transition: all 0.3s;
+  display: block;
+}
+
+.toggle-switch.active {
+  background: #ffffff;
+  transform: translateX(32px);
+}
+
+.toggle-label {
+  font-size: 13px;
+  color: #cccccc;
+  padding: 0 8px;
+  min-width: 60px;
+  text-align: center;
+}
+
+.connection-info {
+  margin-top: 8px;
+  padding: 8px;
+  background: rgba(0, 122, 204, 0.1);
+  border: 1px solid rgba(0, 122, 204, 0.3);
+  border-radius: 4px;
+}
+
+.connection-info p {
+  margin: 0;
+  font-size: 12px;
+  color: #007acc;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.relay-url {
+  word-break: break-all;
+}
+
+.connecting {
+  color: #f9c74f;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+/* Relay Type Selector Styles */
+.relay-type-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.relay-type-option {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  background: #2d2d30;
+  border: 1px solid #3c3c3c;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.relay-type-option:hover {
+  background: #3e3e42;
+  border-color: #4a4a4a;
+}
+
+.relay-type-option.active {
+  background: rgba(0, 122, 204, 0.1);
+  border-color: #007acc;
+}
+
+.relay-type-option input[type="radio"] {
+  margin-right: 12px;
+  cursor: pointer;
+}
+
+.relay-type-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.relay-type-label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #ffffff;
+}
+
+.relay-type-description {
+  font-size: 12px;
+  color: #858585;
+}
+
+.custom-relay-info {
+  margin-top: 12px;
+  padding: 12px;
+  background: rgba(0, 122, 204, 0.1);
+  border: 1px solid rgba(0, 122, 204, 0.3);
+  border-radius: 6px;
+}
+
+.info-text {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  color: #007acc;
+}
+
+.command-examples {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.command-examples code {
+  padding: 8px;
+  background: #1e1e1e;
+  border: 1px solid #3c3c3c;
+  border-radius: 4px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 12px;
+  color: #d4d4d4;
+  user-select: all;
+}
+
+.command-examples code:hover {
+  background: #252526;
+  border-color: #007acc;
+}
+
+.custom-relay-input {
+  margin-top: 12px;
+  padding: 12px;
+  background: rgba(0, 122, 204, 0.05);
+  border: 1px solid rgba(0, 122, 204, 0.2);
+  border-radius: 6px;
+}
+
+.input-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #cccccc;
+}
+
+.relay-url-input {
+  width: 100%;
+  padding: 8px 12px;
+  background: #1e1e1e;
+  border: 1px solid #3c3c3c;
+  border-radius: 4px;
+  color: #d4d4d4;
+  font-size: 13px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  transition: all 0.2s;
+}
+
+.relay-url-input:focus {
+  outline: none;
+  border-color: #007acc;
+  background: #252526;
+}
+
+.relay-url-input::placeholder {
+  color: #585858;
+}
+
+.input-hint {
+  margin: 6px 0 0 0;
+  font-size: 12px;
+  color: #858585;
 }
 
 .future-features {

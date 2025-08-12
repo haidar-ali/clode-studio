@@ -419,8 +419,8 @@ class ConnectionManager {
     const envUrl = import.meta.env.VITE_REMOTE_SERVER_URL;
     if (envUrl) return envUrl;
     
-    // Default to local server for hybrid mode
-    return 'http://localhost:3001';
+    // Default to remote Socket.IO server port for hybrid mode
+    return 'http://localhost:3789';
   }
   
   private getDeviceId(): string {

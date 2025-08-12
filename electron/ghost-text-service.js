@@ -1,6 +1,7 @@
 import { query } from '@anthropic-ai/claude-code';
 import path from 'path';
 import { promises as fs } from 'fs';
+import { ClaudeDetector } from './claude-detector.js';
 
 class GhostTextService {
   constructor() {
@@ -10,6 +11,7 @@ class GhostTextService {
     this.abortController = null;
     this.partialResults = ''; // Store partial results in case of timeout
     this.systemPrompt = 'You are an intelligent code completion assistant. Provide natural code completions at the cursor position - from simple word completions to full functions. Output ONLY the code to insert, no explanations or markdown formatting.';
+    this.claudePath = null; // Store the detected Claude path
   }
 
   /**
@@ -17,10 +19,20 @@ class GhostTextService {
    */
   async initialize() {
     try {
+      // Detect Claude installation
+      const claudeInfo = await ClaudeDetector.detectClaude();
+      if (claudeInfo && claudeInfo.path) {
+        this.claudePath = claudeInfo.path;
+        console.log('[GhostTextService] Using Claude at:', this.claudePath);
+      } else {
+        console.error('[GhostTextService] Claude not found');
+        this.isAvailable = false;
+        return;
+      }
+      
       // Test the Claude Code SDK
       await this.checkHealth();
       
-    
     } catch (error) {
       console.error('[GhostTextService] Failed to initialize:', error);
       this.isAvailable = false;
@@ -32,9 +44,17 @@ class GhostTextService {
    */
   async checkHealth() {
     try {
-    
+      if (!this.claudePath) {
+        console.error('[GhostTextService] Claude path not set');
+        this.isAvailable = false;
+        return { 
+          available: false, 
+          status: 'error', 
+          error: 'Claude path not detected' 
+        };
+      }
       
-      // Try a minimal query to test the SDK
+      // Try a minimal query to test the SDK with the detected Claude path
       const testQuery = query({
         prompt: 'Test',
         systemPrompt: 'Reply with "OK"',
@@ -42,14 +62,14 @@ class GhostTextService {
           model: 'claude-sonnet-4-20250514',
           maxTurns: 1,
           allowedTools: [],
-          maxTokens: 10
+          maxTokens: 10,
+          pathToClaudeCodeExecutable: this.claudePath
         }
       });
       
       // Just check if we can create the query
       if (testQuery) {
         this.isAvailable = true;
-      
         return { available: true, status: 'ready' };
       }
       
@@ -228,7 +248,8 @@ Output ONLY the code to insert at the cursor, no explanations or markdown.`;
           allowedTools: [],
           temperature: 0.3,
           maxTokens: 500,
-          signal
+          signal,
+          pathToClaudeCodeExecutable: this.claudePath
         }
       });
       

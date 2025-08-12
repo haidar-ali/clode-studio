@@ -459,6 +459,19 @@ export class RemoteServer {
     this.io.emit(RemoteEvent.CLAUDE_INSTANCES_UPDATED);
   }
   
+  broadcastClaudeStatusUpdate(instanceId: string, status: 'connected' | 'disconnected' | 'connecting', pid?: number): void {
+    if (!this.io) return;
+    
+    console.log(`[RemoteServer] Broadcasting Claude status update for ${instanceId}: ${status}, pid: ${pid}`);
+    
+    // Broadcast to all connected clients with the status payload
+    this.io.emit(RemoteEvent.CLAUDE_INSTANCES_UPDATED, {
+      instanceId,
+      status,
+      pid
+    });
+  }
+  
   forwardClaudeResponseComplete(socketId: string, instanceId: string): void {
    
     

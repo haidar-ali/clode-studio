@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, shell, dialog } from 'electron';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import * as path from 'path';
-import { spawn, ChildProcess } from 'child_process';
+import { spawn, fork, ChildProcess } from 'child_process';
 import Store from 'electron-store';
 import * as pty from 'node-pty';
 import { FSWatcher, existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
@@ -29,7 +29,7 @@ import { SnapshotService } from './snapshot-service.js';
 import { setupGitTimelineHandlers } from './git-timeline-handlers.js';
 import { ghostTextService } from './ghost-text-service.js';
 // LocalDatabase removed - SQLite not actively used
-import { getModeManager } from './services/mode-config.js';
+import { getModeManager, MainProcessMode } from './services/mode-config.js';
 import { RemoteServer } from './services/remote-server.js';
 import { ClaudeSettingsManager } from './services/claude-settings-manager.js';
 import { CloudflareTunnel } from './services/cloudflare-tunnel.js';
@@ -38,6 +38,11 @@ import { RelayClient } from './services/relay-client.js';
 // Load environment variables from .env file
 import { config } from 'dotenv';
 config();
+
+// Extend global for pending output storage
+declare global {
+  var pendingClaudeOutput: Map<string, string> | undefined;
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -75,15 +80,107 @@ const worktreeManagers: Map<string, WorktreeManager> = new Map();
 const snapshotServices: Map<string, SnapshotService> = new Map();
 
 const isDev = process.env.NODE_ENV !== 'production';
-const nuxtURL = isDev ? 'http://localhost:3000' : `file://${join(__dirname, '../.output/public/index.html')}`;
+let nuxtURL = 'http://localhost:3000';
+let serverProcess: ChildProcess | null = null;
+
+// Start Nuxt server function
+const startNuxtServer = async (): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    if (!app.isPackaged) {
+      // Development mode - server is already running via npm run dev
+      console.log('Development mode - using existing server');
+      setTimeout(resolve, 100);
+      return;
+    }
+
+    // Production mode - start the Nuxt server from extraResources
+    console.log('Starting Nuxt server in production...');
+    
+    // Get the path to the server in extraResources
+    const resourcesPath = process.resourcesPath;
+    const serverPath = join(resourcesPath, '.output', 'server', 'index.mjs');
+    
+    console.log('Server path:', serverPath);
+    
+    if (!existsSync(serverPath)) {
+      console.error('Server file not found at:', serverPath);
+      reject(new Error('Server file not found'));
+      return;
+    }
+
+    // Fork the server process
+    serverProcess = fork(serverPath, [], {
+      env: {
+        ...process.env,
+        PORT: '3000',
+        HOST: 'localhost',
+        NODE_ENV: 'production',
+        NITRO_PORT: '3000',
+        NITRO_HOST: 'localhost'
+      },
+      silent: true // Capture stdout/stderr
+    });
+
+    let serverStarted = false;
+
+    serverProcess.stdout?.on('data', (data) => {
+      const message = data.toString();
+      console.log('Nuxt:', message);
+      
+      // Check if server is ready
+      if (!serverStarted && (message.includes('3000') || message.includes('Listening') || message.includes('ready'))) {
+        serverStarted = true;
+        console.log('Nuxt server is ready!');
+        setTimeout(resolve, 500); // Give it a moment to stabilize
+      }
+    });
+
+    serverProcess.stderr?.on('data', (data) => {
+      console.error('Nuxt Error:', data.toString());
+    });
+
+    serverProcess.on('error', (error) => {
+      console.error('Failed to start Nuxt server:', error);
+      reject(error);
+    });
+
+    serverProcess.on('exit', (code) => {
+      console.log('Nuxt server exited with code:', code);
+    });
+
+    // Timeout fallback
+    setTimeout(() => {
+      if (!serverStarted) {
+        console.log('Server start timeout - proceeding anyway');
+        resolve();
+      }
+    }, 5000);
+  });
+};
+
+// Clean up server on quit
+app.on('before-quit', () => {
+  if (serverProcess) {
+    console.log('Stopping Nuxt server...');
+    serverProcess.kill();
+  }
+});
 
 function createWindow() {
+  // Set up icon path
+  const iconPath = process.platform === 'darwin'
+    ? join(__dirname, '..', 'build', 'icon.icns')
+    : process.platform === 'win32'
+    ? join(__dirname, '..', 'build', 'icon.ico')
+    : join(__dirname, '..', 'build', 'icon.png');
+  
   mainWindow = new BrowserWindow({
     width: 1600,
     height: 1000,
     minWidth: 1200,
     minHeight: 800,
     title: 'Clode Studio',
+    icon: existsSync(iconPath) ? iconPath : undefined,
     webPreferences: {
       preload: join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -108,6 +205,20 @@ function createWindow() {
     if (remoteServer && mainWindow) {
       remoteServer.updateMainWindow(mainWindow);
     }
+    
+    // Flush any pending Claude output
+    if (global.pendingClaudeOutput && global.pendingClaudeOutput.size > 0) {
+      console.log('Flushing pending Claude output to new window');
+      setTimeout(() => {
+        global.pendingClaudeOutput?.forEach((output, instanceId) => {
+          if (output && mainWindow && !mainWindow.isDestroyed()) {
+            console.log(`Flushing ${output.length} chars for instance ${instanceId}`);
+            mainWindow.webContents.send(`claude:output:${instanceId}`, output);
+          }
+        });
+        global.pendingClaudeOutput?.clear();
+      }, 1000); // Give renderer time to set up listeners
+    }
   });
 
   mainWindow.on('closed', () => {
@@ -123,6 +234,21 @@ function createWindow() {
 app.whenReady().then(async () => {
   // Log the current mode
  
+  
+  // Start Nuxt server first (in production)
+  if (app.isPackaged) {
+    try {
+      console.log('Starting Nuxt server for production...');
+      await startNuxtServer();
+      console.log('Nuxt server started successfully');
+    } catch (error) {
+      console.error('Failed to start Nuxt server:', error);
+      // Optionally show error dialog and quit
+      dialog.showErrorBox('Server Error', 'Failed to start the application server. Please try again.');
+      app.quit();
+      return;
+    }
+  }
   
   // Initialize all service managers (singletons)
   GitServiceManager.getInstance();
@@ -140,7 +266,36 @@ app.whenReady().then(async () => {
 
   createWindow();
   
-  // Initialize remote server if in hybrid mode
+  // Check if hybrid mode was enabled in settings and auto-start it
+  const savedHybridMode = (store as any).get('hybridModeEnabled');
+  const savedRelayType = (store as any).get('relayType') || 'CLODE';
+  const savedCustomUrl = (store as any).get('customRelayUrl');
+  
+  if (savedHybridMode && !modeManager.isHybridMode()) {
+    console.log('[Main] Auto-starting hybrid mode from saved settings...');
+    console.log('[Main] Using saved relay type:', savedRelayType);
+    if (savedCustomUrl) {
+      console.log('[Main] Using custom relay URL:', savedCustomUrl);
+    }
+    
+    // Enable hybrid mode with saved relay type and custom URL
+    setTimeout(async () => {
+      try {
+        const result = await enableHybridMode(savedRelayType, savedCustomUrl);
+        if (result && result.success) {
+          console.log('[Main] Hybrid mode auto-started successfully');
+          // Notify the UI that hybrid mode is enabled
+          mainWindow?.webContents.send('hybrid-mode-enabled', { relayType: savedRelayType });
+        } else {
+          console.error('[Main] Failed to auto-start hybrid mode:', result?.error);
+        }
+      } catch (error) {
+        console.error('[Main] Error auto-starting hybrid mode:', error);
+      }
+    }, 3000); // Delay to ensure window is ready
+  }
+  
+  // Initialize remote server if in hybrid mode (from env var)
   if (modeManager.isHybridMode() && mainWindow) {
     const config = modeManager.getConfig();
     remoteServer = new RemoteServer({
@@ -377,6 +532,7 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
     const claudeInfo = await ClaudeDetector.detectClaude(workingDirectory);
 
     // Get the command configuration
+    // Claude starts in interactive mode by default when run without arguments
     const debugArgs = process.env.CLAUDE_DEBUG === 'true' ? ['--debug'] : [];
 
     let { command, args: commandArgs, useShell } = ClaudeDetector.getClaudeCommand(claudeInfo, debugArgs);
@@ -407,38 +563,102 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
     // Get the user's default shell
     const userShell = process.env.SHELL || '/bin/bash';
 
-    const claudePty = pty.spawn(command, commandArgs, {
-      name: 'xterm-color',
-      cols: 80,
-      rows: 30,
-      cwd: workingDirectory,
-      env: {
-        ...process.env,
-        FORCE_COLOR: '1',
-        TERM: 'xterm-256color',
-        HOME: process.env.HOME, // Ensure HOME is set so Claude can find ~/.claude/settings.json
-        USER: process.env.USER, // Ensure USER is set
-        SHELL: userShell, // Ensure SHELL is set
-        // Add instance-specific environment variables for hooks
-        CLAUDE_INSTANCE_ID: instanceId,
-        CLAUDE_INSTANCE_NAME: instanceName || `Claude-${instanceId.slice(7, 15)}`, // Use provided name or short ID
-        CLAUDE_IDE_INSTANCE: 'true'
-      }
-    });
+    console.log('Spawning Claude with:', { command, commandArgs, useShell });
+    
+    // Add error handling for spawn
+    let claudePty;
+    try {
+      claudePty = pty.spawn(command, commandArgs, {
+        name: 'xterm-color',
+        cols: 80,
+        rows: 30,
+        cwd: workingDirectory,
+        env: {
+          ...process.env,
+          FORCE_COLOR: '1',
+          TERM: 'xterm-256color',
+          HOME: process.env.HOME, // Ensure HOME is set so Claude can find ~/.claude/settings.json
+          USER: process.env.USER, // Ensure USER is set
+          SHELL: userShell, // Ensure SHELL is set
+          // Add instance-specific environment variables for hooks
+          CLAUDE_INSTANCE_ID: instanceId,
+          CLAUDE_INSTANCE_NAME: instanceName || `Claude-${instanceId.slice(7, 15)}`, // Use provided name or short ID
+          CLAUDE_IDE_INSTANCE: 'true',
+          // Force PTY mode to ensure Claude uses the PTY for I/O
+          FORCE_TTY: '1'
+        },
+        handleFlowControl: true
+      });
+    } catch (error) {
+      console.error('Failed to spawn Claude:', error);
+      mainWindow?.webContents.send('claude-error', {
+        instanceId,
+        error: `Failed to spawn Claude: ${error instanceof Error ? error.message : String(error)}`
+      });
+      return { success: false, error: error instanceof Error ? error.message : String(error) };
+    }
 
 
     // Store this instance
     claudeInstances.set(instanceId, claudePty);
 
+    // Capture initial output for debugging
+    let initialOutput = '';
+    let outputTimer: NodeJS.Timeout | null = null;
+
     // Handle output from Claude
     claudePty.onData((data: string) => {
-      // Send data with instance ID
-      mainWindow?.webContents.send(`claude:output:${instanceId}`, data);
+      // Capture first few outputs for debugging
+      if (initialOutput.length < 1000) {
+        initialOutput += data;
+        
+        // Log initial output after a short delay
+        if (outputTimer) clearTimeout(outputTimer);
+        outputTimer = setTimeout(() => {
+          if (initialOutput.trim()) {
+            console.log(`Initial Claude output for ${instanceId}:`, initialOutput);
+          }
+        }, 500);
+      }
+      
+      // Send data with instance ID to all windows
+      const windows = BrowserWindow.getAllWindows();
+      console.log(`Sending Claude output to frontend for ${instanceId}, length: ${data.length}, windows: ${windows.length}`);
+      
+      if (windows.length === 0) {
+        console.warn('No windows available to send Claude output to!');
+        // Store output to send when window becomes available
+        if (!global.pendingClaudeOutput) {
+          global.pendingClaudeOutput = new Map();
+        }
+        const pending = global.pendingClaudeOutput.get(instanceId) || '';
+        global.pendingClaudeOutput.set(instanceId, pending + data);
+      } else {
+        windows.forEach(window => {
+          if (!window.isDestroyed()) {
+            console.log(`Sending to window ${window.id}`);
+            window.webContents.send(`claude:output:${instanceId}`, data);
+          }
+        });
+      }
     });
 
     // Handle exit
     claudePty.onExit(async ({ exitCode, signal }) => {
-      mainWindow?.webContents.send(`claude:exit:${instanceId}`, exitCode);
+      console.log(`Claude process exited for ${instanceId}:`, { exitCode, signal });
+      
+      // Log any captured output if process exits quickly
+      if (initialOutput.trim()) {
+        console.log(`Claude output before exit for ${instanceId}:`, initialOutput);
+      }
+      
+      // Send exit event to all windows
+      const windows = BrowserWindow.getAllWindows();
+      windows.forEach(window => {
+        if (!window.isDestroyed()) {
+          window.webContents.send(`claude:exit:${instanceId}`, exitCode);
+        }
+      });
       claudeInstances.delete(instanceId);
       
       // Clean up MCP server configuration
@@ -453,12 +673,22 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
       if (remoteServer) {
         remoteServer.broadcastClaudeInstancesUpdate();
       }
+      
+      // Broadcast the exit/disconnection
+      if (remoteServer) {
+        remoteServer.broadcastClaudeStatusUpdate(instanceId, 'disconnected');
+      }
     });
 
     // Notify all clients about instance update
     mainWindow?.webContents.send('claude:instances:updated');
     if (remoteServer) {
       remoteServer.broadcastClaudeInstancesUpdate();
+    }
+    
+    // Broadcast the successful start with PID
+    if (remoteServer) {
+      remoteServer.broadcastClaudeStatusUpdate(instanceId, 'connected', claudePty.pid);
     }
 
     return {
@@ -503,6 +733,11 @@ ipcMain.handle('claude:stop', async (event, instanceId: string) => {
     mainWindow?.webContents.send('claude:instances:updated');
     if (remoteServer) {
       remoteServer.broadcastClaudeInstancesUpdate();
+    }
+    
+    // Broadcast the disconnection
+    if (remoteServer) {
+      remoteServer.broadcastClaudeStatusUpdate(instanceId, 'disconnected');
     }
     
     return { success: true };
@@ -1891,8 +2126,18 @@ ipcMain.handle('lsp:checkCommand', async (event, command) => {
 // Code generation handler
 ipcMain.handle('codeGeneration:generate', async (event, { prompt, fileContent, filePath, language, resources = [] }) => {
   try {
-    // Import Claude SDK
+    // Import Claude SDK and detector
     const { query } = await import('@anthropic-ai/claude-code');
+    const { ClaudeDetector } = await import('./claude-detector.js');
+    
+    // Detect Claude installation
+    const claudeInfo = await ClaudeDetector.detectClaude();
+    if (!claudeInfo || !claudeInfo.path) {
+      return { 
+        success: false, 
+        error: 'Claude CLI not found. Please ensure Claude is installed.' 
+      };
+    }
     
     // Load resource contents
     const loadedResources = await Promise.all(resources.map(async (resource: any) => {
@@ -1955,7 +2200,7 @@ Remember: Return ONLY the complete code for the file. No explanations. No markdo
     }, 60000); // 60 second timeout
     
     try {
-      // Use Claude SDK to generate code
+      // Use Claude SDK to generate code with detected Claude path
       const response = query({
         prompt: userPrompt,
         options: {
@@ -1963,7 +2208,8 @@ Remember: Return ONLY the complete code for the file. No explanations. No markdo
           model: 'claude-sonnet-4-20250514', // Fast model for code generation
           maxTurns: 1,
           allowedTools: [],
-          customSystemPrompt: systemPrompt
+          customSystemPrompt: systemPrompt,
+          pathToClaudeCodeExecutable: claudeInfo.path
         }
       });
       
@@ -2068,11 +2314,24 @@ ipcMain.handle('mcp:list', async (event, workspacePath?: string) => {
 
     // Detect Claude to use the correct binary
     const claudeInfo = await ClaudeDetector.detectClaude(workspacePath);
-    const claudeCommand = claudeInfo.path;
-
-    const { stdout } = await execAsync(`${claudeCommand} mcp list`, {
+    
+    // Get the properly formatted command for running Claude with arguments
+    const { command, args, useShell } = ClaudeDetector.getClaudeCommand(claudeInfo, ['mcp', 'list']);
+    
+    // Build the full command string - when using shell, args[1] contains the actual command
+    let fullCommand;
+    if (useShell && args[0] === '-c') {
+      // The command is already properly formatted in args[1]
+      fullCommand = args[1];
+    } else {
+      // Direct command execution
+      fullCommand = `"${command}" ${args.map(arg => `"${arg}"`).join(' ')}`;
+    }
+    
+    const { stdout } = await execAsync(fullCommand, {
       cwd: workspacePath,
-      env: process.env
+      env: process.env,
+      timeout: 5000 // 5 second timeout
     });
 
     // Parse the text output
@@ -2115,7 +2374,37 @@ ipcMain.handle('mcp:list', async (event, workspacePath?: string) => {
     }
 
     return { success: true, servers };
-  } catch (error) {
+  } catch (error: any) {
+    // Check if it's a timeout error
+    if (error.code === 'ETIMEDOUT' || error.signal === 'SIGTERM' || error.killed) {
+      console.warn('MCP list command timed out - Claude CLI may not be responding');
+      return { 
+        success: true, 
+        servers: [],
+        warning: 'Claude CLI timed out - no MCP servers detected'
+      };
+    }
+    
+    // Check if it was interrupted (SIGINT)
+    if (error.signal === 'SIGINT') {
+      console.warn('MCP list command was interrupted');
+      return { 
+        success: true, 
+        servers: [],
+        warning: 'Command interrupted'
+      };
+    }
+    
+    // Check if Claude CLI is not properly configured
+    if (error.code === 127) {
+      console.warn('Claude CLI not found or not properly configured');
+      return { 
+        success: true, 
+        servers: [],
+        warning: 'Claude CLI not available'
+      };
+    }
+    
     console.error('Failed to list MCP servers:', error);
     return {
       success: false,
@@ -2870,6 +3159,166 @@ ipcMain.handle('remote:persist-token', async (event, tokenData: any) => {
     console.error('Failed to persist token:', error);
     return false;
   }
+});
+
+// Function to enable hybrid mode
+async function enableHybridMode(selectedRelayType?: string, customRelayUrl?: string): Promise<{ success: boolean; message?: string; error?: string }> {
+  try {
+    // Check if already in hybrid mode
+    if (remoteServer && remoteServer.isRunning()) {
+      return { success: true, message: 'Hybrid mode already enabled' };
+    }
+    
+    // Update mode manager
+    modeManager.setMode(MainProcessMode.HYBRID);
+    
+    // Get configuration
+    const config = modeManager.getConfig();
+    
+    // Start remote server
+    if (mainWindow) {
+      remoteServer = new RemoteServer({
+        config,
+        mainWindow
+      });
+      
+      await remoteServer.start();
+      
+      // Use selected relay type from UI, fallback to env var, then default to CLODE
+      const relayType = (selectedRelayType || process.env.RELAY_TYPE || 'CLODE').toUpperCase();
+      
+      if (relayType === 'CLODE' || relayType === 'TRUE') {
+        // Start Clode relay client
+        if (!relayClient) {
+          // Use custom URL if provided, otherwise use env var or default
+          const relayUrl = customRelayUrl || process.env.RELAY_URL || 'wss://relay.clode.studio';
+          relayClient = new RelayClient(relayUrl);
+          
+          relayClient.on('registered', (info) => {
+            console.log(`[Main] Clode Relay registered: ${info.url}`);
+            mainWindow?.webContents.send('relay:connected', info);
+          });
+          
+          relayClient.on('reconnected', () => {
+            console.log('[Main] Clode Relay reconnected');
+            mainWindow?.webContents.send('relay:reconnected');
+          });
+          
+          relayClient.on('connection_lost', () => {
+            console.log('[Main] Clode Relay connection lost');
+            mainWindow?.webContents.send('relay:disconnected');
+          });
+        }
+        
+        // Connect to relay
+        try {
+          const info = await relayClient.connect();
+          console.log(`[Main] Connected to Clode Relay: ${info.url}`);
+          (global as any).__relayClient = relayClient;
+        } catch (error) {
+          console.error('[Main] Failed to connect to Clode Relay:', error);
+          // Continue without relay - fallback to local network
+        }
+      } else if (relayType === 'CLOUDFLARE') {
+        // Start Cloudflare tunnel
+        if (!cloudflareTunnel) {
+          cloudflareTunnel = new CloudflareTunnel();
+        }
+        
+        try {
+          const url = await cloudflareTunnel.start();
+          console.log(`[Main] Cloudflare tunnel started: ${url}`);
+          mainWindow?.webContents.send('tunnel:connected', { url });
+        } catch (error) {
+          console.error('[Main] Failed to start Cloudflare tunnel:', error);
+        }
+      } else if (relayType === 'CUSTOM') {
+        // Custom tunnel - user needs to set it up
+        console.log('[Main] Custom tunnel mode - user needs to set up their own tunnel');
+        mainWindow?.webContents.send('tunnel:custom', {
+          message: 'Please set up your custom tunnel to expose port 3000',
+          port: 3000
+        });
+      } else if (relayType === 'NONE') {
+        // No tunnel - local network only
+        console.log('[Main] No tunnel mode - local network access only');
+        console.log('[Main] UI available at http://localhost:3000');
+        console.log('[Main] Remote server available at http://localhost:' + config.serverPort);
+        setTimeout(() => {
+          mainWindow?.webContents.send('tunnel:local-only', {
+            port: 3000,
+            serverPort: config.serverPort,
+          });
+        }, 1000);
+      }
+      // Default: no additional setup needed
+      
+      return { success: true, message: 'Hybrid mode enabled successfully' };
+    } else {
+      return { success: false, error: 'Main window not available' };
+    }
+  } catch (error) {
+    console.error('Failed to enable hybrid mode:', error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    };
+  }
+}
+
+// IPC handler for enabling hybrid mode
+ipcMain.handle('remote:enable-hybrid-mode', async (event, options?: any) => {
+  // Support both old string format and new options object
+  if (typeof options === 'string') {
+    return enableHybridMode(options);
+  }
+  return enableHybridMode(options?.relayType, options?.customUrl);
+});
+
+ipcMain.handle('remote:disable-hybrid-mode', async () => {
+  try {
+    // Check if hybrid mode is enabled
+    if (!remoteServer || !remoteServer.isRunning()) {
+      return { success: true, message: 'Hybrid mode already disabled' };
+    }
+    
+    // Stop remote server
+    await remoteServer.stop();
+    remoteServer = null;
+    
+    // Stop relay client if running
+    if (relayClient && relayClient.isConnected()) {
+      relayClient.disconnect();
+      relayClient = null;
+    }
+    
+    // Stop cloudflare tunnel if running
+    if (cloudflareTunnel && cloudflareTunnel.isRunning()) {
+      cloudflareTunnel.stop();
+      cloudflareTunnel = null;
+    }
+    
+    // Update mode manager
+    modeManager.setMode(MainProcessMode.DESKTOP);
+    
+    return { success: true, message: 'Hybrid mode disabled successfully' };
+  } catch (error) {
+    console.error('Failed to disable hybrid mode:', error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    };
+  }
+});
+
+ipcMain.handle('remote:get-mode-status', async () => {
+  return {
+    mode: modeManager.getMode(),
+    isHybrid: modeManager.isHybridMode(),
+    isRemoteEnabled: modeManager.isRemoteEnabled(),
+    serverRunning: remoteServer ? remoteServer.isRunning() : false,
+    config: modeManager.getConfig()
+  };
 });
 
 // Local Database handlers removed - SQLite not actively used

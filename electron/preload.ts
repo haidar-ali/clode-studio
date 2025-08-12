@@ -387,7 +387,10 @@ const electronAPI = {
     revokeToken: (token: string) => ipcRenderer.invoke('remote:revoke-token', token),
     disconnectDevice: (sessionId: string) => ipcRenderer.invoke('remote:disconnect-device', sessionId),
     loadPersistedToken: () => ipcRenderer.invoke('remote:load-persisted-token'),
-    persistToken: (tokenData: any) => ipcRenderer.invoke('remote:persist-token', tokenData)
+    persistToken: (tokenData: any) => ipcRenderer.invoke('remote:persist-token', tokenData),
+    enableHybridMode: (options?: any) => ipcRenderer.invoke('remote:enable-hybrid-mode', options),
+    disableHybridMode: () => ipcRenderer.invoke('remote:disable-hybrid-mode'),
+    getModeStatus: () => ipcRenderer.invoke('remote:get-mode-status')
   },
 
   // Cloudflare tunnel operations

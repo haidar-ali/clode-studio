@@ -104,6 +104,11 @@ check_node() {
         exit 1
     fi
     
+    # Note about Node 23+ (informational only)
+    if [[ "$NODE_VERSION" -ge "23" ]]; then
+        echo -e "${BLUE}ℹ Node.js 23+ detected - using explicit setup process${NC}"
+    fi
+    
     echo -e "${GREEN}✓ Node.js $(node -v) found${NC}"
 }
 
@@ -185,8 +190,45 @@ install_dependencies() {
         rm -rf node_modules package-lock.json
     fi
     
+    # Pre-create directories with proper permissions (fixes Node 23+ issues)
+    echo "Setting up directory structure..."
+    mkdir -p "$INSTALL_DIR/vendor/ripgrep"
+    mkdir -p "$INSTALL_DIR/.nuxt"
+    mkdir -p "$INSTALL_DIR/node_modules"
+    
+    # Ensure proper permissions
+    chmod -R 755 "$INSTALL_DIR"
+    
+    # Install packages WITHOUT running postinstall scripts
     echo "Installing packages (this may take a few minutes)..."
-    npm install
+    npm install --ignore-scripts
+    
+    # Now run the setup tasks manually with error handling
+    echo -e "\n${YELLOW}Running setup tasks...${NC}"
+    
+    # 1. Prepare Nuxt
+    echo "Preparing Nuxt framework..."
+    if ! npx nuxt prepare 2>/dev/null; then
+        echo -e "${YELLOW}⚠ Nuxt prepare had issues, but continuing...${NC}"
+    fi
+    
+    # 2. Rebuild Electron native modules
+    echo "Rebuilding Electron native modules..."
+    if ! npx electron-rebuild 2>/dev/null; then
+        echo -e "${YELLOW}⚠ Some native modules couldn't rebuild, app may still work${NC}"
+    fi
+    
+    # 3. Download ripgrep (only if not available system-wide)
+    if command_exists rg; then
+        echo -e "${GREEN}✓ System ripgrep found, skipping download${NC}"
+    else
+        echo "Downloading ripgrep for better search performance..."
+        if ! node scripts/download-ripgrep.js 2>/dev/null; then
+            echo -e "${YELLOW}⚠ Couldn't download ripgrep, will use fallback search${NC}"
+        else
+            echo -e "${GREEN}✓ Ripgrep downloaded successfully${NC}"
+        fi
+    fi
     
     echo -e "${GREEN}✓ Dependencies installed${NC}"
 }

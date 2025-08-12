@@ -1,0 +1,309 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Release type'
+        required: true
+        default: 'draft'
+        type: choice
+        options:
+          - draft
+          - prerelease
+          - release
+
+env:
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  NODE_VERSION: '22'
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      release_type: ${{ steps.release.outputs.type }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Get version
+        id: version
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+          else
+            VERSION=$(node -p "require('./package.json').version")
+          fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Version: ${VERSION}"
+      
+      - name: Determine release type
+        id: release
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "type=${{ inputs.release_type }}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == refs/tags/*-beta* ]]; then
+            echo "type=prerelease" >> $GITHUB_OUTPUT
+          else
+            echo "type=release" >> $GITHUB_OUTPUT
+          fi
+
+  build:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS builds (Intel and Apple Silicon)
+          - os: macos-latest
+            platform: darwin
+            arch: x64
+            name: macOS-x64
+          - os: macos-latest
+            platform: darwin
+            arch: arm64
+            name: macOS-arm64
+          
+          # Windows build
+          - os: windows-latest
+            platform: win32
+            arch: x64
+            name: Windows-x64
+          
+          # Linux builds
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+            name: Linux-x64
+
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      
+      # Linux specific dependencies
+      - name: Install Linux Dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev webkit2gtk-4.0 libappindicator3-dev librsvg2-dev patchelf
+      
+      # macOS code signing setup
+      - name: Setup macOS certificates
+        if: matrix.platform == 'darwin' && env.MAC_CERTS
+        env:
+          MAC_CERTS: ${{ secrets.MAC_CERTS }}
+          MAC_CERTS_PASSWORD: ${{ secrets.MAC_CERTS_PASSWORD }}
+        run: |
+          echo $MAC_CERTS | base64 --decode > certificate.p12
+          security create-keychain -p actions build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p actions build.keychain
+          security import certificate.p12 -k build.keychain -P $MAC_CERTS_PASSWORD -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k actions build.keychain
+      
+      # Windows code signing setup
+      - name: Setup Windows certificates
+        if: matrix.platform == 'win32' && env.WINDOWS_CERTS
+        env:
+          WINDOWS_CERTS: ${{ secrets.WINDOWS_CERTS }}
+          WINDOWS_CERTS_PASSWORD: ${{ secrets.WINDOWS_CERTS_PASSWORD }}
+        run: |
+          echo "$WINDOWS_CERTS" | base64 --decode > certificate.pfx
+          echo "CSC_LINK=$PWD/certificate.pfx" >> $GITHUB_ENV
+          echo "CSC_KEY_PASSWORD=$WINDOWS_CERTS_PASSWORD" >> $GITHUB_ENV
+      
+      - name: Install dependencies
+        run: |
+          npm ci --ignore-scripts
+          npm run postinstall || true
+      
+      - name: Download ripgrep
+        run: node scripts/download-ripgrep.js
+        continue-on-error: true
+      
+      - name: Compile TypeScript
+        run: npm run electron:compile
+      
+      - name: Build Nuxt
+        run: npm run generate
+      
+      # Build for specific architecture on macOS
+      - name: Build Electron App
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CSC_LINK: ${{ env.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ env.CSC_KEY_PASSWORD }}
+        run: |
+          if [[ "${{ matrix.platform }}" == "darwin" ]]; then
+            npx electron-builder --mac --${{ matrix.arch }} --publish never
+          elif [[ "${{ matrix.platform }}" == "win32" ]]; then
+            npx electron-builder --win --x64 --publish never
+          else
+            npx electron-builder --linux --x64 --publish never
+          fi
+        shell: bash
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}-${{ needs.prepare.outputs.version }}
+          path: |
+            dist/*.dmg
+            dist/*.zip
+            dist/*.exe
+            dist/*.AppImage
+            dist/*.deb
+            dist/*.rpm
+            dist/*.snap
+            dist/latest*.yml
+      
+      - name: Upload to Release
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            dist/*.dmg
+            dist/*.zip
+            dist/*.exe
+            dist/*.AppImage
+            dist/*.deb
+            dist/*.rpm
+            dist/*.snap
+            dist/latest*.yml
+          draft: ${{ needs.prepare.outputs.release_type == 'draft' }}
+          prerelease: ${{ needs.prepare.outputs.release_type == 'prerelease' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Build lite and server variants
+  build-variants:
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        variant: [lite, server]
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: |
+          npm ci --ignore-scripts
+          npm run postinstall || true
+      
+      - name: Compile TypeScript
+        run: npm run electron:compile
+      
+      - name: Build Nuxt
+        run: npm run generate
+      
+      - name: Build ${{ matrix.variant }} variant
+        run: |
+          npx electron-builder --linux --x64 --config.productName="Clode Studio ${{ matrix.variant }}" --config.extraMetadata.variant=${{ matrix.variant }} --publish never
+      
+      - name: Upload ${{ matrix.variant }} artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Linux-${{ matrix.variant }}-${{ needs.prepare.outputs.version }}
+          path: |
+            dist/*.AppImage
+            dist/*.tar.gz
+      
+      - name: Upload to Release
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            dist/*${{ matrix.variant }}*.AppImage
+            dist/*${{ matrix.variant }}*.tar.gz
+          draft: ${{ needs.prepare.outputs.release_type == 'draft' }}
+          prerelease: ${{ needs.prepare.outputs.release_type == 'prerelease' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  release-notes:
+    needs: [prepare, build, build-variants]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Generate Release Notes
+        id: notes
+        run: |
+          VERSION=${{ needs.prepare.outputs.version }}
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          
+          echo "# Clode Studio v${VERSION}" > release-notes.md
+          echo "" >> release-notes.md
+          
+          if [[ -n "$PREVIOUS_TAG" ]]; then
+            echo "## What's Changed" >> release-notes.md
+            git log ${PREVIOUS_TAG}..HEAD --pretty=format:"- %s (%an)" >> release-notes.md
+          else
+            echo "Initial release of Clode Studio!" >> release-notes.md
+          fi
+          
+          echo "" >> release-notes.md
+          echo "## Installation" >> release-notes.md
+          echo "" >> release-notes.md
+          echo "### Quick Install (Recommended)" >> release-notes.md
+          echo '```bash' >> release-notes.md
+          echo 'curl -sSL https://get.clode.studio | bash' >> release-notes.md
+          echo '```' >> release-notes.md
+          echo "" >> release-notes.md
+          echo "### Downloads" >> release-notes.md
+          echo "" >> release-notes.md
+          echo "**Desktop Full** - Complete IDE with all features" >> release-notes.md
+          echo "- 🍎 macOS: Intel (x64) | Apple Silicon (arm64)" >> release-notes.md
+          echo "- 🪟 Windows: x64 installer | Portable" >> release-notes.md
+          echo "- 🐧 Linux: AppImage | DEB | RPM | Snap" >> release-notes.md
+          echo "" >> release-notes.md
+          echo "**Desktop Lite** - Core features, smaller size" >> release-notes.md
+          echo "- 🐧 Linux: AppImage" >> release-notes.md
+          echo "" >> release-notes.md
+          echo "**Server/Headless** - CLI-only for servers" >> release-notes.md
+          echo "- 🖥️ Linux: Tarball" >> release-notes.md
+          echo "" >> release-notes.md
+          echo "### Running Clode Studio" >> release-notes.md
+          echo "" >> release-notes.md
+          echo '```bash' >> release-notes.md
+          echo '# Desktop mode (default)' >> release-notes.md
+          echo 'clode-studio' >> release-notes.md
+          echo '' >> release-notes.md
+          echo '# Hybrid mode (desktop + remote access)' >> release-notes.md
+          echo 'clode-studio --hybrid' >> release-notes.md
+          echo '' >> release-notes.md
+          echo '# Headless mode (server only)' >> release-notes.md
+          echo 'clode-studio --headless' >> release-notes.md
+          echo '```' >> release-notes.md
+      
+      - name: Update Release
+        uses: softprops/action-gh-release@v1
+        with:
+          body_path: release-notes.md
+          draft: ${{ needs.prepare.outputs.release_type == 'draft' }}
+          prerelease: ${{ needs.prepare.outputs.release_type == 'prerelease' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

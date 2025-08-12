@@ -320,8 +320,16 @@ onMounted(async () => {
       // Remove any existing listener first to avoid duplicates
       socket.off('claude:instances:updated');
       
-      socket.on('claude:instances:updated', async () => {
-        console.log('[MobileClaude] Claude instances updated event received');
+      socket.on('claude:instances:updated', async (data: any) => {
+        console.log('[MobileClaude] Claude instances updated event received:', data);
+        
+        // If we have specific instance status update, handle it directly
+        if (data && data.instanceId && data.status) {
+          console.log(`[MobileClaude] Instance ${data.instanceId} status changed to ${data.status}`);
+          // Update the specific instance status in the store
+          claudeStore.updateInstanceStatus(data.instanceId, data.status);
+        }
+        
         // Add a small delay to ensure backend state is updated
         setTimeout(async () => {
           await claudeStore.reloadInstances();
