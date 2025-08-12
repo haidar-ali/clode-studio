@@ -1,7 +1,8 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { existsSync, readdirSync } from 'fs';
+import { existsSync, readdirSync, readFileSync } from 'fs';
 import { join } from 'path';
+import { app } from 'electron';
 
 const execAsync = promisify(exec);
 
@@ -19,96 +20,181 @@ export class ClaudeDetector {
    * This ensures we use the same Claude that the user would get in their terminal
    */
   static async detectClaude(workingDirectory?: string): Promise<ClaudeInfo> {
-    // Return cached info if available
-    if (this.cachedInfo) {
+    // In production, always re-detect to find bundled version
+    if (!app.isPackaged && this.cachedInfo) {
       return this.cachedInfo;
     }
     
-    try {
-      // First, try to detect Claude using the shell's which command
-      // This will respect the user's PATH and shell configuration
-      const userShell = process.env.SHELL || '/bin/bash';
-      const shellCommand = `${userShell} -l -c "which claude && claude --version"`;
+    // In production, check for bundled Claude FIRST
+    if (app && app.isPackaged) {
+      console.log('App is packaged, looking for bundled Claude...');
+      const appPath = app.getAppPath();
+      console.log('App path:', appPath);
+      const unpackedPath = appPath.replace('app.asar', 'app.asar.unpacked');
+      console.log('Unpacked path:', unpackedPath);
       
+      const bundledPaths = [
+        join(unpackedPath, 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js'),
+        join(unpackedPath, 'node_modules', '.bin', 'claude'),
+        join(unpackedPath, 'node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude'),
+        join(unpackedPath, 'node_modules', '@anthropic-ai', 'claude-code', 'dist', 'index.js'),
+        join(unpackedPath, 'node_modules', '@anthropic-ai', 'claude-code', 'dist', 'cli.js')
+      ];
       
-      const { stdout, stderr } = await execAsync(shellCommand, {
-        cwd: workingDirectory || process.cwd(),
-        env: process.env,
-        shell: userShell
-      });
-      
-      if (stderr && !stderr.includes('warn')) {
-        console.warn('Claude detection stderr:', stderr);
+      for (const bundledPath of bundledPaths) {
+        console.log('Checking bundled path:', bundledPath, 'exists:', existsSync(bundledPath));
+        if (existsSync(bundledPath)) {
+          console.log('Found bundled Claude at:', bundledPath);
+          
+          let version = 'bundled';
+          try {
+            // Try to get version from package.json
+            const packagePath = join(unpackedPath, 'node_modules', '@anthropic-ai', 'claude-code', 'package.json');
+            if (existsSync(packagePath)) {
+              const pkg = JSON.parse(readFileSync(packagePath, 'utf8'));
+              version = `${pkg.version} (Claude Code bundled)`;
+            }
+          } catch (e) {
+            console.error('Failed to read Claude package version:', e);
+          }
+          
+          this.cachedInfo = {
+            path: bundledPath,
+            version,
+            source: 'bundled'
+          };
+          
+          console.log('Returning bundled Claude info:', this.cachedInfo);
+          return this.cachedInfo;
+        }
       }
-      
-      const lines = stdout.trim().split('\n');
-      const claudePath = lines[0];
-      const versionInfo = lines.slice(1).join(' ');
-      
-      if (claudePath && existsSync(claudePath)) {
+      console.log('No bundled Claude found, falling back to system detection');
+    } else {
+      console.log('App is not packaged or app is undefined');
+    }
+    
+    // Only try shell detection if not in production
+    if (!app.isPackaged) {
+      try {
+        const userShell = process.env.SHELL || '/bin/bash';
+        const shellCommand = `${userShell} -l -c "which claude && claude --version"`;
         
-        // Determine the source based on the path
-        let source: ClaudeInfo['source'] = 'shell';
-        if (claudePath.includes('node_modules/.bin')) {
-          source = 'local';
-        } else if (claudePath.includes('.nvm')) {
-          source = 'nvm';
-        } else if (claudePath.includes('.bun')) {
-          source = 'bun-global';
-        } else if (claudePath.includes('npm-global') || claudePath.includes('npm/bin')) {
-          source = 'npm-global';
+        const { stdout, stderr } = await execAsync(shellCommand, {
+          cwd: workingDirectory || process.cwd(),
+          env: process.env,
+          shell: userShell
+        });
+        
+        if (stderr && !stderr.includes('warn')) {
+          console.warn('Claude detection stderr:', stderr);
         }
         
-        this.cachedInfo = {
-          path: claudePath,
-          version: versionInfo || 'unknown',
-          source
-        };
+        const lines = stdout.trim().split('\n');
+        const claudePath = lines[0];
+        const versionInfo = lines.slice(1).join(' ');
         
-        return this.cachedInfo;
+        if (claudePath && existsSync(claudePath)) {
+          let source: ClaudeInfo['source'] = 'shell';
+          if (claudePath.includes('node_modules/.bin')) {
+            source = 'local';
+          } else if (claudePath.includes('.nvm')) {
+            source = 'nvm';
+          } else if (claudePath.includes('.bun')) {
+            source = 'bun-global';
+          } else if (claudePath.includes('npm-global') || claudePath.includes('npm/bin')) {
+            source = 'npm-global';
+          }
+          
+          this.cachedInfo = {
+            path: claudePath,
+            version: versionInfo || 'unknown',
+            source
+          };
+          
+          return this.cachedInfo;
+        }
+      } catch (error) {
+        console.error('Failed to detect Claude via shell:', error);
       }
-    } catch (error) {
-      console.error('Failed to detect Claude via shell:', error);
     }
     
     // Fallback: Check common installation locations
-    const fallbackPaths = [
-      // Local node_modules (highest priority)
-      join(process.cwd(), 'node_modules', '.bin', 'claude'),
-      join(workingDirectory || process.cwd(), 'node_modules', '.bin', 'claude'),
-      
-      // Common global locations
-      '/usr/local/bin/claude',
-      '/opt/homebrew/bin/claude',
-      join(process.env.HOME || '', '.local', 'bin', 'claude'),
-      join(process.env.HOME || '', '.npm-global', 'bin', 'claude'),
-      join(process.env.HOME || '', '.bun', 'bin', 'claude'),
-      
-      // NVM installations
-      ...this.getNvmPaths()
-    ];
+    const fallbackPaths = [];
+    
+    // In production, only check bundled paths
+    if (app && app.isPackaged) {
+      console.log('Production mode: Only checking bundled paths in fallback');
+      // In packaged app, the unpacked Claude will be in app.asar.unpacked
+      const appPath = app.getAppPath();
+      const unpackedPath = appPath.replace('app.asar', 'app.asar.unpacked');
+      fallbackPaths.push(
+        join(unpackedPath, 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js'),
+        join(unpackedPath, 'node_modules', '.bin', 'claude'),
+        join(unpackedPath, 'node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude'),
+        join(unpackedPath, 'node_modules', '@anthropic-ai', 'claude-code', 'dist', 'index.js'),
+        join(unpackedPath, 'node_modules', '@anthropic-ai', 'claude-code', 'dist', 'cli.js')
+      );
+    } else {
+      // In development, check all locations
+      fallbackPaths.push(
+        // Local node_modules (highest priority for dev)
+        join(process.cwd(), 'node_modules', '.bin', 'claude'),
+        join(workingDirectory || process.cwd(), 'node_modules', '.bin', 'claude'),
+        
+        // Common global locations
+        '/usr/local/bin/claude',
+        '/opt/homebrew/bin/claude',
+        join(process.env.HOME || '', '.local', 'bin', 'claude'),
+        join(process.env.HOME || '', '.npm-global', 'bin', 'claude'),
+        join(process.env.HOME || '', '.bun', 'bin', 'claude'),
+        
+        // NVM installations
+        ...this.getNvmPaths()
+      );
+    }
     
     for (const path of fallbackPaths) {
       if (existsSync(path)) {
+        console.log('Found Claude at fallback path:', path);
         
         // Try to get version
         let version = 'unknown';
-        try {
-          const { stdout } = await execAsync(`"${path}" --version`, {
-            timeout: 5000
-          });
-          version = stdout.trim();
-        } catch (error) {
-          console.warn('Failed to get Claude version:', error);
-        }
         
+        // In production, mark as bundled
         let source: ClaudeInfo['source'] = 'fallback';
-        if (path.includes('node_modules/.bin')) {
-          source = 'local';
-        } else if (path.includes('.nvm')) {
-          source = 'nvm';
-        } else if (path.includes('.bun')) {
-          source = 'bun-global';
+        if (app && app.isPackaged) {
+          source = 'bundled';
+          // Try to get version from package.json for bundled
+          try {
+            const appPath = app.getAppPath();
+            const unpackedPath = appPath.replace('app.asar', 'app.asar.unpacked');
+            const packagePath = join(unpackedPath, 'node_modules', '@anthropic-ai', 'claude-code', 'package.json');
+            if (existsSync(packagePath)) {
+              const pkg = JSON.parse(readFileSync(packagePath, 'utf8'));
+              version = `${pkg.version} (Claude Code bundled)`;
+            }
+          } catch (e) {
+            console.error('Failed to read package version:', e);
+          }
+        } else {
+          // In development, try to get version
+          try {
+            const { stdout } = await execAsync(`"${path}" --version`, {
+              timeout: 5000
+            });
+            version = stdout.trim();
+          } catch (error) {
+            console.warn('Failed to get Claude version:', error);
+          }
+          
+          // Determine source based on path
+          if (path.includes('node_modules/.bin')) {
+            source = 'local';
+          } else if (path.includes('.nvm')) {
+            source = 'nvm';
+          } else if (path.includes('.bun')) {
+            source = 'bun-global';
+          }
         }
         
         this.cachedInfo = {
@@ -117,6 +203,7 @@ export class ClaudeDetector {
           source
         };
         
+        console.log('Returning Claude info from fallback:', this.cachedInfo);
         return this.cachedInfo;
       }
     }
@@ -174,6 +261,82 @@ export class ClaudeDetector {
     args: string[];
     useShell: boolean;
   } {
+    // For bundled installations, we need special handling
+    if (claudeInfo.source === 'bundled') {
+      // The bundled Claude is a Node.js CLI application, not an Electron app
+      // We need to run it with Node.js, not spawn it as an Electron process
+      if (claudeInfo.path.endsWith('cli.js')) {
+        // Check if we're in development or production
+        const isDev = !app || !app.isPackaged;
+        
+        if (isDev) {
+          // In development, use node from PATH
+          const userShell = process.env.SHELL || '/bin/bash';
+          const quotedPath = `"${claudeInfo.path}"`;
+          const quotedArgs = args.map(arg => `"${arg.replace(/"/g, '\\"')}"`).join(' ');
+          const fullCommand = quotedArgs 
+            ? `node ${quotedPath} ${quotedArgs}`
+            : `node ${quotedPath}`;
+          return {
+            command: userShell,
+            args: ['-c', fullCommand],
+            useShell: true
+          };
+        } else {
+          // In production, try to find node directly
+          // Check common node locations in order
+          const nodePaths = [
+            '/usr/local/bin/node',
+            '/opt/homebrew/bin/node',
+            '/usr/bin/node',
+            'node' // fallback to PATH
+          ];
+          
+          let nodeCommand = 'node';
+          for (const nodePath of nodePaths) {
+            if (existsSync(nodePath)) {
+              nodeCommand = nodePath;
+              break;
+            }
+          }
+          
+          // Spawn node directly without shell to ensure PTY works correctly
+          return {
+            command: nodeCommand,
+            args: [claudeInfo.path, ...args],
+            useShell: false
+          };
+        }
+      }
+      // If the path ends with .js but not cli.js, still try with node
+      if (claudeInfo.path.endsWith('.js')) {
+        const userShell = process.env.SHELL || '/bin/bash';
+        const quotedPath = `"${claudeInfo.path}"`;
+        const quotedArgs = args.map(arg => `"${arg.replace(/"/g, '\\"')}"`).join(' ');
+        const fullCommand = quotedArgs 
+          ? `node ${quotedPath} ${quotedArgs}`
+          : `node ${quotedPath}`;
+        return {
+          command: userShell,
+          args: ['-c', fullCommand],
+          useShell: true
+        };
+      }
+      // Otherwise, try to run it directly (might be a shell script)
+      // But use shell to ensure PATH and environment are set up
+      const userShell = process.env.SHELL || '/bin/bash';
+      const quotedPath = `'${claudeInfo.path}'`;
+      const quotedArgs = args.map(arg => `'${arg}'`).join(' ');
+      const fullCommand = args.length > 0 
+        ? `${quotedPath} ${quotedArgs}`
+        : quotedPath;
+      return {
+        command: userShell,
+        args: ['-l', '-c', fullCommand],
+        useShell: true
+      };
+    }
+    
     // For local or shell-detected installations, run through shell to ensure
     // proper environment setup (including PATH modifications)
     if (claudeInfo.source === 'local' || claudeInfo.source === 'shell') {

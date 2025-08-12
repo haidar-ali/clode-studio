@@ -1,6 +1,8 @@
 {
   "name": "clode-studio",
   "version": "0.1.0",
+  "description": "AI-powered IDE built for Claude Code CLI with modular workspace",
+  "author": "Clode Studio Team",
   "private": true,
   "main": "electron/main.js",
   "type": "module",
@@ -15,7 +17,17 @@
     "electron:build": "nuxt build && npm run electron:preview",
     "electron:remote": "node scripts/check-build-needed.js && npm run electron:preview || npm run electron:build",
     "electron:compile": "tsc -p electron/tsconfig.json && tsc -p electron/tsconfig.preload.json",
-    "dist": "npm run generate && npm run electron:compile && electron-builder"
+    "dist": "npm run build && npm run electron:compile && electron-builder",
+    "dist:all": "npm run build && npm run electron:compile && electron-builder -mwl",
+    "dist:mac": "npm run build && npm run electron:compile && electron-builder --mac",
+    "dist:mac:signed": "source .env.build  && npm run dist:mac",
+    "dist:mac:nosign": "CSC_IDENTITY_AUTO_DISCOVERY=false npm run dist:mac",
+    "dist:win": "npm run build && npm run electron:compile && electron-builder --win",
+    "dist:linux": "npm run build && npm run electron:compile && electron-builder --linux",
+    "dist:lite": "npm run generate && npm run electron:compile && electron-builder --linux --config.productName=\"Clode Studio Lite\" --config.extraMetadata.variant=lite",
+    "dist:server": "npm run generate && npm run electron:compile && electron-builder --linux --config.productName=\"Clode Studio Server\" --config.extraMetadata.variant=server",
+    "release": "npm run dist:all && electron-builder --publish always",
+    "release:draft": "npm run dist:all && electron-builder --publish onTag"
   },
   "dependencies": {
     "@anthropic-ai/claude-code": "^1.0.72",
@@ -62,6 +74,9 @@
     "codemirror-languageservice": "^0.2.3",
     "diff": "^8.0.2",
     "dotenv": "^16.4.7",
+    "electron-store": "^10.1.0",
+    "electron-updater": "^6.3.9",
+    "express": "^4.19.2",
     "fast-json-patch": "^3.1.1",
     "fs-extra": "^11.3.0",
     "gray-matter": "^4.0.3",
@@ -103,7 +118,6 @@
     "concurrently": "^9.2.0",
     "electron": "^37.2.1",
     "electron-builder": "^26.0.12",
-    "electron-store": "^10.1.0",
     "lodash": "^4.17.21",
     "mitt": "^3.0.1",
     "naive-ui": "^2.42.0",
@@ -114,30 +128,5 @@
     "wait-on": "^8.0.3",
     "xterm": "^5.3.0",
     "xterm-addon-fit": "^0.8.0"
-  },
-  "build": {
-    "appId": "com.anthropic.clode-studio",
-    "productName": "Clode Studio",
-    "directories": {
-      "output": "dist"
-    },
-    "files": [
-      "electron/**/*",
-      ".output/**/*",
-      "package.json",
-      "vendor/**/*"
-    ],
-    "mac": {
-      "icon": "assets/icon.icns",
-      "category": "public.app-category.developer-tools"
-    },
-    "win": {
-      "icon": "assets/icon.ico",
-      "target": "nsis"
-    },
-    "linux": {
-      "icon": "assets/icon.png",
-      "target": "AppImage"
-    }
   }
 }

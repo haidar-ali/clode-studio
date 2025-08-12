@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Required for App Sandbox -->
+    <key>com.apple.security.app-sandbox</key>
+    <false/>
+    
+    <!-- Required for Node.js/Electron -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+    <true/>
+    
+    <!-- File system access -->
+    <key>com.apple.security.files.user-selected.read-write</key>
+    <true/>
+    <key>com.apple.security.files.downloads.read-write</key>
+    <true/>
+    
+    <!-- Network access for relay/remote features -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+    <key>com.apple.security.network.server</key>
+    <true/>
+    
+    <!-- Terminal/Shell access for Claude CLI -->
+    <key>com.apple.security.inherit</key>
+    <true/>
+    
+    <!-- Camera access for QR code scanning (future feature) -->
+    <key>com.apple.security.device.camera</key>
+    <false/>
+</dict>
+</plist>

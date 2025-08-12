@@ -1,0 +1,196 @@
+# Electron Builder Configuration
+# Comprehensive build configuration for all platforms and modes
+
+appId: com.ccstudio.clode-studio
+productName: Clode Studio
+copyright: Copyright © 2025 Clode Studio
+
+# Directories
+directories:
+  output: dist
+  buildResources: build
+
+# Files to include in the package
+files:
+  - electron/**/*.js
+  - package.json
+  - node_modules/**/*
+  - "!**/*.ts"
+  - "!**/*.map"
+  - "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}"
+  - "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}"
+  - "!**/node_modules/*.d.ts"
+  - "!**/node_modules/.bin"
+  - "!**/.git"
+  - "!**/*.log"
+  - "!dist/**/*"
+  - "!**/*.dmg"
+  - "!**/*.dmg.blockmap"
+  - "!**/*.zip"
+  - "!**/*.exe"
+  - "!**/*.msi"
+  - "!**/*.AppImage"
+  - "!**/*.deb"
+  - "!**/*.rpm"
+  - "!**/*.snap"
+  - "!**/*.tar.gz"
+  - "!**/*.7z"
+  - "!**/*.nupkg"
+  - "!**/*.blockmap"
+  - "!**/mac/**/*"
+  - "!**/mac-arm64/**/*"
+  - "!**/win-unpacked/**/*"
+  - "!**/linux-unpacked/**/*"
+  - "!**/*-unpacked/**/*"
+  - "!**/latest*.yml"
+
+# Include server and resources outside asar
+extraResources:
+  - from: .output
+    to: .output
+    filter: ["**/*"]
+  - from: vendor
+    to: vendor
+    filter: ["**/*"]
+  - from: build/icons
+    to: icons
+    filter: ["**/*"]
+
+# ASAR configuration - improves performance
+asar: true
+asarUnpack:
+  - vendor/**/*
+  - node_modules/node-pty/**/*
+  - node_modules/better-sqlite3/**/*
+  - node_modules/@anthropic-ai/claude-code/**/*
+  - node_modules/.bin/claude*
+  - "**/*.node"
+
+# Compression for smaller downloads
+compression: maximum
+
+# Auto-update configuration
+publish:
+  - provider: github
+    owner: haidar-ali
+    repo: clode-studio
+    releaseType: release
+
+# macOS Configuration
+mac:
+  category: public.app-category.developer-tools
+  icon: build/icon.icns
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  darkModeSupport: true
+  minimumSystemVersion: '10.14'
+  # Code signing configuration
+  identity: "Ali Haidar"
+  # Notarization is enabled by default when credentials are in environment variables
+  # Required environment variables:
+  # APPLE_ID="your-email@example.com"
+  # APPLE_APP_SPECIFIC_PASSWORD="xxxx-xxxx-xxxx-xxxx"
+  # APPLE_TEAM_ID="Q552577N6X"
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+    - target: zip
+      arch: [x64, arm64]
+
+dmg:
+  sign: false
+  background: build/background.png
+  iconSize: 100
+  contents:
+    - x: 410
+      y: 150
+      type: link
+      path: /Applications
+    - x: 130
+      y: 150
+      type: file
+
+# Windows Configuration
+win:
+  icon: build/icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+  differentialPackage: true
+  displayLanguageSelector: true
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  license: LICENSE
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  menuCategory: Development
+
+portable:
+  artifactName: ${productName}-${version}-portable.${ext}
+
+# Linux Configuration
+linux:
+  icon: build/icons
+  category: Development
+  synopsis: AI-powered IDE for developers
+  description: A modular, AI-first IDE built for Claude Code CLI
+  target:
+    - target: AppImage
+      arch: [x64]
+    - target: deb
+      arch: [x64]
+    - target: rpm
+      arch: [x64]
+    - target: snap
+      arch: [x64]
+
+appImage:
+  artifactName: ${productName}-${version}.${ext}
+
+deb:
+  depends:
+    - libgtk-3-0
+    - libnotify4
+    - libnss3
+    - libxss1
+    - libxtst6
+    - xdg-utils
+    - libatspi2.0-0
+    - libuuid1
+    - libsecret-1-0
+
+snap:
+  confinement: classic
+  grade: stable
+  summary: AI-powered IDE for developers using Claude Code CLI
+
+# Protocol handlers for custom URLs (clode://)
+protocols:
+  - name: clode
+    schemes: [clode]
+
+# File associations
+fileAssociations:
+  - ext: md
+    name: Markdown
+    description: Markdown Document
+    role: Editor
+  - ext: ts
+    name: TypeScript
+    description: TypeScript Source
+    role: Editor
+  - ext: js
+    name: JavaScript
+    description: JavaScript Source
+    role: Editor
+

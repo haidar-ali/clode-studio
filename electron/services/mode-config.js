@@ -12,8 +12,10 @@ export var MainProcessMode;
 })(MainProcessMode || (MainProcessMode = {}));
 export class ModeManager {
     config;
+    initialMode;
     constructor() {
         this.config = this.detectMode();
+        this.initialMode = this.config.mode;
     }
     detectMode() {
         // 1. Check command line arguments
@@ -94,6 +96,17 @@ export class ModeManager {
     // }
     isRemoteEnabled() {
         return this.config.enableRemoteAccess === true;
+    }
+    // Runtime mode change support
+    setMode(mode) {
+        this.config = this.loadConfigForMode(mode);
+    }
+    getInitialMode() {
+        return this.initialMode;
+    }
+    canChangeMode() {
+        // Allow mode changes at runtime
+        return true;
     }
 }
 // Singleton instance

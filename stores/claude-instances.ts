@@ -28,6 +28,7 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
     activeInstanceId: null as string | null,
     activeInstanceByWorktree: new Map<string, string>(), // worktree path -> instance id
     personalities: new Map<string, ClaudePersonality>(),
+    reloadTimeout: null as NodeJS.Timeout | null,
     defaultPersonalities: [
       {
         id: 'architect',
@@ -93,6 +94,7 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
     activeInstance: (state) => state.activeInstanceId ? state.instances.get(state.activeInstanceId) : null,
     personalitiesList: (state) => Array.from(state.personalities.values()),
     getPersonalityById: (state) => (id: string) => state.personalities.get(id),
+    getInstanceById: (state) => (id: string) => state.instances.get(id),
     getInstancePersonality: (state) => (instanceId: string) => {
       const instance = state.instances.get(instanceId);
       if (!instance?.personalityId) return null;
@@ -257,35 +259,77 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
       if (this.instances.has(id)) {
         this.activeInstanceId = id;
         const instance = this.instances.get(id)!;
-        instance.lastActiveAt = new Date().toISOString();
+        // Create a new instance object to trigger reactivity
+        const updatedInstance = { ...instance };
+        updatedInstance.lastActiveAt = new Date().toISOString();
+        // Replace the instance in the Map to trigger reactivity
+        this.instances.set(id, updatedInstance);
         
         // Track active instance per worktree
-        if (instance.workingDirectory) {
-          this.activeInstanceByWorktree.set(instance.workingDirectory, id);
+        if (updatedInstance.workingDirectory) {
+          this.activeInstanceByWorktree.set(updatedInstance.workingDirectory, id);
         }
         
-        this.saveInstances();
+        // Don't save when just changing active instance - it triggers unnecessary reloads
+        // this.saveInstances();
       }
     },
 
     updateInstanceStatus(id: string, status: ClaudeInstance['status'], pid?: number) {
+      console.log(`[Store] Updating instance status for ${id}: ${status}, pid: ${pid}`);
       const instance = this.instances.get(id);
       if (instance) {
-        instance.status = status;
+        const oldStatus = instance.status;
+        
+        // Create a new instance object to trigger reactivity
+        const updatedInstance = { ...instance };
+        updatedInstance.status = status;
         if (pid !== undefined) {
-          instance.pid = pid;
+          updatedInstance.pid = pid;
         }
         if (status === 'disconnected') {
-          delete instance.pid;
+          delete updatedInstance.pid;
         }
-        this.saveInstances();
+        
+        // Delete the old instance and set the new one
+        this.instances.delete(id);
+        this.instances.set(id, updatedInstance);
+        
+        console.log(`[Store] Instance ${id} status changed from ${oldStatus} to ${status}`);
+        
+        // DON'T save instances when updating runtime status
+        // Runtime status (connected/connecting/disconnected) shouldn't be persisted
+      } else {
+        console.error(`[Store] Instance ${id} not found!`);
       }
     },
 
     updateInstancePersonality(id: string, personalityId: string | undefined) {
       const instance = this.instances.get(id);
       if (instance) {
-        instance.personalityId = personalityId;
+        // Create a new instance object to trigger reactivity
+        const updatedInstance = { ...instance };
+        updatedInstance.personalityId = personalityId;
+        // Replace the instance in the Map to trigger reactivity
+        this.instances.set(id, updatedInstance);
+        // Save personality changes since they're important
+        this.saveInstances();
+      }
+    },
+
+    updateInstanceColor(id: string, color: string | undefined) {
+      const instance = this.instances.get(id);
+      if (instance) {
+        // Create a new instance object to trigger reactivity
+        const updatedInstance = { ...instance };
+        if (color) {
+          updatedInstance.color = color;
+        } else {
+          delete updatedInstance.color;
+        }
+        // Replace the instance in the Map to trigger reactivity
+        this.instances.set(id, updatedInstance);
+        // Save color changes since they're user preferences
         this.saveInstances();
       }
     },
@@ -293,7 +337,11 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
     async updateInstanceName(id: string, name: string) {
       const instance = this.instances.get(id);
       if (instance) {
-        instance.name = name;
+        // Create a new instance object to trigger reactivity
+        const updatedInstance = { ...instance };
+        updatedInstance.name = name;
+        // Replace the instance in the Map to trigger reactivity
+        this.instances.set(id, updatedInstance);
         await this.saveInstances();
         
         // Also save to workspace configuration if we have a workspace
@@ -356,6 +404,10 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
         // Ensure all data is serializable
         const serializableInstances = instancesArray.map(inst => ({
           ...inst,
+          // IMPORTANT: Don't persist runtime status - always save as disconnected
+          status: 'disconnected' as const,
+          // Don't persist PID since processes don't persist
+          pid: undefined,
           // Ensure dates are strings
           createdAt: typeof inst.createdAt === 'string' ? inst.createdAt : new Date(inst.createdAt).toISOString(),
           lastActiveAt: typeof inst.lastActiveAt === 'string' ? inst.lastActiveAt : new Date(inst.lastActiveAt).toISOString(),
@@ -539,13 +591,28 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
     },
 
     async reloadInstances() {
-     
-      
-      if (typeof window === 'undefined' || !window.electronAPI?.store) {
-        return;
+      // Debounce reloads to avoid multiple simultaneous reloads
+      if (this.reloadTimeout) {
+        clearTimeout(this.reloadTimeout);
       }
+      
+      this.reloadTimeout = setTimeout(async () => {
+        console.log('[Store] Reloading instances from storage...');
+        
+        if (typeof window === 'undefined' || !window.electronAPI?.store) {
+          return;
+        }
 
-      try {
+        try {
+        // Save current runtime statuses before reloading
+        const currentStatuses = new Map<string, { status: ClaudeInstance['status'], pid?: number }>();
+        this.instances.forEach((inst, id) => {
+          currentStatuses.set(id, { status: inst.status, pid: inst.pid });
+          if (inst.status !== 'disconnected') {
+            console.log(`[Store] Preserving runtime status for ${id}: ${inst.status}, pid: ${inst.pid}`);
+          }
+        });
+        
         // Load saved instances from storage
         const savedInstances = await window.electronAPI.store.get('claudeInstances');
         
@@ -562,6 +629,17 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
             if (instance.lastActiveAt && typeof instance.lastActiveAt !== 'string') {
               instance.lastActiveAt = new Date(instance.lastActiveAt).toISOString();
             }
+            
+            // Restore runtime status if it existed
+            const currentStatus = currentStatuses.get(instance.id);
+            if (currentStatus) {
+              instance.status = currentStatus.status;
+              instance.pid = currentStatus.pid;
+              if (currentStatus.status !== 'disconnected') {
+                console.log(`[Store] Restored runtime status for ${instance.id}: ${instance.status}, pid: ${instance.pid}`);
+              }
+            }
+            
             newInstances.set(instance.id, instance);
           });
           
@@ -574,9 +652,10 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
             this.activeInstanceId = firstId || null;
           }
         }
-      } catch (error) {
-        console.error('Failed to reload instances:', error);
-      }
+        } catch (error) {
+          console.error('Failed to reload instances:', error);
+        }
+      }, 100); // Debounce for 100ms
     },
     
     // Methods for checkpoint system

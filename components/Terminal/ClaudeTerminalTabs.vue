@@ -203,6 +203,7 @@ const removeInstance = async (id: string) => {
 };
 
 const updateInstanceStatus = (id: string, status: any, pid?: number) => {
+  console.log(`[ClaudeTerminalTabs] Updating status for ${id}: ${status}, pid: ${pid}`);
   instancesStore.updateInstanceStatus(id, status, pid);
 };
 
@@ -281,13 +282,7 @@ const renameTabFromMenu = () => {
 
 const setTabColor = async (color: string) => {
   if (contextMenu.value.targetInstance) {
-    const instance = instancesStore.instances.get(contextMenu.value.targetInstance.id);
-    if (instance) {
-      instance.color = color;
-      // Use nextTick to prevent component conflicts
-      await nextTick();
-      await instancesStore.saveInstances();
-    }
+    instancesStore.updateInstanceColor(contextMenu.value.targetInstance.id, color);
   }
   hideContextMenu();
 };

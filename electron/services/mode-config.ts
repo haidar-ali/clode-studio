@@ -22,9 +22,11 @@ export interface ModeConfig {
 
 export class ModeManager {
   private config: ModeConfig;
+  private initialMode: MainProcessMode;
   
   constructor() {
     this.config = this.detectMode();
+    this.initialMode = this.config.mode;
   }
   
   private detectMode(): ModeConfig {
@@ -117,6 +119,20 @@ export class ModeManager {
   
   isRemoteEnabled(): boolean {
     return this.config.enableRemoteAccess === true;
+  }
+  
+  // Runtime mode change support
+  setMode(mode: MainProcessMode): void {
+    this.config = this.loadConfigForMode(mode);
+  }
+  
+  getInitialMode(): MainProcessMode {
+    return this.initialMode;
+  }
+  
+  canChangeMode(): boolean {
+    // Allow mode changes at runtime
+    return true;
   }
 }
 

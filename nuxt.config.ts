@@ -12,6 +12,18 @@ export default defineNuxtConfig({
   nitro: {
     experimental: {
       websocket: true // Enable WebSocket support for Socket.IO integration
+    },
+    devProxy: {
+      '/socket.io': {
+        target: 'http://localhost:3789',
+        ws: true,
+        changeOrigin: true
+      }
+    },
+    routeRules: {
+      '/socket.io/**': {
+        proxy: 'http://localhost:3789/**'
+      }
     }
   },
   experimental: {
@@ -60,6 +72,13 @@ export default defineNuxtConfig({
     server: {
       fs: {
         allow: ['..']
+      },
+      proxy: {
+        '/socket.io': {
+          target: 'http://localhost:3789',
+          ws: true,
+          changeOrigin: true
+        }
       }
     },
     plugins: [

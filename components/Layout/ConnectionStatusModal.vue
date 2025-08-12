@@ -13,8 +13,27 @@
           <div class="modal-content">
             <!-- Status Section -->
             
+            <!-- Hybrid Mode Not Enabled Message -->
+            <div v-if="!appStatus.isHybridMode.value || !appStatus.isRemoteServerRunning.value" class="hybrid-disabled-notice">
+              <Icon name="mdi:information-outline" class="notice-icon" />
+              <div class="notice-content">
+                <h4>Hybrid Mode is Not Active</h4>
+                <p>To enable remote access to your Clode Studio from other devices:</p>
+                <ol>
+                  <li>Open the <strong>Settings</strong> (gear icon in the top bar)</li>
+                  <li>Navigate to the <strong>Remote Access</strong> section</li>
+                  <li>Toggle <strong>Hybrid Mode</strong> to enable it</li>
+                  <li>Choose your preferred relay type (Clode, Cloudflare, Custom, or Local Network)</li>
+                </ol>
+                <button class="open-settings-btn" @click="openSettings">
+                  <Icon name="mdi:cog" />
+                  Open Settings
+                </button>
+              </div>
+            </div>
+            
             <!-- Remote Server Status (for hybrid mode) -->
-            <div v-if="appStatus.isHybridMode.value" class="server-status-section">
+            <div v-else-if="appStatus.isHybridMode.value" class="server-status-section">
               <h4>Remote Server</h4>
               <div class="server-info">
                 <div class="info-item">
@@ -543,6 +562,17 @@ function formatTimeSince(date: Date): string {
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
   if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
   return `${Math.floor(seconds / 86400)}d ago`;
+}
+
+// Open settings modal
+function openSettings() {
+  // Close this modal first
+  emit('close');
+  
+  // Dispatch event to open settings
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('open-settings'));
+  }
 }
 
 onMounted(() => {
@@ -1193,6 +1223,83 @@ async function switchToDevice(deviceId: string) {
 
 .switch-btn .icon {
   font-size: 14px;
+}
+
+/* Hybrid Disabled Notice */
+.hybrid-disabled-notice {
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.hybrid-disabled-notice .notice-icon {
+  font-size: 48px;
+  color: var(--color-primary);
+  margin-bottom: 12px;
+  display: block;
+  text-align: center;
+}
+
+.hybrid-disabled-notice .notice-content h4 {
+  color: var(--color-text-primary);
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 12px 0;
+  text-align: center;
+}
+
+.hybrid-disabled-notice .notice-content p {
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  margin: 0 0 16px 0;
+  text-align: center;
+}
+
+.hybrid-disabled-notice ol {
+  text-align: left;
+  margin: 0 0 20px 20px;
+  padding: 0;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+}
+
+.hybrid-disabled-notice ol li {
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
+.hybrid-disabled-notice ol li strong {
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+
+.open-settings-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px 20px;
+  background: var(--color-primary);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.open-settings-btn:hover {
+  background: var(--color-primary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 122, 204, 0.3);
+}
+
+.open-settings-btn:active {
+  transform: translateY(0);
 }
 
 /* Actions Section */
