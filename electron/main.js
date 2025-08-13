@@ -128,6 +128,22 @@ app.on('before-quit', () => {
         console.log('Stopping Nuxt server...');
         serverProcess.kill();
     }
+    // Clean up all pending Claude output
+    if (global.pendingClaudeOutput && global.pendingClaudeOutput.size > 0) {
+        console.log('Cleaning up all pending Claude output...');
+        global.pendingClaudeOutput.clear();
+    }
+    // Kill all Claude instances
+    claudeInstances.forEach((pty, instanceId) => {
+        console.log(`Killing Claude instance ${instanceId}`);
+        try {
+            pty.kill();
+        }
+        catch (error) {
+            console.error(`Failed to kill Claude instance ${instanceId}:`, error);
+        }
+    });
+    claudeInstances.clear();
 });
 function createWindow() {
     // Set up icon path
@@ -215,6 +231,24 @@ app.whenReady().then(async () => {
     // Setup Git Timeline handlers
     setupGitTimelineHandlers();
     createWindow();
+    // Set up periodic cleanup of orphaned pending output (every 5 minutes)
+    setInterval(() => {
+        if (global.pendingClaudeOutput && global.pendingClaudeOutput.size > 0) {
+            // Check for orphaned entries (instances that no longer exist)
+            const activeInstances = new Set(claudeInstances.keys());
+            let cleanedCount = 0;
+            global.pendingClaudeOutput.forEach((output, instanceId) => {
+                if (!activeInstances.has(instanceId)) {
+                    console.log(`Cleaning up orphaned pending output for ${instanceId}`);
+                    global.pendingClaudeOutput?.delete(instanceId);
+                    cleanedCount++;
+                }
+            });
+            if (cleanedCount > 0) {
+                console.log(`Cleaned up ${cleanedCount} orphaned pending output entries`);
+            }
+        }
+    }, 5 * 60 * 1000); // 5 minutes
     // Check if hybrid mode was enabled in settings and auto-start it
     const savedHybridMode = store.get('hybridModeEnabled');
     const savedRelayType = store.get('relayType') || 'CLODE';
@@ -535,7 +569,17 @@ ipcMain.handle('claude:start', async (event, instanceId, workingDirectory, insta
                     global.pendingClaudeOutput = new Map();
                 }
                 const pending = global.pendingClaudeOutput.get(instanceId) || '';
-                global.pendingClaudeOutput.set(instanceId, pending + data);
+                // Limit pending output to prevent unbounded memory growth (10MB limit)
+                const MAX_PENDING_SIZE = 10 * 1024 * 1024; // 10MB
+                const newPending = pending + data;
+                if (newPending.length > MAX_PENDING_SIZE) {
+                    // Keep only the last portion of the output
+                    global.pendingClaudeOutput.set(instanceId, newPending.slice(-MAX_PENDING_SIZE));
+                    console.warn(`Pending output for ${instanceId} exceeded limit, truncating...`);
+                }
+                else {
+                    global.pendingClaudeOutput.set(instanceId, newPending);
+                }
             }
             else {
                 windows.forEach(window => {
@@ -552,6 +596,11 @@ ipcMain.handle('claude:start', async (event, instanceId, workingDirectory, insta
             // Log any captured output if process exits quickly
             if (initialOutput.trim()) {
                 console.log(`Claude output before exit for ${instanceId}:`, initialOutput);
+            }
+            // Clean up pending output for this instance to prevent memory leak
+            if (global.pendingClaudeOutput?.has(instanceId)) {
+                console.log(`Cleaning up pending output for ${instanceId}`);
+                global.pendingClaudeOutput.delete(instanceId);
             }
             // Send exit event to all windows
             const windows = BrowserWindow.getAllWindows();
@@ -622,6 +671,11 @@ ipcMain.handle('claude:stop', async (event, instanceId) => {
     if (claudePty) {
         claudePty.kill();
         claudeInstances.delete(instanceId);
+        // Clean up pending output for this instance
+        if (global.pendingClaudeOutput?.has(instanceId)) {
+            console.log(`Cleaning up pending output for stopped instance ${instanceId}`);
+            global.pendingClaudeOutput.delete(instanceId);
+        }
         // Notify all clients about instance update
         mainWindow?.webContents.send('claude:instances:updated');
         if (remoteServer) {

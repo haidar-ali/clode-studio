@@ -91,6 +91,9 @@ async function onWorkspaceReady(workspace: string) {
 // Set up ghost text loading listener
 let removeGhostTextListener: (() => void) | null = null;
 
+// Store all IPC listeners for cleanup
+const ipcListeners: Array<{ channel: string; handler: Function }> = [];
+
 onMounted(() => {
   // Listen for ghost text loading events from main process
   if (window.electronAPI?.onGhostTextLoading) {
@@ -99,10 +102,16 @@ onMounted(() => {
     });
   }
   
+  // Helper function to register IPC listeners that will be cleaned up
+  const registerIPCListener = (channel: string, handler: Function) => {
+    window.electronAPI.ipcRenderer.on(channel, handler);
+    ipcListeners.push({ channel, handler });
+  };
+  
   // Set up remote snapshot request handlers
   if (window.electronAPI?.ipcRenderer?.on) {
     // Handle remote snapshot list requests
-    window.electronAPI.ipcRenderer.on('remote-snapshot-list', async (event: any, data: any) => {
+    registerIPCListener('remote-snapshot-list', async (event: any, data: any) => {
       try {
         const { allBranches, branch } = data;
         const snapshotsStore = (await import('~/stores/snapshots')).useSnapshotsStore();
@@ -123,7 +132,7 @@ onMounted(() => {
     });
     
     // Handle remote snapshot capture requests  
-    window.electronAPI.ipcRenderer.on('remote-snapshot-capture', async (event: any, data: any) => {
+    registerIPCListener('remote-snapshot-capture', async (event: any, data: any) => {
       try {
         const { name, trigger, ideState } = data;
         const snapshotsStore = (await import('~/stores/snapshots')).useSnapshotsStore();
@@ -143,7 +152,7 @@ onMounted(() => {
     });
     
     // Handle remote snapshot restore requests
-    window.electronAPI.ipcRenderer.on('remote-snapshot-restore', async (event: any, data: any) => {
+    registerIPCListener('remote-snapshot-restore', async (event: any, data: any) => {
       try {
         const { snapshotId, options } = data;
         const snapshotsStore = (await import('~/stores/snapshots')).useSnapshotsStore();
@@ -160,7 +169,7 @@ onMounted(() => {
     });
     
     // Handle remote snapshot delete requests
-    window.electronAPI.ipcRenderer.on('remote-snapshot-delete', async (event: any, data: any) => {
+    registerIPCListener('remote-snapshot-delete', async (event: any, data: any) => {
       try {
         const { snapshotId, branch } = data;
         const snapshotsStore = (await import('~/stores/snapshots')).useSnapshotsStore();
@@ -177,7 +186,7 @@ onMounted(() => {
     });
     
     // Handle remote snapshot update requests
-    window.electronAPI.ipcRenderer.on('remote-snapshot-update', async (event: any, data: any) => {
+    registerIPCListener('remote-snapshot-update', async (event: any, data: any) => {
       try {
         const { snapshot } = data;
         // For updates, we could update tags or other metadata
@@ -190,7 +199,7 @@ onMounted(() => {
     });
     
     // Handle remote snapshot content requests
-    window.electronAPI.ipcRenderer.on('remote-snapshot-content', async (event: any, data: any) => {
+    registerIPCListener('remote-snapshot-content', async (event: any, data: any) => {
       try {
         const { hash, projectPath } = data;
         
@@ -214,7 +223,7 @@ onMounted(() => {
     });
     
     // Handle remote snapshot getDiff requests
-    window.electronAPI.ipcRenderer.on('remote-snapshot-getDiff', async (event: any, data: any) => {
+    registerIPCListener('remote-snapshot-getDiff', async (event: any, data: any) => {
       try {
         const { hash, projectPath } = data;
         
@@ -236,7 +245,7 @@ onMounted(() => {
     });
     
     // Handle remote snapshot scanProjectFiles requests
-    window.electronAPI.ipcRenderer.on('remote-snapshot-scanProjectFiles', async (event: any, data: any) => {
+    registerIPCListener('remote-snapshot-scanProjectFiles', async (event: any, data: any) => {
       try {
         const { projectPath } = data;
         
@@ -257,7 +266,7 @@ onMounted(() => {
     });
     
     // Handle remote worktree requests
-    window.electronAPI.ipcRenderer.on('remote-worktree-list', async (event: any) => {
+    registerIPCListener('remote-worktree-list', async (event: any) => {
       try {
         const result = await window.electronAPI.worktree.list();
         window.electronAPI.send('worktree-list-response', result);
@@ -267,7 +276,7 @@ onMounted(() => {
       }
     });
     
-    window.electronAPI.ipcRenderer.on('remote-worktree-sessions', async (event: any) => {
+    registerIPCListener('remote-worktree-sessions', async (event: any) => {
       try {
         const result = await window.electronAPI.worktree.sessions();
         window.electronAPI.send('worktree-sessions-response', result);
@@ -277,7 +286,7 @@ onMounted(() => {
       }
     });
     
-    window.electronAPI.ipcRenderer.on('remote-worktree-switch', async (event: any, data: any) => {
+    registerIPCListener('remote-worktree-switch', async (event: any, data: any) => {
       try {
         const { worktreePath } = data;
         
@@ -297,7 +306,7 @@ onMounted(() => {
       }
     });
     
-    window.electronAPI.ipcRenderer.on('remote-worktree-remove', async (event: any, data: any) => {
+    registerIPCListener('remote-worktree-remove', async (event: any, data: any) => {
       try {
         const { worktreePath, force } = data;
         const result = await window.electronAPI.worktree.remove(worktreePath, force);
@@ -308,7 +317,7 @@ onMounted(() => {
       }
     });
     
-    window.electronAPI.ipcRenderer.on('remote-worktree-lock', async (event: any, data: any) => {
+    registerIPCListener('remote-worktree-lock', async (event: any, data: any) => {
       try {
         const { worktreePath, lock } = data;
         const result = await window.electronAPI.worktree.lock(worktreePath, lock);
@@ -319,7 +328,7 @@ onMounted(() => {
       }
     });
     
-    window.electronAPI.ipcRenderer.on('remote-worktree-compare', async (event: any, data: any) => {
+    registerIPCListener('remote-worktree-compare', async (event: any, data: any) => {
       try {
         const { path1, path2 } = data;
         const result = await window.electronAPI.worktree.compare(path1, path2);
@@ -330,7 +339,7 @@ onMounted(() => {
       }
     });
     
-    window.electronAPI.ipcRenderer.on('remote-worktree-createSession', async (event: any, data: any) => {
+    registerIPCListener('remote-worktree-createSession', async (event: any, data: any) => {
       try {
         const { sessionData } = data;
         const result = await window.electronAPI.worktree.createSession(sessionData);
@@ -341,7 +350,7 @@ onMounted(() => {
       }
     });
     
-    window.electronAPI.ipcRenderer.on('remote-worktree-deleteSession', async (event: any, data: any) => {
+    registerIPCListener('remote-worktree-deleteSession', async (event: any, data: any) => {
       try {
         const { sessionId } = data;
         const result = await window.electronAPI.worktree.deleteSession(sessionId);
@@ -355,8 +364,18 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  // Clean up ghost text listener
   if (removeGhostTextListener) {
     removeGhostTextListener();
+    removeGhostTextListener = null;
+  }
+  
+  // Clean up all IPC listeners to prevent memory leaks
+  if (window.electronAPI?.ipcRenderer?.removeListener) {
+    ipcListeners.forEach(({ channel, handler }) => {
+      window.electronAPI.ipcRenderer.removeListener(channel, handler);
+    });
+    ipcListeners.length = 0; // Clear the array
   }
 });
 </script>
