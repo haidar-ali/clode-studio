@@ -16,6 +16,7 @@ export class LSPManager {
     this.documentVersions = new Map(); // uri -> version number
     this.diagnostics = new Map(); // uri -> diagnostics array
     this.openDocuments = new Map(); // uri -> { version, language }
+    this.unavailableServers = new Set(); // Track servers that failed to start
     
     // Increase max listeners to prevent warnings when multiple LSP servers start
     process.setMaxListeners(20);
@@ -172,6 +173,11 @@ export class LSPManager {
     const language = this.detectLanguage(filepath);
     if (!language) return null;
     
+    // Skip if we know this server is unavailable
+    if (this.unavailableServers.has(language)) {
+      return null;
+    }
+    
     // Check if server is already running
     if (this.connections.has(language)) {
       return this.connections.get(language);
@@ -222,6 +228,11 @@ export class LSPManager {
    * Start a language server
    */
   async startServer(language, workspaceUri = null) {
+    // Skip if we know this server is unavailable
+    if (this.unavailableServers.has(language)) {
+      return null;
+    }
+    
     const config = this.serverConfigs[language];
     if (!config) {
       throw new Error(`No language server configured for ${language}`);
@@ -271,6 +282,10 @@ export class LSPManager {
       });
       
       serverProcess.on('error', (err) => {
+        // Only log error once, not repeatedly
+        if (!this.servers.has(language)) {
+          return; // Already handled
+        }
         console.error(`[LSP] Failed to start ${language} server:`, err);
         this.handleServerError(language, err);
       });
@@ -706,8 +721,9 @@ export class LSPManager {
       
       return connection;
     } catch (error) {
-      console.error(`[LSP] Failed to start ${language} server:`, error);
-      throw error;
+      // Clean up and mark as unavailable
+      this.handleServerError(language, error);
+      return null; // Return null instead of throwing to prevent cascading errors
     }
   }
 
@@ -716,8 +732,32 @@ export class LSPManager {
    */
   handleServerError(language, error) {
     const config = this.serverConfigs[language];
+    
+    // Clean up any existing connection/server to prevent stream errors
+    const connection = this.connections.get(language);
+    if (connection) {
+      try {
+        connection.dispose();
+      } catch (e) {
+        // Ignore disposal errors
+      }
+      this.connections.delete(language);
+    }
+    
+    const server = this.servers.get(language);
+    if (server) {
+      try {
+        server.kill();
+      } catch (e) {
+        // Ignore kill errors
+      }
+      this.servers.delete(language);
+    }
+    
     if (error.code === 'ENOENT') {
-      console.error(`[LSP] ${language} server not found. Install with: ${config.install}`);
+      console.log(`[LSP] ${language} server not found. Install with: ${config.install}`);
+      // Mark this language as unavailable to prevent repeated attempts
+      this.unavailableServers.add(language);
     }
   }
 

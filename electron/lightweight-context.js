@@ -11,6 +11,12 @@ export class LightweightContext {
     watchers = new Map();
     watcherCallbacks = new Set();
     scanDebounceTimer = null;
+    // Performance limits
+    MAX_FILES = 5000; // Limit for large projects
+    MAX_FILE_SIZE = 512 * 1024; // 512KB
+    MAX_ERRORS = 100; // Stop after too many errors
+    scanningInProgress = false;
+    errorCount = 0;
     // Common file extensions and their languages
     languageMap = {
         '.js': 'javascript',
@@ -41,28 +47,35 @@ export class LightweightContext {
         '.xml': 'xml',
         '.sql': 'sql'
     };
-    // Files to ignore
+    // Files to ignore (expanded for better performance)
     ignorePatterns = [
-        'node_modules',
-        '.git',
-        '.claude',
-        '.claude-checkpoints',
-        '.clode',
-        '.worktrees',
-        'dist',
-        'build',
-        '.output',
-        'coverage',
-        '.nyc_output',
-        'tmp',
-        'temp',
-        '.cache',
-        '.parcel-cache',
-        '.vscode',
-        '.idea',
-        '__pycache__',
-        '*.pyc',
-        '.DS_Store'
+        // Dependencies
+        'node_modules', 'vendor', 'packages', '.pnpm-store', 'bower_components',
+        // Version control
+        '.git', '.svn', '.hg', '.bzr',
+        // Claude specific
+        '.claude', '.claude-checkpoints', '.clode', '.worktrees',
+        // Build outputs
+        'dist', 'build', '.output', '.next', 'target', 'bin', 'obj', '_build',
+        // Testing and coverage
+        'coverage', '.nyc_output', '.pytest_cache',
+        // Temp and cache
+        'tmp', 'temp', '.cache', '.parcel-cache', '.nuxt', '.turbo',
+        // IDE
+        '.vscode', '.idea', '.vs',
+        // Python
+        '__pycache__', '*.pyc', '*.pyo', '.Python', 'venv', 'env',
+        // OS
+        '.DS_Store', 'Thumbs.db', 'desktop.ini',
+        // Media directories (common locations)
+        'wwwroot', 'public/images', 'public/media', 'assets/images',
+        'resources', 'static/images', 'uploads', 'media',
+        // Deployment directories (fix for the double slash issue)
+        'azure-deploy', 'incremental-deploy', 'deploy', 'deployment',
+        // Large files
+        '*.jpg', '*.jpeg', '*.png', '*.gif', '*.mp4', '*.avi', '*.mov',
+        '*.zip', '*.rar', '*.tar', '*.gz', '*.pdf', '*.exe', '*.dll',
+        '*.min.js', '*.min.css', '*.map', '*.sql', '*.sqlite', '*.db'
     ];
     async initialize(workspacePath) {
         // Stop any existing watchers
@@ -85,12 +98,25 @@ export class LightweightContext {
         this.startWatching();
     }
     async scanWorkspace() {
+        // Prevent concurrent scans
+        if (this.scanningInProgress) {
+            console.log('Scan already in progress, skipping...');
+            return;
+        }
+        this.scanningInProgress = true;
+        this.errorCount = 0;
         const startTime = Date.now();
-        this.fileCache.clear();
-        const files = await this.scanDirectory(this.workspacePath);
-        // Build project info
-        this.projectInfo = this.analyzeProject(files);
-        this.lastScanTime = Date.now();
+        try {
+            this.fileCache.clear();
+            const files = await this.scanDirectory(this.workspacePath);
+            // Build project info
+            this.projectInfo = this.analyzeProject(files);
+            this.lastScanTime = Date.now();
+            console.log(`Workspace scan completed: ${files.length} files in ${Date.now() - startTime}ms, errors: ${this.errorCount}`);
+        }
+        finally {
+            this.scanningInProgress = false;
+        }
     }
     async scanDirectory(dirPath, depth = 0) {
         if (depth > 8)
@@ -103,9 +129,26 @@ export class LightweightContext {
         }
         try {
             const entries = await readdir(dirPath);
+            // Check limits before processing
+            if (this.fileCache.size >= this.MAX_FILES) {
+                console.warn(`Reached maximum file limit (${this.MAX_FILES}), stopping scan`);
+                return files;
+            }
+            if (this.errorCount >= this.MAX_ERRORS) {
+                console.error(`Too many errors (${this.MAX_ERRORS}), stopping scan`);
+                return files;
+            }
             for (const entry of entries) {
                 const fullPath = join(dirPath, entry);
-                const stats = await stat(fullPath);
+                let stats;
+                try {
+                    stats = await stat(fullPath);
+                }
+                catch (statError) {
+                    // File doesn't exist or is a broken symlink - skip silently
+                    this.errorCount++;
+                    continue;
+                }
                 if (stats.isDirectory()) {
                     // Recursively scan subdirectories
                     const subFiles = await this.scanDirectory(fullPath, depth + 1);
@@ -115,8 +158,8 @@ export class LightweightContext {
                     // Process file
                     const ext = extname(entry).toLowerCase();
                     const language = this.languageMap[ext] || 'unknown';
-                    // Skip binary files and very large files
-                    if (stats.size > 1024 * 1024 || this.isBinaryFile(entry)) {
+                    // Skip binary files and large files
+                    if (stats.size > this.MAX_FILE_SIZE || this.isBinaryFile(entry)) {
                         continue;
                     }
                     const fileInfo = {
@@ -133,7 +176,11 @@ export class LightweightContext {
             }
         }
         catch (error) {
-            console.warn(`Error scanning directory ${dirPath}:`, error);
+            this.errorCount++;
+            // Only log if it's not a common error
+            if (error.code !== 'ENOENT' && error.code !== 'EACCES') {
+                console.warn(`Error scanning directory ${dirPath}:`, error.code || error);
+            }
         }
         return files;
     }
@@ -284,42 +331,70 @@ export class LightweightContext {
     // Build smart context for Claude based on query and working files
     async buildContext(query, workingFiles = [], maxTokens = 2000) {
         const context = [];
-        // Add project overview
+        // Detect if this is a large project
+        const isLargeProject = this.fileCache.size > 1000;
+        // Add minimal project overview
         if (this.projectInfo) {
             context.push(`PROJECT: ${this.projectInfo.type} project`);
             if (this.projectInfo.framework) {
                 context.push(`FRAMEWORK: ${this.projectInfo.framework}`);
             }
-            context.push(`LANGUAGES: ${this.projectInfo.languages.join(', ')}`);
+            // Only show top 3 languages for large projects
+            const languages = isLargeProject
+                ? this.projectInfo.languages.slice(0, 3).join(', ') + (this.projectInfo.languages.length > 3 ? '...' : '')
+                : this.projectInfo.languages.join(', ');
+            context.push(`LANGUAGES: ${languages}`);
+            // Show size indicator
+            if (isLargeProject) {
+                context.push(`SIZE: Large project (${this.projectInfo.totalFiles}+ files)`);
+            }
             context.push('');
         }
-        // Find relevant files
-        const relevantFiles = await this.searchFiles(query, 10);
-        // Add working files context
+        // For large projects, severely limit file search
+        const searchLimit = isLargeProject ? 5 : 10;
+        const relevantFiles = query ? await this.searchFiles(query, searchLimit) : [];
+        // Add working files context (limit to 5 for large projects)
         if (workingFiles.length > 0) {
-            context.push('WORKING FILES:');
-            for (const filePath of workingFiles) {
-                const file = this.fileCache.get(filePath);
-                if (file) {
-                    context.push(`- ${relative(this.workspacePath, filePath)} (${file.language})`);
+            const filesToShow = isLargeProject ? workingFiles.slice(0, 5) : workingFiles.slice(0, 10);
+            if (filesToShow.length > 0) {
+                context.push('WORKING FILES:');
+                for (const filePath of filesToShow) {
+                    const file = this.fileCache.get(filePath);
+                    if (file) {
+                        const relativePath = relative(this.workspacePath, filePath);
+                        // Shorten paths for large projects
+                        const displayPath = isLargeProject && relativePath.length > 50
+                            ? '...' + relativePath.slice(-47)
+                            : relativePath;
+                        context.push(`- ${displayPath} (${file.language})`);
+                    }
                 }
+                if (workingFiles.length > filesToShow.length) {
+                    context.push(`  ... and ${workingFiles.length - filesToShow.length} more`);
+                }
+                context.push('');
             }
-            context.push('');
         }
-        // Add relevant files
+        // Add relevant files (but fewer for large projects)
         if (relevantFiles.length > 0) {
+            const filesToShow = isLargeProject ? relevantFiles.slice(0, 3) : relevantFiles.slice(0, 5);
             context.push('RELEVANT FILES:');
-            for (const file of relevantFiles.slice(0, 5)) {
+            for (const file of filesToShow) {
                 const relativePath = relative(this.workspacePath, file.path);
-                context.push(`- ${relativePath} (${file.language}) - Score: ${file.relevanceScore}`);
+                const displayPath = isLargeProject && relativePath.length > 50
+                    ? '...' + relativePath.slice(-47)
+                    : relativePath;
+                context.push(`- ${displayPath} (${file.language})`);
             }
             context.push('');
         }
-        // Add file tree for small projects
-        if (this.projectInfo && this.projectInfo.totalFiles < 50) {
+        // NEVER build file tree for large projects or projects with many files
+        if (this.projectInfo && this.projectInfo.totalFiles < 30 && !isLargeProject) {
             const tree = await this.buildFileTree();
-            context.push('FILE TREE:');
-            context.push(tree);
+            if (tree) {
+                context.push('FILE TREE:');
+                context.push(tree);
+            }
         }
         const contextString = context.join('\n');
         // Save to history for future reference
@@ -371,9 +446,14 @@ export class LightweightContext {
     startWatching() {
         if (!this.workspacePath)
             return;
+        // Don't watch if project has too many files
+        if (this.fileCache.size > 1000) {
+            console.log(`Project has ${this.fileCache.size} files, skipping file watching for performance`);
+            return;
+        }
         try {
-            // Watch the workspace directory
-            const watcher = watch(this.workspacePath, { recursive: true }, (eventType, filename) => {
+            // Watch the workspace directory (non-recursive for large projects)
+            const watcher = watch(this.workspacePath, { recursive: false }, (eventType, filename) => {
                 if (!filename)
                     return;
                 const fullPath = join(this.workspacePath, filename);
@@ -410,6 +490,10 @@ export class LightweightContext {
         }
     }
     handleFileSystemEvent(eventType, filePath) {
+        // Skip if already scanning
+        if (this.scanningInProgress) {
+            return;
+        }
         // Debounce rapid file system events
         if (this.scanDebounceTimer) {
             clearTimeout(this.scanDebounceTimer);
@@ -452,8 +536,8 @@ export class LightweightContext {
             if (stats.isFile()) {
                 const ext = extname(filePath).toLowerCase();
                 const language = this.languageMap[ext] || 'unknown';
-                // Skip binary files and very large files
-                if (stats.size <= 1024 * 1024 && !this.isBinaryFile(filePath)) {
+                // Skip binary files and large files
+                if (stats.size <= this.MAX_FILE_SIZE && !this.isBinaryFile(filePath)) {
                     const fileInfo = {
                         path: filePath,
                         name: basename(filePath),

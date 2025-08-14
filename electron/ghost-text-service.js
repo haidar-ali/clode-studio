@@ -30,7 +30,8 @@ class GhostTextService {
         return;
       }
       
-      // Test the Claude Code SDK
+      // Test the Claude Code SDK but with a very light operation
+      // We still need to warm up Claude but we'll do it efficiently
       await this.checkHealth();
       
     } catch (error) {
