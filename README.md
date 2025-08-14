@@ -227,6 +227,9 @@ clode-studio
 
 # Start with remote access enabled
 clode-studio --hybrid
+
+# Start in headless mode (server only) - requires workspace
+clode-studio --headless --workspace=/path/to/project
 ```
 
 ### Manual Installation
@@ -266,6 +269,12 @@ clode-studio --hybrid
    
    # Hybrid mode with your own tunnel (ngrok, serveo, etc.)
    RELAY_TYPE=CUSTOM CLODE_MODE=hybrid npm run electron:remote
+   
+   # Headless mode (server only, no GUI) - REQUIRES workspace path
+   CLODE_WORKSPACE_PATH=/path/to/project npm run electron:headless
+   
+   # Headless with custom relay URL
+   RELAY_TYPE=CLODE RELAY_URL=wss://your-relay.com CLODE_WORKSPACE_PATH=/path/to/project npm run electron:headless
    ```
 
 ### Prerequisites
@@ -288,6 +297,26 @@ npm install -g claude-code
 # Verify installation
 claude --version
 ```
+
+### Headless Mode (Server Only)
+
+Run Clode Studio as a headless server without any GUI, perfect for cloud deployments and remote servers:
+
+```bash
+# Basic headless mode (uses CLODE relay by default)
+CLODE_WORKSPACE_PATH=/path/to/project npm run electron:headless
+
+# With custom relay server
+RELAY_TYPE=CLODE RELAY_URL=wss://your-relay.com CLODE_WORKSPACE_PATH=/path/to/project npm run electron:headless
+
+# With Cloudflare tunnel
+RELAY_TYPE=CLOUDFLARE CLODE_WORKSPACE_PATH=/path/to/project npm run electron:headless
+
+# Local network only (no external access)
+RELAY_TYPE=LOCAL CLODE_WORKSPACE_PATH=/path/to/project npm run electron:headless
+```
+
+**Important**: `CLODE_WORKSPACE_PATH` is **required** for headless mode. The server will exit with an error message if not provided.
 
 ### Remote Access Setup
 

@@ -262,11 +262,20 @@ cd "$INSTALL_DIR"
 # Parse arguments
 MODE="desktop"
 DEV=false
+WORKSPACE=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
         --hybrid)
             MODE="hybrid"
+            shift
+            ;;
+        --headless)
+            MODE="headless"
+            shift
+            ;;
+        --workspace=*)
+            WORKSPACE="${1#*=}"
             shift
             ;;
         --dev)
@@ -279,14 +288,17 @@ while [[ $# -gt 0 ]]; do
             echo "Usage: clode-studio [options]"
             echo ""
             echo "Options:"
-            echo "  --hybrid    Start in hybrid mode (desktop + remote server)"
-            echo "  --dev       Start in development mode"
-            echo "  --help      Show this help message"
+            echo "  --hybrid         Start in hybrid mode (desktop + remote server)"
+            echo "  --headless       Start in headless mode (server only, no GUI)"
+            echo "  --workspace=PATH Set workspace path (required for headless mode)"
+            echo "  --dev            Start in development mode"
+            echo "  --help           Show this help message"
             echo ""
             echo "Examples:"
-            echo "  clode-studio           # Start desktop mode"
-            echo "  clode-studio --hybrid  # Start with remote access enabled"
-            echo "  clode-studio --dev     # Start in development mode"
+            echo "  clode-studio                                    # Start desktop mode"
+            echo "  clode-studio --hybrid                           # Start with remote access enabled"
+            echo "  clode-studio --headless --workspace=/path/to/project  # Headless mode"
+            echo "  clode-studio --dev                              # Start in development mode"
             exit 0
             ;;
         *)
@@ -299,14 +311,28 @@ done
 # Start Clode Studio
 export CLODE_MODE="$MODE"
 
+# Set workspace path if provided
+if [ -n "$WORKSPACE" ]; then
+    export CLODE_WORKSPACE_PATH="$WORKSPACE"
+fi
+
+# Check headless mode requirements
+if [ "$MODE" = "headless" ] && [ -z "$WORKSPACE" ]; then
+    echo "Error: Headless mode requires --workspace=/path/to/project"
+    echo "Example: clode-studio --headless --workspace=/home/user/my-project"
+    exit 1
+fi
+
 if [ "$DEV" = true ]; then
     echo "Starting Clode Studio in development mode (${MODE})..."
     npm run electron:dev
 else
     echo "Starting Clode Studio (${MODE} mode)..."
-    # Use optimized mode for hybrid/remote, dev mode for desktop
+    # Use appropriate script based on mode
     if [ "$MODE" = "hybrid" ]; then
         npm run electron:remote
+    elif [ "$MODE" = "headless" ]; then
+        npm run electron:headless
     else
         npm run electron:dev
     fi
@@ -357,7 +383,7 @@ configure_env() {
     if [ ! -f "$CONFIG_FILE" ]; then
         cat > "$CONFIG_FILE" << EOF
 # Clode Studio Configuration
-# Default mode: desktop or hybrid
+# Default mode: desktop, hybrid, or headless
 CLODE_MODE=desktop
 
 # Relay/Tunnel type: CLODE, CLOUDFLARE, CUSTOM, NONE
@@ -366,14 +392,14 @@ RELAY_TYPE=CLODE
 # Custom relay server (when RELAY_TYPE=CLODE)
 # RELAY_URL=wss://your-relay.example.com
 
-# Remote server settings (for hybrid mode)
+# Remote server settings (for hybrid/headless mode)
 CLODE_SERVER_PORT=3789
 CLODE_SERVER_HOST=0.0.0.0
 CLODE_MAX_CONNECTIONS=10
 CLODE_AUTH_REQUIRED=false
 
-# Optional: Workspace path
-# WORKSPACE_PATH=$HOME/projects
+# Workspace path (REQUIRED for headless mode)
+# CLODE_WORKSPACE_PATH=$HOME/projects
 EOF
         echo -e "${GREEN}✓ Configuration file created${NC}"
     fi
@@ -387,8 +413,9 @@ print_success() {
     echo ""
     echo -e "${BOLD}To start Clode Studio:${NC}"
     echo ""
-    echo -e "  ${YELLOW}clode-studio${NC}           # Desktop mode"
-    echo -e "  ${YELLOW}clode-studio --hybrid${NC}  # Desktop + Remote server"
+    echo -e "  ${YELLOW}clode-studio${NC}                                         # Desktop mode"
+    echo -e "  ${YELLOW}clode-studio --hybrid${NC}                                # Desktop + Remote server"
+    echo -e "  ${YELLOW}clode-studio --headless --workspace=/path/to/project${NC} # Headless server only"
     echo ""
     
     if [[ "$OS" == "macos" ]]; then

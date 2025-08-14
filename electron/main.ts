@@ -290,6 +290,26 @@ app.whenReady().then(async () => {
   // In headless mode, use workspace from config
   if (modeManager.isHeadlessMode()) {
     const config = modeManager.getConfig();
+    
+    // Check if workspace path is properly set (not just current directory)
+    // Check both environment variable and command line argument
+    const hasWorkspaceArg = process.argv.some(arg => arg.startsWith('--workspace='));
+    if (!process.env.CLODE_WORKSPACE_PATH && !hasWorkspaceArg) {
+      console.error('\n❌ Headless mode requires a workspace path!\n');
+      console.error('Please provide the workspace path using one of these methods:\n');
+      console.error('1. Environment variable:');
+      console.error('   CLODE_WORKSPACE_PATH=/path/to/project npm run electron:headless\n');
+      console.error('2. Command line argument:');
+      console.error('   npm run electron:headless -- --workspace=/path/to/project');
+      console.error('   or');
+      console.error('   clode-studio --headless --workspace=/path/to/project\n');
+      console.error('Examples:');
+      console.error('   CLODE_WORKSPACE_PATH=/Users/alihaidar/my-project npm run electron:headless');
+      console.error('   RELAY_TYPE=CLODE CLODE_WORKSPACE_PATH=/Users/alihaidar/my-project npm run electron:headless\n');
+      app.quit();
+      return;
+    }
+    
     if (config.workspacePath) {
       workspacePath = config.workspacePath;
       (store as any).set('workspacePath', workspacePath);

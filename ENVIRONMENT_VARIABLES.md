@@ -154,30 +154,19 @@ CLAUDE_DEBUG=true RELAY_TYPE=CLODE CLODE_MODE=hybrid npm run electron:dev
 
 ### 9. Custom Server Configuration
 ```bash
-CLODE_SERVER_PORT=8080 \
-CLODE_SERVER_HOST=127.0.0.1 \
-CLODE_AUTH_REQUIRED=true \
-CLODE_MAX_CONNECTIONS=20 \
-RELAY_TYPE=CLODE \
-CLODE_MODE=hybrid \
-npm run electron:remote
+CLODE_SERVER_PORT=8080 CLODE_SERVER_HOST=127.0.0.1 CLODE_AUTH_REQUIRED=true CLODE_MAX_CONNECTIONS=20 RELAY_TYPE=CLODE CLODE_MODE=hybrid npm run electron:remote
 ```
 
 ### 10. Headless Mode with Clode Relay
 ```bash
-# With environment variables (no prompts)
-RELAY_TYPE=CLODE \
-CLODE_WORKSPACE_PATH=/path/to/project \
-npm run electron:headless
+# With environment variables (workspace is required)
+RELAY_TYPE=CLODE CLODE_WORKSPACE_PATH=/path/to/project npm run electron:headless
 
 # With custom relay URL
-RELAY_TYPE=CLODE \
-RELAY_URL=wss://my-relay.example.com \
-CLODE_WORKSPACE_PATH=/path/to/project \
-npm run electron:headless
+RELAY_TYPE=CLODE RELAY_URL=wss://my-relay.example.com CLODE_WORKSPACE_PATH=/path/to/project npm run electron:headless
 
-# Interactive setup (will prompt for missing config)
-npm run electron:headless
+# Minimal (defaults to CLODE relay)
+CLODE_WORKSPACE_PATH=/path/to/project npm run electron:headless
 ```
 
 ### 11. Production Build
