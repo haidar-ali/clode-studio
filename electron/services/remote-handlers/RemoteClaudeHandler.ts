@@ -52,6 +52,9 @@ export class RemoteClaudeHandler {
   private claudePath: string | null = null;
   // Terminal translators for mobile clients - key is "socketId-instanceId"
   private terminalTranslators: Map<string, TerminalTranslator> = new Map();
+  // Simple circular buffer storage for headless mode instances (instance ID -> recent output)
+  private instanceBuffers: Map<string, string[]> = new Map();
+  private readonly MAX_BUFFER_LINES = 1000; // Keep last 1000 lines
   
   constructor(
     private mainWindow: BrowserWindow,
@@ -109,11 +112,11 @@ export class RemoteClaudeHandler {
   /**
    * Clean up instances for a disconnected socket
    */
-  cleanupSocketInstances(socketId: string): void {
+  async cleanupSocketInstances(socketId: string): Promise<void> {
     const instanceIds = this.instancesBySocket.get(socketId);
     if (instanceIds) {
-      instanceIds.forEach(instanceId => {
-        this.stopInstance(instanceId);
+      for (const instanceId of instanceIds) {
+        await this.stopInstance(instanceId);
         
         // Clean up terminal translator for this socket/instance
         const translatorKey = `${socketId}-${instanceId}`;
@@ -123,7 +126,7 @@ export class RemoteClaudeHandler {
           this.terminalTranslators.delete(translatorKey);
          
         }
-      });
+      }
       this.instancesBySocket.delete(socketId);
     }
     
@@ -213,7 +216,7 @@ export class RemoteClaudeHandler {
       const isDesktopInstance = this.desktopClaudeForwarding?.get(socket.id)?.has(request.payload.instanceId) || false;
       
       // If not already tracked, check if it exists on desktop
-      if (!isDesktopInstance) {
+      if (!isDesktopInstance && this.mainWindow) {
         try {
           const desktopCheck = await this.mainWindow.webContents.executeJavaScript(`
             (() => {
@@ -243,10 +246,9 @@ export class RemoteClaudeHandler {
         }
       }
       
-      if (isDesktopInstance || this.desktopClaudeForwarding?.get(socket.id)?.has(request.payload.instanceId)) {
+      // In headless mode, skip all desktop instance logic
+      if (this.mainWindow && (isDesktopInstance || this.desktopClaudeForwarding?.get(socket.id)?.has(request.payload.instanceId))) {
         // This is a desktop Claude instance - we need to forward communication
-       
-        
         // Set up forwarding from desktop Claude to socket FIRST
         this.setupDesktopClaudeForwarding(socket, request.payload.instanceId);
         
@@ -350,7 +352,7 @@ export class RemoteClaudeHandler {
       }
       
       // Check if this is a desktop instance that needs to be started
-      const instanceExists = await this.mainWindow.webContents.executeJavaScript(`
+      const instanceExists = this.mainWindow ? await this.mainWindow.webContents.executeJavaScript(`
         (() => {
           if (window.__getClaudeStore) {
             const store = window.__getClaudeStore();
@@ -359,7 +361,7 @@ export class RemoteClaudeHandler {
           }
           return { exists: false };
         })()
-      `);
+      `) : { exists: false };
       
       if (instanceExists.exists && instanceExists.status === 'disconnected') {
         // This is a desktop instance that needs to be started
@@ -446,6 +448,37 @@ export class RemoteClaudeHandler {
       // Check if instance already exists (skip for desktop instances)
       const isDesktop = this.desktopClaudeForwarding?.get(socket.id)?.has(request.payload.instanceId) || false;
       if (!isDesktop && this.instances.has(request.payload.instanceId)) {
+        // Instance already exists, but in headless mode we should update its status to connected
+        if (!this.mainWindow) {
+          console.log(`[RemoteClaudeHandler] Instance ${request.payload.instanceId} already exists, checking status...`);
+          try {
+            const { claudeInstanceManager } = await import('../claude-instance-manager.js');
+            const existingInstance = this.instances.get(request.payload.instanceId);
+            
+            console.log(`[RemoteClaudeHandler] Existing instance has PTY: ${!!existingInstance?.pty}, is in ClaudeInstanceManager: ${claudeInstanceManager.hasInstance(request.payload.instanceId)}`);
+            
+            if (existingInstance && existingInstance.pty && claudeInstanceManager.hasInstance(request.payload.instanceId)) {
+              // Update status to connected since the PTY is still active
+              const updated = claudeInstanceManager.reconnectInstance(request.payload.instanceId, existingInstance.pty);
+              console.log(`[RemoteClaudeHandler] Updated existing instance ${request.payload.instanceId} to connected status, pid: ${updated?.pid}`);
+              
+              // Broadcast the status update
+              const { getRemoteServer } = await import('../../main.js');
+              const remoteServer = getRemoteServer();
+              if (remoteServer && updated) {
+                console.log(`[RemoteClaudeHandler] Broadcasting status update for ${request.payload.instanceId}`);
+                remoteServer.broadcastClaudeStatusUpdate(request.payload.instanceId, 'connected', updated.pid);
+              }
+            } else {
+              console.log(`[RemoteClaudeHandler] Cannot update status - missing PTY or not in ClaudeInstanceManager`);
+            }
+          } catch (error) {
+            console.error('[RemoteClaudeHandler] Failed to update instance status:', error);
+          }
+        } else {
+          console.log(`[RemoteClaudeHandler] Not in headless mode, skipping status update`);
+        }
+        
         return callback({
           id: request.id,
           success: false,
@@ -493,10 +526,16 @@ export class RemoteClaudeHandler {
       }
       
       // Spawn Claude PTY
+      // In headless mode, use smaller dimensions that fit mobile screens better
+      // Most mobile screens in portrait are narrower, so 60 cols is safer than 80
+      const isHeadless = !this.mainWindow;
+      const defaultCols = isHeadless ? 60 : 80;  // Narrower for headless/mobile
+      const defaultRows = isHeadless ? 20 : 24;  // Slightly shorter for mobile
+      
       const claudePty = pty.spawn(this.claudePath, args, {
         name: 'xterm-256color',
-        cols: 80,
-        rows: 24,
+        cols: defaultCols,
+        rows: defaultRows,
         cwd: workingDir,
         env: {
           ...process.env,
@@ -537,8 +576,55 @@ export class RemoteClaudeHandler {
       }
       this.instancesBySocket.get(socket.id)!.add(request.payload.instanceId);
       
+      // In headless mode, register with ClaudeInstanceManager so it shows as connected
+      if (!this.mainWindow) {
+        try {
+          const { claudeInstanceManager } = await import('../claude-instance-manager.js');
+          
+          // Check if instance already exists (might be persisted from before)
+          let updatedMetadata;
+          if (claudeInstanceManager.hasInstance(request.payload.instanceId)) {
+            // Reconnect existing instance with new PTY
+            updatedMetadata = claudeInstanceManager.reconnectInstance(request.payload.instanceId, claudePty);
+            console.log(`[RemoteClaudeHandler] Reconnected instance ${request.payload.instanceId} in ClaudeInstanceManager`);
+          } else {
+            // Add new instance
+            updatedMetadata = claudeInstanceManager.addInstance(request.payload.instanceId, claudePty, {
+              name: request.payload.instanceName || `Claude ${request.payload.instanceId.slice(0, 8)}`,
+              workingDirectory: workingDir,
+              isHeadless: true
+            });
+            console.log(`[RemoteClaudeHandler] Added instance ${request.payload.instanceId} to ClaudeInstanceManager`);
+          }
+          
+          // Broadcast the status update
+          const { getRemoteServer } = await import('../../main.js');
+          const remoteServer = getRemoteServer();
+          if (remoteServer && updatedMetadata) {
+            remoteServer.broadcastClaudeStatusUpdate(request.payload.instanceId, 'connected', updatedMetadata.pid);
+          }
+        } catch (error) {
+          console.error('[RemoteClaudeHandler] Failed to register with ClaudeInstanceManager:', error);
+        }
+      }
+      
       // Set up PTY data handler
       claudePty.onData((data) => {
+        // Store output in buffer for headless mode
+        if (!this.mainWindow) {
+          if (!this.instanceBuffers.has(request.payload.instanceId)) {
+            this.instanceBuffers.set(request.payload.instanceId, []);
+          }
+          const buffer = this.instanceBuffers.get(request.payload.instanceId)!;
+          
+          // Append data to buffer (keep as single string entries for now)
+          buffer.push(data);
+          // Keep buffer size limited (by number of data chunks)
+          while (buffer.length > this.MAX_BUFFER_LINES) {
+            buffer.shift(); // Remove oldest chunk
+          }
+        }
+        
         // Send raw output directly
         socket.emit(RemoteEvent.CLAUDE_OUTPUT, {
           instanceId: request.payload.instanceId,
@@ -554,7 +640,7 @@ export class RemoteClaudeHandler {
       });
       
       // Set up PTY exit handler
-      claudePty.onExit((exitCode) => {
+      claudePty.onExit(async (exitCode) => {
         socket.emit(RemoteEvent.CLAUDE_EXIT, {
           instanceId: request.payload.instanceId,
           code: exitCode.exitCode,
@@ -562,7 +648,7 @@ export class RemoteClaudeHandler {
         });
         
         // Clean up
-        this.stopInstance(request.payload.instanceId);
+        await this.stopInstance(request.payload.instanceId);
       });
       
      
@@ -879,11 +965,19 @@ export class RemoteClaudeHandler {
         rows
       });
       
-     
+      // Resize the actual Claude PTY to match the mobile terminal dimensions
+      const instance = this.instances.get(instanceId);
+      if (instance && instance.pty) {
+        try {
+          instance.pty.resize(cols, rows);
+          console.log(`[RemoteClaudeHandler] Resized Claude PTY ${instanceId} to ${cols}x${rows}`);
+        } catch (error) {
+          console.error(`[RemoteClaudeHandler] Failed to resize PTY for ${instanceId}:`, error);
+        }
+      }
       
       // Get current buffer content from the Claude instance to populate the translator
-      const instance = this.instances.get(instanceId);
-      if (instance) {
+      if (instance && this.mainWindow && !this.mainWindow.isDestroyed()) {
         // Get current buffer through desktop forwarding
         try {
           const buffer = await this.mainWindow.webContents.executeJavaScript(`
@@ -902,6 +996,7 @@ export class RemoteClaudeHandler {
           console.error('[RemoteClaudeHandler] Failed to get initial buffer:', error);
         }
       }
+      // In headless mode or if instance is new, buffer will be empty initially
       
       callback({
         id: request.id,
@@ -966,7 +1061,7 @@ export class RemoteClaudeHandler {
     }
   }
   
-  private stopInstance(instanceId: string): void {
+  private async stopInstance(instanceId: string): Promise<void> {
     const instance = this.instances.get(instanceId);
     if (!instance) return;
     
@@ -980,6 +1075,9 @@ export class RemoteClaudeHandler {
     // Remove from tracking
     this.instances.delete(instanceId);
     
+    // Remove buffer for this instance
+    this.instanceBuffers.delete(instanceId);
+    
     // Remove from socket tracking
     const socketInstances = this.instancesBySocket.get(instance.socketId);
     if (socketInstances) {
@@ -992,6 +1090,23 @@ export class RemoteClaudeHandler {
     // Unregister from user isolation service
     userIsolation.unregisterInstance(instanceId);
     
+    // In headless mode, update ClaudeInstanceManager to mark as disconnected
+    if (!this.mainWindow) {
+      try {
+        const { claudeInstanceManager } = await import('../claude-instance-manager.js');
+        const updated = claudeInstanceManager.disconnectInstance(instanceId);
+        console.log(`[RemoteClaudeHandler] Marked instance ${instanceId} as disconnected in ClaudeInstanceManager`);
+        
+        // Broadcast the status update
+        const { getRemoteServer } = await import('../../main.js');
+        const remoteServer = getRemoteServer();
+        if (remoteServer && updated) {
+          remoteServer.broadcastClaudeStatusUpdate(instanceId, 'disconnected');
+        }
+      } catch (error) {
+        console.error('[RemoteClaudeHandler] Failed to update ClaudeInstanceManager:', error);
+      }
+    }
    
   }
   
@@ -1010,8 +1125,55 @@ export class RemoteClaudeHandler {
         });
       }
       
-      // Get desktop Claude instances from the renderer
+      // Get desktop Claude instances from the renderer or main process
       let desktopInstances: any[] = [];
+      
+      // In headless mode, mainWindow is null, so get instances from main process
+      if (!this.mainWindow) {
+        console.log('[RemoteClaudeHandler] Headless mode detected, getting instances from main process');
+        try {
+          // Directly access the instance manager from the main process
+          const { claudeInstanceManager } = await import('../claude-instance-manager.js');
+          
+          // Get workspace from global variable (set in main.ts for headless mode)
+          const currentWorkspace = (global as any).__currentWorkspace || process.cwd();
+          console.log('[RemoteClaudeHandler] Current workspace from global:', currentWorkspace);
+          
+          const allInstances = claudeInstanceManager.getAllInstances();
+          console.log('[RemoteClaudeHandler] All instances:', allInstances);
+          
+          const instances = claudeInstanceManager.getInstancesByWorkspace(currentWorkspace);
+          console.log('[RemoteClaudeHandler] Workspace instances:', instances);
+          
+          desktopInstances = instances.map((instance: any) => ({
+            instanceId: instance.id,
+            name: instance.name,
+            status: instance.status,
+            personalityId: instance.personalityId,
+            workingDirectory: instance.workingDirectory,
+            createdAt: instance.createdAt,
+            lastActiveAt: instance.lastActiveAt,
+            color: instance.color,
+            pid: instance.pid,
+            isDesktop: true, // Mark as desktop instance even in headless mode so they appear in UI
+            isHeadless: instance.isHeadless
+          }));
+          
+          return callback({
+            id: request.id,
+            success: true,
+            data: desktopInstances
+          });
+        } catch (error) {
+          console.error('[RemoteClaudeHandler] Failed to get instances from main process:', error);
+          return callback({
+            id: request.id,
+            success: true,
+            data: []
+          });
+        }
+      }
+      
       try {
         const result = await this.mainWindow.webContents.executeJavaScript(`
           (async () => {
@@ -1153,19 +1315,45 @@ export class RemoteClaudeHandler {
       */
       
       // Get buffer from desktop Claude instance
-      const buffer = await this.mainWindow.webContents.executeJavaScript(`
-        (() => {
-          if (typeof window.__getClaudeTerminalBuffer === 'function') {
-            return window.__getClaudeTerminalBuffer('${request.payload.instanceId}');
+      let buffer: string | null = null;
+      
+      // Only try to get buffer from mainWindow if it exists (desktop/hybrid mode)
+      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+        buffer = await this.mainWindow.webContents.executeJavaScript(`
+          (() => {
+            if (typeof window.__getClaudeTerminalBuffer === 'function') {
+              return window.__getClaudeTerminalBuffer('${request.payload.instanceId}');
+            }
+            return null;
+          })()
+        `);
+      } else {
+        // In headless mode, first try to get buffer from our stored buffer
+        const storedBuffer = this.instanceBuffers.get(request.payload.instanceId);
+        if (storedBuffer && storedBuffer.length > 0) {
+          // Join all buffered chunks
+          buffer = storedBuffer.join('');
+        } else {
+          // Fallback: try to get buffer from the translator if it exists
+          const translatorKey = `${socket.id}-${request.payload.instanceId}`;
+          const translator = this.terminalTranslators.get(translatorKey);
+          
+          if (translator && translator.serializeAddon) {
+            try {
+              buffer = translator.serializeAddon.serialize({
+                scrollback: translator.terminal.buffer.active.length
+              });
+            } catch (error) {
+              console.error('[RemoteClaudeHandler] Failed to serialize translator buffer:', error);
+            }
           }
-          return null;
-        })()
-      `);
+        }
+      }
       
       callback({
         id: request.id,
         success: true,
-        data: { buffer }
+        data: { buffer: buffer || '' }
       });
     } catch (error) {
       callback({

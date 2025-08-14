@@ -22,7 +22,7 @@ CLODE_SERVER_PORT=8080 CLODE_AUTH_REQUIRED=true npm run electron:dev
 
 | Variable | Default | Description | Example |
 |----------|---------|-------------|---------|
-| `CLODE_MODE` | `desktop` | Application mode: `desktop`, `hybrid`, or `remote` | `CLODE_MODE=hybrid` |
+| `CLODE_MODE` | `desktop` | Application mode: `desktop`, `hybrid`, or `headless` | `CLODE_MODE=hybrid` |
 | `APP_MODE` | - | Legacy alias for CLODE_MODE | `APP_MODE=hybrid` |
 
 ### Relay/Tunnel Configuration
@@ -42,6 +42,7 @@ CLODE_SERVER_PORT=8080 CLODE_AUTH_REQUIRED=true npm run electron:dev
 | `CLODE_PORT` | `3789` | Alternative port variable | `CLODE_PORT=8080` |
 | `CLODE_MAX_CONNECTIONS` | `10` | Max remote connections | `CLODE_MAX_CONNECTIONS=50` |
 | `CLODE_AUTH_REQUIRED` | `false` | Require authentication | `CLODE_AUTH_REQUIRED=true` |
+| `CLODE_WORKSPACE_PATH` | `cwd` | Workspace path for headless mode | `CLODE_WORKSPACE_PATH=/path/to/project` |
 
 ### Debug & Development
 
@@ -162,7 +163,24 @@ CLODE_MODE=hybrid \
 npm run electron:remote
 ```
 
-### 10. Production Build
+### 10. Headless Mode with Clode Relay
+```bash
+# With environment variables (no prompts)
+RELAY_TYPE=CLODE \
+CLODE_WORKSPACE_PATH=/path/to/project \
+npm run electron:headless
+
+# With custom relay URL
+RELAY_TYPE=CLODE \
+RELAY_URL=wss://my-relay.example.com \
+CLODE_WORKSPACE_PATH=/path/to/project \
+npm run electron:headless
+
+# Interactive setup (will prompt for missing config)
+npm run electron:headless
+```
+
+### 11. Production Build
 ```bash
 NODE_ENV=production npm run dist
 ```
@@ -182,11 +200,12 @@ NODE_ENV=production npm run dist
 - Generates QR codes for mobile access
 - Best for teams and remote work
 
-### Remote Mode (`CLODE_MODE=remote`)
-- Remote-only mode (experimental)
+### Headless Mode (`CLODE_MODE=headless`)
+- Headless server mode
 - No desktop UI
 - Server-only operation
-- Best for headless servers
+- Best for headless servers and cloud deployments
+- Requires workspace path configuration
 
 ## Security Considerations
 

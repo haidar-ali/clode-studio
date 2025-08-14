@@ -30,6 +30,7 @@ import { getModeManager, MainProcessMode } from './services/mode-config.js';
 import { RemoteServer } from './services/remote-server.js';
 import { CloudflareTunnel } from './services/cloudflare-tunnel.js';
 import { RelayClient } from './services/relay-client.js';
+import { claudeInstanceManager } from './services/claude-instance-manager.js';
 // Load environment variables from .env file
 import { config } from 'dotenv';
 config();
@@ -39,7 +40,7 @@ let mainWindow = null;
 const store = new Store();
 const fileWatchers = new Map();
 // Multi-instance Claude support
-const claudeInstances = new Map();
+const claudeInstances = new Map(); // Keep for backward compatibility, will migrate gradually
 // Mode manager and remote server
 const modeManager = getModeManager();
 let remoteServer = null;
@@ -57,6 +58,10 @@ const worktreeManagers = new Map();
 // const gitHooksManagers: Map<string, GitHooksManager> = new Map();
 // Snapshot service instances per workspace
 const snapshotServices = new Map();
+// Export getter for remoteServer for use in other modules
+export function getRemoteServer() {
+    return remoteServer;
+}
 const isDev = process.env.NODE_ENV !== 'production';
 let nuxtURL = 'http://localhost:3000';
 let serverProcess = null;
@@ -205,7 +210,8 @@ function createWindow() {
 }
 app.whenReady().then(async () => {
     // Log the current mode
-    // Start Nuxt server first (in production)
+    console.log(`[Main] Starting in ${modeManager.getMode()} mode`);
+    // Start Nuxt server (needed for all modes - it's the UI that remote users access)
     if (app.isPackaged) {
         try {
             console.log('Starting Nuxt server for production...');
@@ -214,7 +220,13 @@ app.whenReady().then(async () => {
         }
         catch (error) {
             console.error('Failed to start Nuxt server:', error);
-            // Optionally show error dialog and quit
+            // In headless mode, just log and exit
+            if (modeManager.isHeadlessMode()) {
+                console.error('Cannot start in headless mode without UI server');
+                app.quit();
+                return;
+            }
+            // In desktop/hybrid mode, show error dialog
             dialog.showErrorBox('Server Error', 'Failed to start the application server. Please try again.');
             app.quit();
             return;
@@ -225,12 +237,27 @@ app.whenReady().then(async () => {
     WorktreeManagerGlobal.getInstance();
     GitHooksManagerGlobal.getInstance();
     // LocalDatabase removed - SQLite not actively used
-    const workspacePath = store.get('workspacePath');
-    // Initialize autocomplete services
+    let workspacePath = store.get('workspacePath');
+    // In headless mode, use workspace from config
+    if (modeManager.isHeadlessMode()) {
+        const config = modeManager.getConfig();
+        if (config.workspacePath) {
+            workspacePath = config.workspacePath;
+            store.set('workspacePath', workspacePath);
+            // Also set it as a global variable for RemoteClaudeHandler
+            global.__currentWorkspace = workspacePath;
+            console.log(`[Main] Setting workspace to: ${workspacePath}`);
+            console.log(`[Main] Global workspace set to:`, global.__currentWorkspace);
+        }
+    }
+    // Initialize autocomplete services (needed for remote clients too)
     await ghostTextService.initialize();
     // Setup Git Timeline handlers
     setupGitTimelineHandlers();
-    createWindow();
+    // Only create window if not in headless mode
+    if (!modeManager.isHeadlessMode()) {
+        createWindow();
+    }
     // Set up periodic cleanup of orphaned pending output (every 5 minutes)
     setInterval(() => {
         if (global.pendingClaudeOutput && global.pendingClaudeOutput.size > 0) {
@@ -277,12 +304,12 @@ app.whenReady().then(async () => {
             }
         }, 3000); // Delay to ensure window is ready
     }
-    // Initialize remote server if in hybrid mode (from env var)
-    if (modeManager.isHybridMode() && mainWindow) {
+    // Initialize remote server if in hybrid or headless mode
+    if ((modeManager.isHybridMode() || modeManager.isHeadlessMode()) && (mainWindow || modeManager.isHeadlessMode())) {
         const config = modeManager.getConfig();
         remoteServer = new RemoteServer({
             config,
-            mainWindow
+            mainWindow: mainWindow || null // In headless mode, mainWindow is null
         });
         try {
             await remoteServer.start();
@@ -330,8 +357,30 @@ app.whenReady().then(async () => {
                 case 'TRUE': // Backward compatibility with USE_RELAY=true
                     // Use Clode relay server (default behavior)
                     relayClient = new RelayClient(process.env.RELAY_URL || 'wss://relay.clode.studio');
-                    relayClient.on('registered', (info) => {
+                    relayClient.on('registered', async (info) => {
                         console.log(`[Main] Clode Relay registered: ${info.url}`);
+                        // In headless mode, output the connection info with pairing parameters
+                        if (modeManager.isHeadlessMode()) {
+                            // Generate pairing parameters for easy connection
+                            const { generateToken, generateDeviceId, generatePairingCode } = await import('./utils/token-generator.js');
+                            const deviceId = generateDeviceId();
+                            const token = generateToken();
+                            const pairingCode = generatePairingCode();
+                            // Store the token for validation
+                            if (remoteServer) {
+                                const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+                                remoteServer.storeToken(token, deviceId, 'Headless Connection', pairingCode, expiresAt);
+                            }
+                            // Build the complete connection URL with parameters
+                            const connectUrl = `${info.url}?deviceId=${deviceId}&token=${token}&pairing=${pairingCode}`;
+                            console.log('\n========================================');
+                            console.log('🚀 Clode Studio Headless Server Ready!');
+                            console.log('========================================');
+                            console.log(`📱 Connect URL: ${connectUrl}`);
+                            console.log(`🔑 Access Token: ${info.token}`);
+                            console.log(`📂 Workspace: ${config.workspacePath || process.cwd()}`);
+                            console.log('========================================\n');
+                        }
                         mainWindow?.webContents.send('relay:connected', info);
                     });
                     relayClient.on('reconnected', () => {
@@ -360,10 +409,32 @@ app.whenReady().then(async () => {
                     console.log('[Main] Initializing Cloudflare tunnel...');
                     cloudflareTunnel = new CloudflareTunnel();
                     // Set up tunnel status updates
-                    cloudflareTunnel.onStatusUpdated((tunnelInfo) => {
+                    cloudflareTunnel.onStatusUpdated(async (tunnelInfo) => {
                         // Send tunnel info to renderer process
                         mainWindow?.webContents.send('tunnel:status-updated', tunnelInfo);
                         console.log('[Main] Cloudflare tunnel status:', tunnelInfo);
+                        // In headless mode, output the connection info when tunnel is ready
+                        if (modeManager.isHeadlessMode() && tunnelInfo.url) {
+                            // Generate pairing parameters for easy connection
+                            const { generateToken, generateDeviceId, generatePairingCode } = await import('./utils/token-generator.js');
+                            const deviceId = generateDeviceId();
+                            const token = generateToken();
+                            const pairingCode = generatePairingCode();
+                            // Store the token for validation
+                            if (remoteServer) {
+                                const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+                                remoteServer.storeToken(token, deviceId, 'Headless Connection', pairingCode, expiresAt);
+                            }
+                            // Build the complete connection URL with parameters
+                            const connectUrl = `${tunnelInfo.url}?deviceId=${deviceId}&token=${token}&pairing=${pairingCode}`;
+                            console.log('\n========================================');
+                            console.log('🚀 Clode Studio Headless Server Ready!');
+                            console.log('========================================');
+                            console.log(`📱 Connect URL: ${connectUrl}`);
+                            console.log(`📂 Workspace: ${config.workspacePath || process.cwd()}`);
+                            console.log('🌐 Tunnel Type: Cloudflare');
+                            console.log('========================================\n');
+                        }
                     });
                     // Start tunnel (wait a bit for Nuxt to be ready)
                     setTimeout(async () => {
@@ -382,14 +453,32 @@ app.whenReady().then(async () => {
                     // Custom tunnels should expose port 3000 (Nuxt UI), not 3789 (remote server)
                     const uiPort = 3000;
                     console.log('[Main] Custom tunnel mode - user will provide their own tunnel');
-                    console.log('[Main] UI server running on port:', uiPort);
-                    console.log('[Main] Remote server running on port:', config.serverPort);
-                    console.log('[Main] To expose your app, use one of these commands:');
-                    console.log(`[Main]   tunnelmole: npx tunnelmole@latest ${uiPort}`);
-                    console.log(`[Main]   localtunnel: npx localtunnel --port ${uiPort}`);
-                    console.log(`[Main]   ngrok: ngrok http ${uiPort}`);
-                    console.log(`[Main]   serveo: ssh -R 80:localhost:${uiPort} serveo.net`);
-                    console.log(`[Main]   bore: bore local ${uiPort} --to bore.pub`);
+                    if (modeManager.isHeadlessMode()) {
+                        console.log('\n========================================');
+                        console.log('🚀 Clode Studio Headless Server Ready!');
+                        console.log('========================================');
+                        console.log('📂 Workspace:', config.workspacePath || process.cwd());
+                        console.log('🖥️  UI Server: http://localhost:' + uiPort);
+                        console.log('🔌 Socket Server: http://localhost:' + config.serverPort);
+                        console.log('\n📡 Set up your own tunnel to expose port', uiPort);
+                        console.log('Choose one of these commands:');
+                        console.log(`  • tunnelmole:  npx tunnelmole@latest ${uiPort}`);
+                        console.log(`  • localtunnel: npx localtunnel --port ${uiPort}`);
+                        console.log(`  • ngrok:       ngrok http ${uiPort}`);
+                        console.log(`  • serveo:      ssh -R 80:localhost:${uiPort} serveo.net`);
+                        console.log(`  • bore:        bore local ${uiPort} --to bore.pub`);
+                        console.log('========================================\n');
+                    }
+                    else {
+                        console.log('[Main] UI server running on port:', uiPort);
+                        console.log('[Main] Remote server running on port:', config.serverPort);
+                        console.log('[Main] To expose your app, use one of these commands:');
+                        console.log(`[Main]   tunnelmole: npx tunnelmole@latest ${uiPort}`);
+                        console.log(`[Main]   localtunnel: npx localtunnel --port ${uiPort}`);
+                        console.log(`[Main]   ngrok: ngrok http ${uiPort}`);
+                        console.log(`[Main]   serveo: ssh -R 80:localhost:${uiPort} serveo.net`);
+                        console.log(`[Main]   bore: bore local ${uiPort} --to bore.pub`);
+                    }
                     // Send a message to the renderer that custom mode is active
                     setTimeout(() => {
                         mainWindow?.webContents.send('tunnel:custom-mode', {
@@ -409,8 +498,22 @@ app.whenReady().then(async () => {
                 case 'NONE':
                     // No tunnel/relay - local network only
                     console.log('[Main] No tunnel/relay - local network access only');
-                    console.log('[Main] UI available at http://localhost:3000');
-                    console.log('[Main] Remote server available at http://localhost:' + config.serverPort);
+                    if (modeManager.isHeadlessMode()) {
+                        console.log('\n========================================');
+                        console.log('🚀 Clode Studio Headless Server Ready!');
+                        console.log('========================================');
+                        console.log('📂 Workspace:', config.workspacePath || process.cwd());
+                        console.log('🖥️  UI Server: http://localhost:3000');
+                        console.log('🔌 Socket Server: http://localhost:' + config.serverPort);
+                        console.log('🌐 Access Mode: Local Network Only');
+                        console.log('\nTo access from other devices on your network:');
+                        console.log('  Use your local IP address instead of localhost');
+                        console.log('========================================\n');
+                    }
+                    else {
+                        console.log('[Main] UI available at http://localhost:3000');
+                        console.log('[Main] Remote server available at http://localhost:' + config.serverPort);
+                    }
                     setTimeout(() => {
                         mainWindow?.webContents.send('tunnel:local-only', {
                             port: 3000,
@@ -462,12 +565,20 @@ app.on('window-all-closed', () => {
 });
 // Claude Process Management using PTY with multi-instance support
 ipcMain.handle('claude:start', async (event, instanceId, workingDirectory, instanceName, runConfig) => {
-    if (claudeInstances.has(instanceId)) {
+    // Check both the legacy map and the instance manager
+    if (claudeInstances.has(instanceId) || claudeInstanceManager.hasInstance(instanceId)) {
         // Instance already running - return success with existing PID
-        const existingPty = claudeInstances.get(instanceId);
+        const existingPty = claudeInstances.get(instanceId) || claudeInstanceManager.getPty(instanceId);
         const pid = existingPty?.pid || -1;
         // Get Claude info for response
         const claudeInfo = await ClaudeDetector.detectClaude(workingDirectory);
+        // Update instance metadata if it exists in manager
+        if (claudeInstanceManager.hasInstance(instanceId)) {
+            claudeInstanceManager.updateInstance(instanceId, {
+                status: 'connected',
+                lastActiveAt: new Date().toISOString()
+            });
+        }
         return {
             success: true,
             pid,
@@ -542,6 +653,18 @@ ipcMain.handle('claude:start', async (event, instanceId, workingDirectory, insta
         }
         // Store this instance
         claudeInstances.set(instanceId, claudePty);
+        // Also register with the instance manager
+        const instanceMetadata = claudeInstanceManager.addInstance(instanceId, claudePty, {
+            name: instanceName || `Claude-${instanceId.slice(7, 15)}`,
+            workingDirectory,
+            isHeadless: modeManager.isHeadlessMode()
+        });
+        console.log(`[Main] Registered Claude instance with manager:`, {
+            instanceId,
+            name: instanceMetadata.name,
+            workingDirectory,
+            isHeadless: modeManager.isHeadlessMode()
+        });
         // Capture initial output for debugging
         let initialOutput = '';
         let outputTimer = null;
@@ -610,6 +733,8 @@ ipcMain.handle('claude:start', async (event, instanceId, workingDirectory, insta
                 }
             });
             claudeInstances.delete(instanceId);
+            // Also update instance status in the manager (mark as disconnected, don't remove)
+            claudeInstanceManager.disconnectInstance(instanceId);
             // Clean up MCP server configuration
             try {
                 await claudeSettingsManager.cleanupClodeIntegration();
@@ -671,6 +796,8 @@ ipcMain.handle('claude:stop', async (event, instanceId) => {
     if (claudePty) {
         claudePty.kill();
         claudeInstances.delete(instanceId);
+        // Also remove from the instance manager
+        claudeInstanceManager.removeInstance(instanceId);
         // Clean up pending output for this instance
         if (global.pendingClaudeOutput?.has(instanceId)) {
             console.log(`Cleaning up pending output for stopped instance ${instanceId}`);
@@ -1186,6 +1313,36 @@ ipcMain.handle('claude:detectInstallation', async () => {
     }
     catch (error) {
         return { success: false };
+    }
+});
+// Claude instance management - list all instances
+ipcMain.handle('claude:listInstances', async () => {
+    try {
+        const instances = claudeInstanceManager.getAllInstances();
+        return { success: true, instances };
+    }
+    catch (error) {
+        return { success: false, error: error.message };
+    }
+});
+// Claude instance management - list instances by workspace
+ipcMain.handle('claude:listInstancesByWorkspace', async (event, workspacePath) => {
+    try {
+        const instances = claudeInstanceManager.getInstancesByWorkspace(workspacePath);
+        return { success: true, instances };
+    }
+    catch (error) {
+        return { success: false, error: error.message };
+    }
+});
+// Claude instance management - get single instance
+ipcMain.handle('claude:getInstance', async (event, instanceId) => {
+    try {
+        const metadata = claudeInstanceManager.getMetadata(instanceId);
+        return { success: true, instance: metadata };
+    }
+    catch (error) {
+        return { success: false, error: error.message };
     }
 });
 // File watching operations

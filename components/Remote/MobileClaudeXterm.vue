@@ -372,7 +372,7 @@ onMounted(async () => {
                     }
                     
                     session.terminal.write(data);
-                    startRefreshWithDebounce(activeInstance.value.id);
+                    //startRefreshWithDebounce(activeInstance.value.id);
                     // Don't schedule auto-refresh here - continuous refresh handles it better
                   }
                 });
@@ -461,16 +461,25 @@ async function loadClaudeInstances() {
             // Don't set up output handler again - it's already set up in initializeClaudeSession
             // Just ensure spawning if needed
             if (!session.spawned) {
-              const result = await services.value.claude.spawn(
-                instance.id,
-                instance.workingDirectory,
-                instance.name
-              );
-             
-              session.spawned = true;
+              try {
+                const result = await services.value.claude.spawn(
+                  instance.id,
+                  instance.workingDirectory,
+                  instance.name
+                );
+                session.spawned = true;
+              } catch (spawnError: any) {
+                // If instance already exists, that's fine - mark as spawned
+                if (spawnError?.message?.includes('already exists')) {
+                  console.log('[MobileClaude] Instance already exists, marking as spawned');
+                  session.spawned = true;
+                } else {
+                  console.error('[MobileClaude] Failed to spawn:', spawnError);
+                }
+              }
             }
           } catch (error) {
-            console.error('[MobileClaude] Failed to setup forwarding:', error);
+            console.error('[MobileClaude] Unexpected error:', error);
           }
         }
       }
@@ -623,7 +632,7 @@ async function initializeClaudeSession(instance: any) {
         
         // Write data directly to terminal
         terminal.write(data);
-        startRefreshWithDebounce(instance.id);
+        //startRefreshWithDebounce(instance.id);
         // Don't schedule auto-refresh here - continuous refresh handles it better
         
         // Handle prompt detection for auto-scroll
@@ -677,39 +686,61 @@ async function initializeClaudeSession(instance: any) {
       attachTerminal(instance.id);
     }
     
+    // Check if instance is already connected
+    console.log('[MobileClaude] Instance status:', instance.id, instance.status);
+    
     if (instance.status === 'connected') {
-     
       terminal.write(`\x1b[32mConnected to ${instance.name}\x1b[0m\r\n`);
       terminal.write(`\x1b[90mInstance ID: ${instance.id}\x1b[0m\r\n\r\n`);
       
-      try {
-        if (!session.spawned) {
+      // Spawn/setup forwarding if not already done
+      if (!session.spawned) {
+        try {
           const result = await services.value!.claude.spawn(
             instance.id,
             instance.workingDirectory,
             instance.name
           );
-         
           session.spawned = true;
+        } catch (spawnError: any) {
+          // If instance already exists, that's fine - it means it's already spawned
+          if (spawnError?.message?.includes('already exists')) {
+            console.log('[MobileClaude] Instance already spawned, proceeding to get buffer');
+            session.spawned = true;
+          } else {
+            console.error('[MobileClaude] Failed to spawn:', spawnError);
+          }
         }
-        
-        // Send a newline to trigger Claude to show its prompt
+      }
+      
+      // Get and restore buffer immediately (or after a short delay)
+      console.log('[MobileClaude] Checking buffer restore status:', session.bufferRestored);
+      if (!session.bufferRestored) {
+        console.log('[MobileClaude] Setting up buffer fetch...');
+        // Small delay to ensure spawn is complete and terminal is ready
         setTimeout(async () => {
           try {
-            // await services.value!.claude.send(instance.id, '\n');
-           
-          } catch (e) {
-            console.error('[MobileClaude] Failed to send newline:', e);
+            console.log('[MobileClaude] Fetching buffer for:', instance.id);
+            const buffer = await services.value!.claude.getClaudeBuffer(instance.id);
+            console.log('[MobileClaude] Got buffer for connected instance:', buffer?.length || 0, 'bytes');
+            if (buffer && buffer.length > 0) {
+              // Write the buffer to the terminal
+              terminal.write(buffer);
+              session.bufferRestored = true;
+              autoScrollIfNeeded(session);
+            } else {
+              console.log('[MobileClaude] Buffer was empty or null');
+            }
+          } catch (error) {
+            console.error('[MobileClaude] Failed to get buffer:', error);
           }
-        }, 500);
-        
-        if (!session.bufferRestored) {
-          (session as any).pendingBuffer = services.value!.claude.getClaudeBuffer(instance.id);
-        }
-      } catch (error) {
-        console.error('[MobileClaude] Failed to setup forwarding:', error);
+        }, 500); // Wait 500ms for terminal to be ready
+      } else {
+        console.log('[MobileClaude] Buffer already restored, skipping');
       }
     } else {
+      // Instance is disconnected - show message but don't start it
+      console.log('[MobileClaude] Instance is disconnected:', instance.id);
       terminal.write(`\x1b[33m${instance.name} is not running on desktop\x1b[0m\r\n`);
       terminal.write(`\x1b[90mStart it on desktop first to connect from mobile\x1b[0m\r\n\r\n`);
     }
@@ -785,7 +816,21 @@ async function createNewInstance() {
   if (!services.value) return;
   
   try {
-    const workspace = (window as any).__remoteWorkspace?.path || '/';
+    // Get workspace from window.__remoteWorkspace first, fallback to fetching from server
+    let workspace = (window as any).__remoteWorkspace?.path;
+    
+    // If not available in window, fetch from server
+    if (!workspace) {
+      try {
+        const workspaceInfo = await $fetch('/api/workspace/current');
+        workspace = workspaceInfo.path || process.env.HOME || '/';
+        console.log('[MobileClaude] Got workspace from server:', workspace);
+      } catch (error) {
+        console.error('[MobileClaude] Failed to get workspace from server:', error);
+        workspace = process.env.HOME || '/';
+      }
+    }
+    
     const instanceNumber = instances.value.length + 1;
     const instanceName = `Claude ${instanceNumber}`;
     const instanceId = `claude-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -793,7 +838,7 @@ async function createNewInstance() {
     const instance = {
       id: instanceId,
       name: instanceName,
-      status: 'connecting' as const,
+      status: 'connected' as const,  // Set as connected since we'll spawn it directly
       workingDirectory: workspace,
       createdAt: new Date().toISOString(),
       lastActiveAt: new Date().toISOString()
@@ -857,7 +902,7 @@ async function startClaude(instanceId: string) {
           
           // Write data directly to terminal
           terminal.write(data);
-          startRefreshWithDebounce(instance.id);
+          //startRefreshWithDebounce(instance.id);
           // Don't schedule auto-refresh here - continuous refresh handles it better
           
           // Handle prompt detection for auto-scroll

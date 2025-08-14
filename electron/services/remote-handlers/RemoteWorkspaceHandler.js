@@ -30,6 +30,21 @@ export class RemoteWorkspaceHandler {
                     error: { code: 'NO_SESSION', message: 'No active session' }
                 });
             }
+            // In headless mode, get workspace from config
+            if (!this.mainWindow) {
+                const Store = (await import('electron-store')).default;
+                const store = new Store();
+                const workspacePath = store.get('workspacePath') || process.cwd();
+                return callback({
+                    id: request.id,
+                    success: true,
+                    data: {
+                        currentPath: workspacePath,
+                        workspaceName: path.basename(workspacePath),
+                        hasWorkspace: true
+                    }
+                });
+            }
             // Get workspace path from the main window
             // First try to get from the workspace manager state
             const result = await this.mainWindow.webContents.executeJavaScript(`

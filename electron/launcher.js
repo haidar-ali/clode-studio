@@ -25,6 +25,7 @@ const flags = {
   debug: args.includes('--debug'),
   port: null,
   relay: null,
+  workspace: null,
   auth: false
 };
 
@@ -38,6 +39,12 @@ if (portIndex !== -1) {
 const relayIndex = args.findIndex(arg => arg.startsWith('--relay='));
 if (relayIndex !== -1) {
   flags.relay = args[relayIndex].split('=')[1];
+}
+
+// Extract workspace path if specified
+const workspaceIndex = args.findIndex(arg => arg.startsWith('--workspace='));
+if (workspaceIndex !== -1) {
+  flags.workspace = args[workspaceIndex].split('=')[1];
 }
 
 // Check for auth flag
@@ -56,6 +63,7 @@ Options:
   --server          Alias for --headless
   --port=<port>     Specify server port (default: 3789)
   --relay=<url>     Custom relay server URL
+  --workspace=<path> Set workspace directory (useful for headless mode)
   --auth            Enable authentication for remote access
   --dev             Start in development mode
   --debug           Enable debug output
@@ -73,6 +81,7 @@ Examples:
   clode-studio                    # Start desktop mode
   clode-studio --hybrid           # Desktop with remote access
   clode-studio --headless         # Server mode only
+  clode-studio --headless --workspace=/path/to/project
   clode-studio --hybrid --port=8080 --auth
 
 For more information, visit: https://github.com/haidar-ali/clode-studio
@@ -120,6 +129,11 @@ if (flags.port) {
 if (flags.relay) {
   env.RELAY_URL = flags.relay;
   env.RELAY_TYPE = 'CLODE';
+}
+
+// Workspace configuration
+if (flags.workspace) {
+  env.CLODE_WORKSPACE_PATH = flags.workspace;
 }
 
 // Authentication
@@ -196,6 +210,7 @@ const passThroughArgs = args.filter(arg =>
   !arg.startsWith('--server') &&
   !arg.startsWith('--port=') &&
   !arg.startsWith('--relay=') &&
+  !arg.startsWith('--workspace=') &&
   !arg.startsWith('--auth') &&
   !arg.startsWith('--dev') &&
   !arg.startsWith('--debug')
@@ -211,6 +226,9 @@ if (mode === 'hybrid') {
 if (mode === 'headless') {
   console.log('Starting in headless mode. No GUI will be shown.');
   console.log(`Server will be available on port ${env.CLODE_SERVER_PORT || 3789}`);
+  if (flags.workspace) {
+    console.log(`Workspace: ${flags.workspace}`);
+  }
 }
 
 // Launch Electron

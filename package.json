@@ -16,6 +16,7 @@
     "electron:preview": "concurrently \"nuxt preview\" \"wait-on http://localhost:3000 && electron .\"",
     "electron:build": "nuxt build && npm run electron:preview",
     "electron:remote": "node scripts/check-build-needed.js && npm run electron:preview || npm run electron:build",
+    "electron:headless": "npm run electron:compile && nuxt build && CLODE_MODE=headless concurrently \"nuxt preview\" \"wait-on http://localhost:3000 && electron .\"",
     "electron:compile": "tsc -p electron/tsconfig.json && tsc -p electron/tsconfig.preload.json",
     "dist": "npm run build && npm run electron:compile && electron-builder",
     "dist:all": "npm run build && npm run electron:compile && electron-builder -mwl",
