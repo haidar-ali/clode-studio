@@ -283,29 +283,49 @@ export class ClaudeDetector {
             useShell: true
           };
         } else {
-          // In production, try to find node directly
-          // Check common node locations in order
+          // In production, try to find a real Node.js binary first to avoid macOS dock icon bug
+          // This is a known issue in macOS Sequoia 15+ where Node processes show in dock
+          
+          // Try to find Node.js in common locations
           const nodePaths = [
             '/usr/local/bin/node',
             '/opt/homebrew/bin/node',
-            '/usr/bin/node',
-            'node' // fallback to PATH
+            '/opt/homebrew/opt/node/bin/node',
+            '/opt/homebrew/opt/node@20/bin/node',
+            '/opt/homebrew/opt/node@22/bin/node',
+            // Check user's .nvm directory
+            `${process.env.HOME}/.nvm/versions/node/v22.14.0/bin/node`,
+            `${process.env.HOME}/.nvm/versions/node/v20.18.2/bin/node`
           ];
           
-          let nodeCommand = 'node';
+          let nodeCommand: string | null = null;
           for (const nodePath of nodePaths) {
             if (existsSync(nodePath)) {
+              console.log('Found system Node.js at:', nodePath);
               nodeCommand = nodePath;
               break;
             }
           }
           
-          // Spawn node directly without shell to ensure PTY works correctly
-          return {
-            command: nodeCommand,
-            args: [claudeInfo.path, ...args],
-            useShell: false
-          };
+          if (nodeCommand) {
+            // Use the system Node.js to avoid dock icon issue
+            return {
+              command: nodeCommand,
+              args: [claudeInfo.path, ...args],
+              useShell: false
+            };
+          } else {
+            // Fallback to Electron's built-in Node.js
+            console.log('No system Node.js found, using Electron built-in:', process.execPath);
+            console.log('Note: This may cause dock icons on macOS 15+ due to system bug');
+            
+            // Spawn using Electron as Node.js (env will be set in pty.spawn)
+            return {
+              command: process.execPath,
+              args: [claudeInfo.path, ...args],
+              useShell: false
+            };
+          }
         }
       }
       // If the path ends with .js but not cli.js, still try with node

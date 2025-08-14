@@ -409,7 +409,6 @@ const electronAPI = {
     disconnect: () => ipcRenderer.invoke('relay:disconnect')
   },
   
-  // Local database removed - SQLite not actively used
   snapshots: {
     save: (snapshot: any) =>
       ipcRenderer.invoke('snapshots:save', snapshot),

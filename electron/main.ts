@@ -2,14 +2,14 @@ import { app, BrowserWindow, ipcMain, shell, dialog } from 'electron';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import * as path from 'path';
-import { spawn, fork, ChildProcess } from 'child_process';
+import { spawn, fork, ChildProcess, execSync } from 'child_process';
 import Store from 'electron-store';
 import * as pty from 'node-pty';
 import { FSWatcher, existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import * as fs from 'fs';
 import { readFile, mkdir } from 'fs/promises';
 import { watch as chokidarWatch } from 'chokidar';
-import { homedir } from 'os';
+import { homedir, userInfo } from 'os';
 import { claudeCodeService } from './claude-sdk-service.js';
 import { lightweightContext } from './lightweight-context.js';
 import { contextOptimizer } from './context-optimizer.js';
@@ -28,7 +28,6 @@ import { GitHooksManager } from './git-hooks.js';
 import { SnapshotService } from './snapshot-service.js';
 import { setupGitTimelineHandlers } from './git-timeline-handlers.js';
 import { ghostTextService } from './ghost-text-service.js';
-// LocalDatabase removed - SQLite not actively used
 import { getModeManager, MainProcessMode } from './services/mode-config.js';
 import { RemoteServer } from './services/remote-server.js';
 import { ClaudeSettingsManager } from './services/claude-settings-manager.js';
@@ -284,7 +283,7 @@ app.whenReady().then(async () => {
   WorktreeManagerGlobal.getInstance();
   GitHooksManagerGlobal.getInstance();
   
-  // LocalDatabase removed - SQLite not actively used
+
   let workspacePath = (store as any).get('workspacePath');
   
   // In headless mode, use workspace from config
@@ -786,15 +785,20 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
           ...process.env,
           FORCE_COLOR: '1',
           TERM: 'xterm-256color',
-          HOME: process.env.HOME, // Ensure HOME is set so Claude can find ~/.claude/settings.json
-          USER: process.env.USER, // Ensure USER is set
+          HOME: process.env.HOME || homedir(), // Ensure HOME is set so Claude can find ~/.claude/settings.json
+          USER: process.env.USER || userInfo().username, // Ensure USER is set
           SHELL: userShell, // Ensure SHELL is set
+          PATH: process.env.PATH || '/usr/bin:/bin:/usr/sbin:/sbin', // Basic PATH (Electron will use its own Node.js)
           // Add instance-specific environment variables for hooks
           CLAUDE_INSTANCE_ID: instanceId,
           CLAUDE_INSTANCE_NAME: instanceName || `Claude-${instanceId.slice(7, 15)}`, // Use provided name or short ID
           CLAUDE_IDE_INSTANCE: 'true',
           // Force PTY mode to ensure Claude uses the PTY for I/O
-          FORCE_TTY: '1'
+          FORCE_TTY: '1',
+          // Add Node.js specific flags to prevent exit on missing TTY
+          NODE_NO_WARNINGS: '1',
+          // CRITICAL: Make Electron behave as Node.js when spawning CLI scripts
+          ELECTRON_RUN_AS_NODE: '1'
         },
         handleFlowControl: true
       });
@@ -827,6 +831,7 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
     // Capture initial output for debugging
     let initialOutput = '';
     let outputTimer: NodeJS.Timeout | null = null;
+
 
     // Handle output from Claude
     claudePty.onData((data: string) => {
@@ -3612,7 +3617,6 @@ ipcMain.handle('remote:get-mode-status', async () => {
   };
 });
 
-// Local Database handlers removed - SQLite not actively used
 
 // Clean up on app quit
 app.on('before-quit', async () => {
@@ -3627,7 +3631,6 @@ app.on('before-quit', async () => {
     cloudflareTunnel.stop();
   }
   
-  // Database cleanup removed - SQLite not actively used
   for (const [path, service] of gitServices) {
     service.cleanup();
   }

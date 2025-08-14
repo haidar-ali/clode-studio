@@ -68,7 +68,6 @@
     "@xterm/addon-serialize": "^0.13.0",
     "@xterm/headless": "^5.5.0",
     "archiver": "^7.0.1",
-    "better-sqlite3": "^11.5.0",
     "chart.js": "^4.5.0",
     "cloudflared": "^0.7.1",
     "codemirror": "^6.0.2",
@@ -109,7 +108,6 @@
   "devDependencies": {
     "@formkit/drag-and-drop": "^0.5.3",
     "@pinia/nuxt": "^0.11.1",
-    "@types/better-sqlite3": "^7.6.11",
     "@types/chokidar": "^1.7.5",
     "@types/lodash": "^4.17.20",
     "@types/node": "^24.0.14",

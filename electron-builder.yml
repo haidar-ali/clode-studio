@@ -61,7 +61,6 @@ asar: true
 asarUnpack:
   - vendor/**/*
   - node_modules/node-pty/**/*
-  - node_modules/better-sqlite3/**/*
   - node_modules/@anthropic-ai/claude-code/**/*
   - node_modules/.bin/claude*
   - "**/*.node"

@@ -9,4 +9,3 @@ export * from './DesktopGitService';
 export * from './DesktopTerminalService';
 export * from './DesktopKnowledgeService';
 export * from './DesktopMCPService';
-// DesktopStorageService and DesktopQueueManager moved to toVerify - SQLite not actively used
