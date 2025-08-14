@@ -677,32 +677,60 @@ app.on('window-all-closed', () => {
   }
 });
 
+// Helper function to check if a process is running
+function isProcessRunning(pid: number): boolean {
+  try {
+    // Sending signal 0 doesn't actually send a signal, but checks if process exists
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
 // Claude Process Management using PTY with multi-instance support
 ipcMain.handle('claude:start', async (event, instanceId: string, workingDirectory: string, instanceName?: string, runConfig?: { command?: string; args?: string[] }) => {
-  // Check both the legacy map and the instance manager
-  if (claudeInstances.has(instanceId) || claudeInstanceManager.hasInstance(instanceId)) {
-    // Instance already running - return success with existing PID
-    const existingPty = claudeInstances.get(instanceId) || claudeInstanceManager.getPty(instanceId);
-    const pid = existingPty?.pid || -1;
+  // Check if instance actually has a running PTY process
+  const existingPty = claudeInstances.get(instanceId) || claudeInstanceManager.getPty(instanceId);
+  
+  // Check if the PTY exists and the process is actually still running
+  if (existingPty && existingPty.pid) {
+    if (isProcessRunning(existingPty.pid)) {
+      // Instance is actually running with a valid PTY
+      const pid = existingPty.pid;
    
-    
-    // Get Claude info for response
-    const claudeInfo = await ClaudeDetector.detectClaude(workingDirectory);
-    
-    // Update instance metadata if it exists in manager
-    if (claudeInstanceManager.hasInstance(instanceId)) {
-      claudeInstanceManager.updateInstance(instanceId, {
-        status: 'connected',
-        lastActiveAt: new Date().toISOString()
-      });
+      // Get Claude info for response
+      const claudeInfo = await ClaudeDetector.detectClaude(workingDirectory);
+      
+      // Update instance metadata if it exists in manager
+      if (claudeInstanceManager.hasInstance(instanceId)) {
+        claudeInstanceManager.updateInstance(instanceId, {
+          status: 'connected',
+          lastActiveAt: new Date().toISOString()
+        });
+      }
+      
+      // Send a newline to trigger Claude to show its prompt again
+      // This helps when reconnecting to an existing session
+      try {
+        existingPty.write('\n');
+        console.log(`Sent refresh newline to existing Claude instance ${instanceId}`);
+      } catch (error) {
+        console.error(`Failed to refresh Claude prompt for ${instanceId}:`, error);
+      }
+      
+      return { 
+        success: true, 
+        pid,
+        claudeInfo,
+        alreadyRunning: true 
+      };
+    } else {
+      // PTY exists but process is dead - clean it up
+      console.log(`Found dead PTY for ${instanceId}, cleaning up...`);
+      claudeInstances.delete(instanceId);
+      claudeInstanceManager.disconnectInstance(instanceId);
     }
-    
-    return { 
-      success: true, 
-      pid,
-      claudeInfo,
-      alreadyRunning: true 
-    };
   }
 
   try {
@@ -933,6 +961,18 @@ ipcMain.handle('claude:send', async (event, instanceId: string, command: string)
     console.error(`Failed to send command to Claude PTY ${instanceId}:`, error);
     return { success: false, error: error instanceof Error ? error.message : String(error) };
   }
+});
+
+// Handler to get pending output for an instance (used when reconnecting)
+ipcMain.handle('claude:getPendingOutput', async (event, instanceId: string) => {
+  if (global.pendingClaudeOutput && global.pendingClaudeOutput.has(instanceId)) {
+    const output = global.pendingClaudeOutput.get(instanceId);
+    // Clear the pending output after sending
+    global.pendingClaudeOutput.delete(instanceId);
+    console.log(`Sending ${output?.length || 0} bytes of pending output for ${instanceId}`);
+    return output || '';
+  }
+  return '';
 });
 
 ipcMain.handle('claude:stop', async (event, instanceId: string) => {

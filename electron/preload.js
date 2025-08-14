@@ -69,6 +69,7 @@ const electronAPI = {
         send: (instanceId, command) => electron_1.ipcRenderer.invoke('claude:send', instanceId, command),
         stop: (instanceId) => electron_1.ipcRenderer.invoke('claude:stop', instanceId),
         resize: (instanceId, cols, rows) => electron_1.ipcRenderer.invoke('claude:resize', instanceId, cols, rows),
+        getPendingOutput: (instanceId) => electron_1.ipcRenderer.invoke('claude:getPendingOutput', instanceId),
         onOutput: (instanceId, callback) => {
             const channel = `claude:output:${instanceId}`;
             const handler = (_, data) => callback(data);

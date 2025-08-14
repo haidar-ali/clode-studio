@@ -585,7 +585,26 @@ const startClaude = async () => {
     // Also directly update the store to ensure status is updated
     instancesStore.updateInstanceStatus(props.instance.id, 'connected', result.pid);
     
-    terminal.writeln('Claude CLI started successfully!');
+    // Check if instance was already running (e.g., after window close/reopen)
+    if (result.alreadyRunning) {
+      terminal.writeln('\x1b[33mReconnected to existing Claude instance\x1b[0m');
+      terminal.writeln(`\x1b[90mPID: ${result.pid}\x1b[0m`);
+      // Set up listeners for the already running instance
+      setupClaudeListeners();
+      
+      // Request any pending output that was captured while window was closed
+      try {
+        const pendingOutput = await window.electronAPI.claude.getPendingOutput(props.instance.id);
+        if (pendingOutput) {
+          terminal.write(pendingOutput);
+        }
+      } catch (error) {
+        console.error('Failed to get pending output:', error);
+      }
+    } else {
+      terminal.writeln('Claude CLI started successfully!');
+    }
+    
     if (result.claudeInfo) {
       terminal.writeln(`\x1b[90mUsing: ${result.claudeInfo.path} (${result.claudeInfo.source})\x1b[0m`);
       terminal.writeln(`\x1b[90mVersion: ${result.claudeInfo.version}\x1b[0m`);

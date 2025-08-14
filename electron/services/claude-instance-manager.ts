@@ -60,7 +60,13 @@ class ClaudeInstanceManager {
     try {
       const metadataOnly: Record<string, ClaudeInstanceMetadata> = {};
       for (const [id, data] of this.instances.entries()) {
-        metadataOnly[id] = data.metadata;
+        // When persisting, always set status to disconnected
+        // since PTY processes don't survive app restarts
+        metadataOnly[id] = {
+          ...data.metadata,
+          status: 'disconnected',
+          pid: undefined
+        };
       }
       (this.store as any).set('claudeInstances', metadataOnly);
     } catch (error) {
@@ -184,6 +190,8 @@ class ClaudeInstanceManager {
   disconnectInstance(id: string) {
     const instance = this.instances.get(id);
     if (instance) {
+      // Clear the PTY reference since the process has exited
+      instance.pty = null as any;
       instance.metadata.status = 'disconnected';
       instance.metadata.pid = undefined;
       this.persistInstances();
