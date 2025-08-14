@@ -110,11 +110,20 @@ export class RemoteTerminalHandler {
       
       // Create PTY instance
       const shell = process.platform === 'win32' ? 'powershell.exe' : 'bash';
+      
+      // In headless mode, use the global workspace path if no cwd is provided
+      // This is set in main.ts when starting in headless mode
+      const workingDirectory = process.cwd() || 
+                              (global as any).__currentWorkspace || 
+                              process.env.HOME;
+      
+      console.log('[RemoteTerminalHandler] Creating terminal with cwd:', workingDirectory);
+      
       const termPty = pty.spawn(shell, [], {
         name: 'xterm-256color',
         cols: request.payload.cols || 80,
         rows: request.payload.rows || 24,
-        cwd: request.payload.cwd || process.env.HOME,
+        cwd: workingDirectory,
         env: {
           ...process.env,
           ...request.payload.env,
@@ -129,7 +138,7 @@ export class RemoteTerminalHandler {
         pty: termPty,
         sessionId: session.id,
         socketId: socket.id,
-        workspacePath: request.payload.cwd || process.env.HOME || '/',
+        workspacePath: workingDirectory,
         createdAt: new Date(),
         name: request.payload.name
       };
@@ -226,6 +235,15 @@ export class RemoteTerminalHandler {
       }
       
       // Not a remote terminal, try desktop terminal
+      // In headless mode, there are no desktop terminals
+      if (!this.mainWindow) {
+        return callback({
+          id: request.id,
+          success: false,
+          error: { code: 'TERMINAL_NOT_FOUND', message: 'Terminal not found (headless mode)' }
+        });
+      }
+      
       // We need to find the PTY ID for this terminal instance ID
       try {
         const ptyInfo = await this.mainWindow.webContents.executeJavaScript(`
@@ -441,41 +459,45 @@ export class RemoteTerminalHandler {
       
       // Get desktop terminal instances from the renderer
       let desktopTerminals: any[] = [];
-      try {
-        // Use the global function exposed by the terminal store
-        const result = await this.mainWindow.webContents.executeJavaScript(`
-          (() => {
-            if (typeof window.__getTerminalInstances === 'function') {
-              const terminals = window.__getTerminalInstances();
-              // Try to get current buffer for each terminal
-              return terminals.map(t => {
-                let currentBuffer = null;
-                if (typeof window.__getTerminalBuffer === 'function') {
-                  try {
-                    currentBuffer = window.__getTerminalBuffer(t.id);
-                  } catch (e) {
-                    console.error('Failed to get terminal buffer:', e);
+      
+      // In headless mode, there are no desktop terminals
+      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+        try {
+          // Use the global function exposed by the terminal store
+          const result = await this.mainWindow.webContents.executeJavaScript(`
+            (() => {
+              if (typeof window.__getTerminalInstances === 'function') {
+                const terminals = window.__getTerminalInstances();
+                // Try to get current buffer for each terminal
+                return terminals.map(t => {
+                  let currentBuffer = null;
+                  if (typeof window.__getTerminalBuffer === 'function') {
+                    try {
+                      currentBuffer = window.__getTerminalBuffer(t.id);
+                    } catch (e) {
+                      console.error('Failed to get terminal buffer:', e);
+                    }
                   }
-                }
-                return {
-                  ...t,
-                  currentBuffer: currentBuffer || t.savedBuffer || null
-                };
-              });
-            }
-            return [];
-          })()
-        `);
-        
-        if (result && Array.isArray(result)) {
-          desktopTerminals = result;
-         
+                  return {
+                    ...t,
+                    currentBuffer: currentBuffer || t.savedBuffer || null
+                  };
+                });
+              }
+              return [];
+            })()
+          `);
           
-          // Update the socket's terminal mapping for forwarding
-          this.updateSocketTerminalMapping(socket.id, desktopTerminals);
+          if (result && Array.isArray(result)) {
+            desktopTerminals = result;
+           
+            
+            // Update the socket's terminal mapping for forwarding
+            this.updateSocketTerminalMapping(socket.id, desktopTerminals);
+          }
+        } catch (e) {
+         
         }
-      } catch (e) {
-       
       }
       
       // Get remote-created terminals for this session
