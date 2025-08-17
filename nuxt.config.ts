@@ -69,6 +69,26 @@ export default defineNuxtConfig({
     worker: {
       format: 'es'
     },
+    build: {
+      chunkSizeWarningLimit: 1000,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'codemirror': ['codemirror', '@codemirror/state', '@codemirror/view'],
+            'codemirror-lang': [
+              '@codemirror/lang-javascript',
+              '@codemirror/lang-python',
+              '@codemirror/lang-html',
+              '@codemirror/lang-css',
+              '@codemirror/lang-json',
+              '@codemirror/lang-markdown'
+            ],
+            'ui-libs': ['naive-ui', 'vue', 'vue-router'],
+            'utils': ['lodash', 'date-fns-tz', 'marked']
+          }
+        }
+      }
+    },
     server: {
       fs: {
         allow: ['..']
