@@ -3,14 +3,25 @@ import * as rpc from 'vscode-jsonrpc/node.js';
 import * as lsp from 'vscode-languageserver-protocol';
 import { v4 as uuidv4 } from 'uuid';
 
+// Debug: Log module evaluation
+console.log('[LSP-MODULE] lsp-manager.js module evaluated at', new Date().toISOString());
+
+// Global singleton check
+if (global._lspManagerInstance) {
+  console.log('[LSP-SINGLETON] Using existing global LSPManager instance');
+}
+
 /**
  * Language Server Protocol Manager
  * Manages LSP servers for different languages
  */
 export class LSPManager {
   constructor() {
+    this.instanceId = Math.random().toString(36).substring(7);
+    console.log('[LSP-1] LSPManager constructor called, instance ID:', this.instanceId);
     this.servers = new Map(); // language -> server info
     this.connections = new Map(); // language -> connection
+    this.pendingConnections = new Map(); // language -> Promise<connection>
     this.capabilities = new Map(); // language -> server capabilities
     this.workspaceRoots = new Map(); // cache workspace roots
     this.documentVersions = new Map(); // uri -> version number
@@ -180,13 +191,55 @@ export class LSPManager {
     
     // Check if server is already running
     if (this.connections.has(language)) {
+      console.log(`[LSP-13] Using existing connection for ${language}`);
       return this.connections.get(language);
     }
     
-    // Start new server with workspace URI
-    const workspaceUri = await this.findWorkspaceRoot(filepath);
-  
-    return await this.startServer(language, workspaceUri);
+    // Check if server is currently being started
+    if (this.pendingConnections.has(language)) {
+      console.log(`[LSP-14] Waiting for pending connection for ${language}, pending keys:`, Array.from(this.pendingConnections.keys()));
+      return await this.pendingConnections.get(language);
+    }
+    
+    console.log(`[LSP-15] Starting new server for ${language}, instance:`, this.instanceId, 'pending before set:', Array.from(this.pendingConnections.keys()));
+    
+    // Create and store the promise SYNCHRONOUSLY before any async work
+    let resolvePromise, rejectPromise;
+    const connectionPromise = new Promise((resolve, reject) => {
+      resolvePromise = resolve;
+      rejectPromise = reject;
+    });
+    
+    // Store the promise IMMEDIATELY, synchronously
+    this.pendingConnections.set(language, connectionPromise);
+    console.log(`[LSP-16] Pending connection stored for ${language}, pending after set:`, Array.from(this.pendingConnections.keys()));
+    
+    // Now do the async work
+    (async () => {
+      try {
+        const workspaceUri = await this.findWorkspaceRoot(filepath);
+        const connection = await this.startServer(language, workspaceUri);
+        
+        if (connection) {
+          // Connection is now stored in this.connections by startServer
+          // Only NOW is it safe to remove from pending
+          this.pendingConnections.delete(language);
+          console.log(`[LSP-17] Removed from pending, connection ready for ${language}`);
+          resolvePromise(connection);
+        } else {
+          // Server failed to start, remove from pending
+          this.pendingConnections.delete(language);
+          console.log(`[LSP-19] Server returned null for ${language}, removed from pending`);
+          resolvePromise(null);
+        }
+      } catch (error) {
+        this.pendingConnections.delete(language);
+        console.log(`[LSP-18] Removed from pending due to error for ${language}:`, error.message);
+        rejectPromise(error);
+      }
+    })();
+    
+    return connectionPromise;
   }
 
   /**
@@ -228,6 +281,7 @@ export class LSPManager {
    * Start a language server
    */
   async startServer(language, workspaceUri = null) {
+    console.log('[LSP-10] Starting LSP server for language:', language);
     // Skip if we know this server is unavailable
     if (this.unavailableServers.has(language)) {
       return null;
@@ -561,7 +615,7 @@ export class LSPManager {
       connection.listen();
       
       // Initialize the server with server-specific options
-      const initResult = await connection.sendRequest(lsp.InitializeRequest.type, {
+      const initResult = await connection.sendRequest('initialize', {
         processId: process.pid,
         clientInfo: {
           name: 'Clode Studio',
@@ -662,7 +716,7 @@ export class LSPManager {
       this.capabilities.set(language, initResult.capabilities);
       
       // Notify initialized
-      await connection.sendNotification(lsp.InitializedNotification.type, {});
+      await connection.sendNotification('initialized', {});
       
     
       
@@ -721,6 +775,7 @@ export class LSPManager {
       
       return connection;
     } catch (error) {
+      console.error(`[LSP-ERROR] Failed to start ${language} server:`, error.message);
       // Clean up and mark as unavailable
       this.handleServerError(language, error);
       return null; // Return null instead of throwing to prevent cascading errors
@@ -744,6 +799,11 @@ export class LSPManager {
       this.connections.delete(language);
     }
     
+    // Clean up pending connections
+    if (this.pendingConnections.has(language)) {
+      this.pendingConnections.delete(language);
+    }
+    
     const server = this.servers.get(language);
     if (server) {
       try {
@@ -765,6 +825,7 @@ export class LSPManager {
    * Get completions from LSP
    */
   async getCompletions(filepath, content, position, context = null) {
+    console.log('[LSP-3] getCompletions called for', filepath, 'at position', position);
     // Extract triggerCharacter from context if provided, otherwise use the parameter
     const triggerCharacter = context?.triggerCharacter || null;
     const language = this.detectLanguage(filepath);
@@ -804,13 +865,13 @@ export class LSPManager {
       if (!docInfo || docInfo.language !== language) {
         // Close old document if it was open with different language
         if (docInfo) {
-          await connection.sendNotification(lsp.DidCloseTextDocumentNotification.type, {
+          await connection.sendNotification('textDocument/didClose', {
             textDocument: { uri }
           });
         }
         
         // Send document open notification for new document
-        await connection.sendNotification(lsp.DidOpenTextDocumentNotification.type, {
+        await connection.sendNotification('textDocument/didOpen', {
           textDocument: {
             uri,
             languageId: language === 'vue' ? 'vue' : language,
@@ -827,7 +888,7 @@ export class LSPManager {
         }
       } else {
         // Send document change notification for existing document
-        await connection.sendNotification(lsp.DidChangeTextDocumentNotification.type, {
+        await connection.sendNotification('textDocument/didChange', {
           textDocument: {
             uri,
             version
@@ -904,7 +965,7 @@ export class LSPManager {
             },
             context: completionContext
           })
-        : connection.sendRequest(lsp.CompletionRequest.type, {
+        : connection.sendRequest('textDocument/completion', {
             textDocument: { uri },
             position: {
               line: position.line - 1, // LSP uses 0-based lines
@@ -946,7 +1007,7 @@ export class LSPManager {
         if (completions.length === 0) {
         
           try {
-            const hoverTest = await connection.sendRequest(lsp.HoverRequest.type, {
+            const hoverTest = await connection.sendRequest('textDocument/hover', {
               textDocument: { uri },
               position: {
                 line: position.line - 1,
@@ -1122,7 +1183,7 @@ export class LSPManager {
     try {
     
       
-      const resolved = await connection.sendRequest(lsp.CompletionResolveRequest.type, item);
+      const resolved = await connection.sendRequest('completionItem/resolve', item);
       
       if (resolved) {
         // Merge resolved data back into the item
@@ -1148,7 +1209,7 @@ export class LSPManager {
     
     try {
       const uri = `file://${filepath}`;
-      const hover = await connection.sendRequest(lsp.HoverRequest.type, {
+      const hover = await connection.sendRequest('textDocument/hover', {
         textDocument: { uri },
         position: {
           line: position.line - 1,
@@ -1182,7 +1243,7 @@ export class LSPManager {
     
     try {
       const uri = `file://${filepath}`;
-      const definition = await connection.sendRequest(lsp.DefinitionRequest.type, {
+      const definition = await connection.sendRequest('textDocument/definition', {
         textDocument: { uri },
         position: {
           line: position.line - 1,
@@ -1209,7 +1270,7 @@ export class LSPManager {
     
     try {
       const uri = `file://${filepath}`;
-      const symbols = await connection.sendRequest(lsp.DocumentSymbolRequest.type, {
+      const symbols = await connection.sendRequest('textDocument/documentSymbol', {
         textDocument: { uri }
       });
       
@@ -1238,7 +1299,7 @@ export class LSPManager {
       
       if (!isOpen) {
         // Open the document
-        await connection.sendNotification(lsp.DidOpenTextDocumentNotification.type, {
+        await connection.sendNotification('textDocument/didOpen', {
           textDocument: {
             uri,
             languageId: language,
@@ -1253,7 +1314,7 @@ export class LSPManager {
         const currentVersion = this.documentVersions.get(uri) || 1;
         const newVersion = currentVersion + 1;
         
-        await connection.sendNotification(lsp.DidChangeTextDocumentNotification.type, {
+        await connection.sendNotification('textDocument/didChange', {
           textDocument: {
             uri,
             version: newVersion
@@ -1298,7 +1359,7 @@ export class LSPManager {
       this.openDocuments.delete(uri);
       
       // Send close notification to LSP
-      await connection.sendNotification(lsp.DidCloseTextDocumentNotification.type, {
+      await connection.sendNotification('textDocument/didClose', {
         textDocument: { uri }
       });
       
@@ -1343,8 +1404,8 @@ export class LSPManager {
     
     for (const [language, connection] of this.connections) {
       try {
-        await connection.sendRequest(lsp.ShutdownRequest.type);
-        await connection.sendNotification(lsp.ExitNotification.type);
+        await connection.sendRequest('shutdown');
+        await connection.sendNotification('exit');
         connection.dispose();
       } catch (error) {
         console.error(`[LSP] Error shutting down ${language} server:`, error);
@@ -1473,5 +1534,12 @@ export class LSPManager {
   }
 }
 
-// Export singleton instance
-export const lspManager = new LSPManager();
+// Export singleton instance - use global to ensure true singleton
+if (!global._lspManagerInstance) {
+  console.log('[LSP-2] Creating NEW global LSPManager instance');
+  global._lspManagerInstance = new LSPManager();
+} else {
+  console.log('[LSP-2-REUSE] Reusing existing global LSPManager instance');
+}
+
+export const lspManager = global._lspManagerInstance;

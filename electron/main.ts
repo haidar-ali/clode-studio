@@ -34,6 +34,7 @@ import { ClaudeSettingsManager } from './services/claude-settings-manager.js';
 import { CloudflareTunnel } from './services/cloudflare-tunnel.js';
 import { RelayClient } from './services/relay-client.js';
 import { claudeInstanceManager } from './services/claude-instance-manager.js';
+import { lspManager } from './lsp-manager.js';
 
 // Load environment variables from .env file
 import { config } from 'dotenv';
@@ -2124,7 +2125,6 @@ ipcMain.handle('debug:getStoredSettings', async () => {
 
 ipcMain.handle('autocomplete:checkLSPServers', async () => {
   try {
-    const { lspManager } = await import('./lsp-manager.js');
     const servers = await lspManager.getAvailableServers();
     return { success: true, servers };
   } catch (error) {
@@ -2135,7 +2135,6 @@ ipcMain.handle('autocomplete:checkLSPServers', async () => {
 
 ipcMain.handle('autocomplete:getLSPStatus', async () => {
   try {
-    const { lspManager } = await import('./lsp-manager.js');
     const status = {
       connected: lspManager.getConnectedServers(),
       available: await lspManager.getAvailableServers()
@@ -2149,8 +2148,8 @@ ipcMain.handle('autocomplete:getLSPStatus', async () => {
 
 // LSP Bridge handlers for codemirror-languageservice
 ipcMain.handle('lsp:getCompletions', async (event, params) => {
+  console.log('[LSP-4] IPC lsp:getCompletions called with params:', params.filepath);
   try {
-    const { lspManager } = await import('./lsp-manager.js');
     const completions = await lspManager.getCompletions(
       params.filepath,
       params.content,
@@ -2185,7 +2184,6 @@ ipcMain.handle('lsp:getCompletions', async (event, params) => {
 
 ipcMain.handle('lsp:getHover', async (event, params) => {
   try {
-    const { lspManager } = await import('./lsp-manager.js');
     const hover = await lspManager.getHover(
       params.filepath,
       params.content,
@@ -2211,8 +2209,7 @@ ipcMain.handle('lsp:getHover', async (event, params) => {
 
 ipcMain.handle('lsp:getDiagnostics', async (event, params) => {
   try {
-    const { lspManager } = await import('./lsp-manager.js') as any;
-    const diagnostics = await lspManager.getDiagnostics(
+    const diagnostics = await (lspManager as any).getDiagnostics(
       params.filepath,
       params.content
     );
@@ -2579,7 +2576,6 @@ Remember: Return ONLY the complete code for the file. No explanations. No markdo
 app.on('before-quit', async () => {
   // Shutdown LSP servers
   try {
-    const { lspManager } = await import('./lsp-manager.js');
     await lspManager.shutdown();
   } catch (error) {
     console.error('Failed to shutdown LSP servers:', error);

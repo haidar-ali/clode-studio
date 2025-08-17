@@ -30,6 +30,7 @@ import { RemoteServer } from './services/remote-server.js';
 import { CloudflareTunnel } from './services/cloudflare-tunnel.js';
 import { RelayClient } from './services/relay-client.js';
 import { claudeInstanceManager } from './services/claude-instance-manager.js';
+import { lspManager } from './lsp-manager.js';
 // Load environment variables from .env file
 import { config } from 'dotenv';
 config();
@@ -1888,7 +1889,6 @@ ipcMain.handle('debug:getStoredSettings', async () => {
 });
 ipcMain.handle('autocomplete:checkLSPServers', async () => {
     try {
-        const { lspManager } = await import('./lsp-manager.js');
         const servers = await lspManager.getAvailableServers();
         return { success: true, servers };
     }
@@ -1899,7 +1899,6 @@ ipcMain.handle('autocomplete:checkLSPServers', async () => {
 });
 ipcMain.handle('autocomplete:getLSPStatus', async () => {
     try {
-        const { lspManager } = await import('./lsp-manager.js');
         const status = {
             connected: lspManager.getConnectedServers(),
             available: await lspManager.getAvailableServers()
@@ -1913,8 +1912,8 @@ ipcMain.handle('autocomplete:getLSPStatus', async () => {
 });
 // LSP Bridge handlers for codemirror-languageservice
 ipcMain.handle('lsp:getCompletions', async (event, params) => {
+    console.log('[LSP-4] IPC lsp:getCompletions called with params:', params.filepath);
     try {
-        const { lspManager } = await import('./lsp-manager.js');
         const completions = await lspManager.getCompletions(params.filepath, params.content, params.position, params.context // Pass the full context object
         );
         // Return in LSP format expected by codemirror-languageservice
@@ -1944,7 +1943,6 @@ ipcMain.handle('lsp:getCompletions', async (event, params) => {
 });
 ipcMain.handle('lsp:getHover', async (event, params) => {
     try {
-        const { lspManager } = await import('./lsp-manager.js');
         const hover = await lspManager.getHover(params.filepath, params.content, params.position);
         if (!hover) {
             return { success: true, hover: null };
@@ -1964,7 +1962,6 @@ ipcMain.handle('lsp:getHover', async (event, params) => {
 });
 ipcMain.handle('lsp:getDiagnostics', async (event, params) => {
     try {
-        const { lspManager } = await import('./lsp-manager.js');
         const diagnostics = await lspManager.getDiagnostics(params.filepath, params.content);
         return {
             success: true,
@@ -2284,7 +2281,6 @@ Remember: Return ONLY the complete code for the file. No explanations. No markdo
 app.on('before-quit', async () => {
     // Shutdown LSP servers
     try {
-        const { lspManager } = await import('./lsp-manager.js');
         await lspManager.shutdown();
     }
     catch (error) {
