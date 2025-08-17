@@ -2,6 +2,7 @@
   <div
     class="task-card"
     :class="[`priority-${task.priority}`, { dragging: isDragging }]"
+    :data-item-type="props.itemType || 'task'"
     draggable="true"
     @dragstart="onDragStart"
     @dragend="onDragEnd"
@@ -9,10 +10,29 @@
   >
     <div class="task-header">
       <h5 class="task-title">
-        <span v-if="task.identifier" class="task-id">[{{ task.identifier }}]</span>
-        {{ task.content }}
+        <span v-if="task.identifier || task.id" class="task-id">
+          [{{ task.identifier || task.id }}]
+        </span>
+        {{ getItemTitle(task) }}
       </h5>
       <div class="task-actions">
+        <!-- Epic/Story specific actions -->
+        <button 
+          v-if="props.itemType === 'epic'" 
+          @click="$emit('create-story', task)" 
+          class="action-button" 
+          title="Add Story"
+        >
+          <Icon name="mdi:plus" size="14" />
+        </button>
+        <button 
+          v-if="props.itemType === 'story'" 
+          @click="$emit('create-task', task)" 
+          class="action-button" 
+          title="Add Task"
+        >
+          <Icon name="mdi:plus" size="14" />
+        </button>
         <button @click="$emit('edit')" class="action-button" title="Edit">
           <Icon name="mdi:pencil" size="14" />
         </button>
@@ -22,25 +42,59 @@
       </div>
     </div>
     
-    <p v-if="task.description" class="task-description">
-      {{ task.description }}
+    <!-- Epic/Story specific content -->
+    <p v-if="getItemDescription(task)" class="task-description">
+      {{ getItemDescription(task) }}
     </p>
+    
+    <!-- Epic business value -->
+    <div v-if="props.itemType === 'epic' && task.businessValue" class="business-value">
+      <Icon name="mdi:currency-usd" size="12" />
+      <span>{{ task.businessValue }}</span>
+    </div>
+    
+    <!-- Story user story -->
+    <div v-if="props.itemType === 'story' && task.userStory" class="user-story">
+      <Icon name="mdi:account" size="12" />
+      <span>{{ task.userStory }}</span>
+    </div>
     
     <div class="task-footer">
       <div class="task-meta">
-        <span class="task-type" :class="`type-${task.type}`">
+        <!-- Item type indicator -->
+        <span class="item-type-badge" :class="`item-${props.itemType || 'task'}`">
+          <Icon :name="getItemTypeIcon()" size="12" />
+          {{ props.itemType || 'task' }}
+        </span>
+        
+        <!-- Task specific metadata -->
+        <span v-if="props.itemType === 'task' && task.type" class="task-type" :class="`type-${task.type}`">
           <Icon :name="getTypeIcon(task.type)" size="12" />
           {{ task.type }}
         </span>
+        
         <span class="priority-badge" :class="`priority-${task.priority}`">
           {{ task.priority }}
         </span>
-        <span v-if="task.assignee !== 'claude'" class="assignee-badge">
+        
+        <!-- Story points for stories -->
+        <span v-if="props.itemType === 'story' && task.storyPoints" class="story-points">
+          <Icon name="mdi:numeric" size="12" />
+          {{ task.storyPoints }}pts
+        </span>
+        
+        <!-- Progress indicators -->
+        <span v-if="props.itemType === 'epic' && getEpicProgress(task)" class="progress-indicator">
+          <Icon name="mdi:progress-check" size="12" />
+          {{ getEpicProgress(task) }}%
+        </span>
+        
+        <span v-if="task.assignee && task.assignee !== 'claude'" class="assignee-badge">
           @{{ task.assignee }}
         </span>
       </div>
       <span class="task-date">
-        {{ formatDate(task.updatedAt) }}
+        {{ formatDate(task.updatedAt || task.createdAt || new Date()) }}
       </span>
     </div>
     
@@ -94,12 +148,15 @@ interface SimpleTask {
 
 const props = defineProps<{
   task: SimpleTask;
+  itemType?: 'task' | 'epic' | 'story';
 }>();
 
 const emit = defineEmits<{
   edit: [];
   delete: [];
   click: [];
+  'create-story': [item: any];
+  'create-task': [item: any];
 }>();
 
 const isDragging = ref(false);
@@ -154,6 +211,33 @@ const getResourceIcon = (type: string): string => {
   };
   return icons[type] || 'mdi:file';
 };
+
+const getItemTitle = (item: any) => {
+  return item.title || item.content || 'Untitled';
+};
+
+const getItemDescription = (item: any) => {
+  return item.description || '';
+};
+
+const getItemTypeIcon = () => {
+  switch (props.itemType) {
+    case 'epic': return 'mdi:flag';
+    case 'story': return 'mdi:book-open-variant';
+    case 'task': return 'mdi:checkbox-marked-outline';
+    default: return 'mdi:checkbox-marked-outline';
+  }
+};
+
+const getEpicProgress = (epic: any) => {
+  // This would calculate epic progress based on completed stories
+  // For now, return a placeholder
+  if (epic.storyIds && epic.storyIds.length > 0) {
+    // Would need access to stories to calculate actual progress
+    return Math.round(Math.random() * 100); // Placeholder
+  }
+  return 0;
+};
 </script>
 
 <style scoped>
@@ -189,6 +273,26 @@ const getResourceIcon = (type: string): string => {
 
 .task-card.priority-low {
   border-left: 3px solid #4ec9b0;
+}
+
+/* Epic cards have special styling */
+.task-card[data-item-type="epic"] {
+  background: linear-gradient(135deg, #252526 0%, #2d2d30 100%);
+  border: 1px solid #f48771;
+}
+
+.task-card[data-item-type="epic"]:hover {
+  box-shadow: 0 4px 12px rgba(244, 135, 113, 0.2);
+}
+
+/* Story cards have special styling */
+.task-card[data-item-type="story"] {
+  background: linear-gradient(135deg, #252526 0%, #2a2d32 100%);
+  border: 1px solid #007acc;
+}
+
+.task-card[data-item-type="story"]:hover {
+  box-shadow: 0 4px 12px rgba(0, 122, 204, 0.2);
 }
 
 .task-header {
@@ -421,5 +525,81 @@ const getResourceIcon = (type: string): string => {
 .resource-name {
   word-break: break-all;
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+}
+
+/* Epic and Story specific styles */
+.business-value {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0;
+  font-size: 12px;
+  color: #4ec9b0;
+  background: rgba(78, 201, 176, 0.1);
+  padding: 4px 8px;
+  border-radius: 4px;
+  border-left: 3px solid #4ec9b0;
+}
+
+.user-story {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 8px 0;
+  font-size: 12px;
+  color: #858585;
+  font-style: italic;
+  line-height: 1.4;
+}
+
+.item-type-badge {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+}
+
+.item-epic {
+  background: rgba(244, 135, 113, 0.2);
+  color: #f48771;
+}
+
+.item-story {
+  background: rgba(0, 122, 204, 0.2);
+  color: #007acc;
+}
+
+.item-task {
+  background: rgba(78, 201, 176, 0.2);
+  color: #4ec9b0;
+}
+
+.story-points {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-weight: 500;
+  background: rgba(156, 104, 255, 0.2);
+  color: #9c68ff;
+  font-size: 10px;
+}
+
+.progress-indicator {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-weight: 500;
+  background: rgba(231, 197, 71, 0.2);
+  color: #e7c547;
+  font-size: 10px;
 }
 </style>

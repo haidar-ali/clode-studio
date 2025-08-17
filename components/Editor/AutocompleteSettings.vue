@@ -36,7 +36,7 @@
             <span>Model:</span>
             <select v-model="settings.providers.claude.model" @change="updateSettings">
               <option value="claude-sonnet-4-20250514">Claude Sonnet 4 (Fast)</option>
-              <option value="claude-opus-4-20250514">Claude Opus 4 (Powerful)</option>
+              <option value="claude-opus-4-1-20250805">Claude Opus 4.1 (Powerful)</option>
             </select>
           </label>
           <label class="setting-item">

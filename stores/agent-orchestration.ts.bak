@@ -1,0 +1,482 @@
+import { defineStore } from 'pinia';
+import { ref, computed } from 'vue';
+import type { SimpleTask, PipelineResult } from '../agents/orchestrator/pipeline-state-machine';
+import type { AgentDefinition } from '../agents/providers/types';
+import type { SystemStatus, ProcessOptions } from '../agents/index';
+
+export interface PipelineExecution {
+  id: string;
+  taskId: string;
+  taskTitle: string;
+  status: 'running' | 'paused' | 'completed' | 'failed' | 'waiting_approval';
+  progress: number;
+  currentAgent?: string;
+  startTime: string;
+  endTime?: string;
+  cost: number;
+  tokensUsed: number;
+  logs: LogEntry[];
+  result?: PipelineResult;
+  error?: string;
+}
+
+export interface LogEntry {
+  timestamp: string;
+  level: 'info' | 'warning' | 'error' | 'debug';
+  message: string;
+  agentId?: string;
+  metadata?: any;
+}
+
+export interface AgentMetrics {
+  executionsToday: number;
+  avgExecutionTime: number;
+  successRate: number;
+  totalTokensUsed: number;
+  totalCost: number;
+  lastExecution?: string;
+}
+
+export interface ProviderStatus {
+  name: string;
+  available: boolean;
+  dailyCost: number;
+  rateLimit: {
+    remaining: number;
+    reset: string;
+  };
+  lastError?: string;
+}
+
+export const useAgentOrchestrationStore = defineStore('agent-orchestration', () => {
+  // State
+  const isInitialized = ref(false);
+  const isInitializing = ref(false);
+  const orchestrator = ref<any>(null);
+  
+  // Pipelines
+  const activePipelines = ref<Map<string, PipelineExecution>>(new Map());
+  const pipelineHistory = ref<PipelineExecution[]>([]);
+  
+  // Agents
+  const availableAgents = ref<AgentDefinition[]>([]);
+  const agentMetrics = ref<Map<string, AgentMetrics>>(new Map());
+  const selectedAgents = ref<string[]>(['architect', 'developer', 'qa']);
+  
+  // System status
+  const systemStatus = ref<SystemStatus | null>(null);
+  const providers = ref<ProviderStatus[]>([]);
+  
+  // UI state
+  const selectedPipelineId = ref<string | null>(null);
+  const showCreateTaskModal = ref(false);
+  const showPipelineDetails = ref(false);
+  const autoScrollLogs = ref(true);
+  const filterLevel = ref<'all' | 'info' | 'warning' | 'error'>('all');
+  
+  // Budget controls
+  const maxCostPerTask = ref(5.0);
+  const dailyBudgetLimit = ref(50.0);
+  const enableApprovals = ref(true);
+  const enableDryRun = ref(false);
+  
+  // Computed
+  const selectedPipeline = computed(() => {
+    if (!selectedPipelineId.value) return null;
+    return activePipelines.value.get(selectedPipelineId.value);
+  });
+  
+  const totalDailyCost = computed(() => {
+    return systemStatus.value?.budget.daily.spent || 0;
+  });
+  
+  const remainingBudget = computed(() => {
+    return systemStatus.value?.budget.daily.remaining || dailyBudgetLimit.value;
+  });
+  
+  const filteredLogs = computed(() => {
+    if (!selectedPipeline.value) return [];
+    
+    if (filterLevel.value === 'all') {
+      return selectedPipeline.value.logs;
+    }
+    
+    return selectedPipeline.value.logs.filter(log => log.level === filterLevel.value);
+  });
+  
+  const runningPipelines = computed(() => {
+    return Array.from(activePipelines.value.values()).filter(p => 
+      p.status === 'running' || p.status === 'paused' || p.status === 'waiting_approval'
+    );
+  });
+  
+  const completedPipelines = computed(() => {
+    return pipelineHistory.value.filter(p => 
+      p.status === 'completed' || p.status === 'failed'
+    );
+  });
+  
+  // Actions
+  async function initialize(workspacePath: string) {
+    if (isInitialized.value || isInitializing.value) return;
+    
+    isInitializing.value = true;
+    
+    try {
+      // Dynamically import the orchestration system
+      const { AgentOrchestrationSystem } = await import('../agents/index');
+      
+      orchestrator.value = new AgentOrchestrationSystem(workspacePath);
+      await orchestrator.value.initialize();
+      
+      // Load available agents
+      availableAgents.value = Array.from(orchestrator.value.getAgents().values());
+      
+      // Initialize agent metrics
+      for (const agent of availableAgents.value) {
+        agentMetrics.value.set(agent.id, {
+          executionsToday: 0,
+          avgExecutionTime: 0,
+          successRate: 100,
+          totalTokensUsed: 0,
+          totalCost: 0
+        });
+      }
+      
+      // Load system status
+      await refreshStatus();
+      
+      // Start status polling
+      startStatusPolling();
+      
+      isInitialized.value = true;
+      
+      addLog(null, 'info', 'Agent orchestration system initialized');
+    } catch (error: any) {
+      console.error('Failed to initialize orchestration:', error);
+      addLog(null, 'error', `Initialization failed: ${error.message}`);
+      throw error;
+    } finally {
+      isInitializing.value = false;
+    }
+  }
+  
+  async function createTask(task: Omit<SimpleTask, 'id'>) {
+    if (!orchestrator.value) {
+      throw new Error('Orchestrator not initialized');
+    }
+    
+    const taskWithId: SimpleTask = {
+      ...task,
+      id: `task-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    };
+    
+    const pipelineId = `pipeline-${taskWithId.id}`;
+    
+    // Create pipeline execution tracking
+    const execution: PipelineExecution = {
+      id: pipelineId,
+      taskId: taskWithId.id,
+      taskTitle: taskWithId.title,
+      status: 'running',
+      progress: 0,
+      startTime: new Date().toISOString(),
+      cost: 0,
+      tokensUsed: 0,
+      logs: []
+    };
+    
+    activePipelines.value.set(pipelineId, execution);
+    selectedPipelineId.value = pipelineId;
+    
+    // Process options
+    const options: ProcessOptions = {
+      maxCost: maxCostPerTask.value,
+      skipApprovals: !enableApprovals.value,
+      dryRun: enableDryRun.value,
+      agents: selectedAgents.value.length > 0 ? selectedAgents.value : undefined
+    };
+    
+    addLog(pipelineId, 'info', `Starting task: ${taskWithId.title}`);
+    addLog(pipelineId, 'info', `Selected agents: ${selectedAgents.value.join(', ')}`);
+    
+    try {
+      // Execute task
+      const result = await orchestrator.value.processTask(taskWithId, options);
+      
+      // Update execution with result
+      execution.status = result.status === 'completed' ? 'completed' : 'failed';
+      execution.endTime = new Date().toISOString();
+      execution.cost = result.metrics.totalCost;
+      execution.tokensUsed = result.metrics.totalTokensUsed;
+      execution.progress = 100;
+      execution.result = result;
+      
+      addLog(pipelineId, 'info', `Task completed: ${result.status}`);
+      addLog(pipelineId, 'info', `Total cost: $${result.metrics.totalCost.toFixed(2)}`);
+      
+      // Move to history
+      pipelineHistory.value.unshift(execution);
+      
+      // Update metrics
+      await refreshStatus();
+      
+      return result;
+    } catch (error: any) {
+      execution.status = 'failed';
+      execution.endTime = new Date().toISOString();
+      execution.error = error.message;
+      execution.progress = 0;
+      
+      addLog(pipelineId, 'error', `Task failed: ${error.message}`);
+      
+      // Move to history
+      pipelineHistory.value.unshift(execution);
+      
+      throw error;
+    }
+  }
+  
+  async function resumePipeline(pipelineId: string) {
+    if (!orchestrator.value) return;
+    
+    const execution = activePipelines.value.get(pipelineId);
+    if (!execution) return;
+    
+    execution.status = 'running';
+    addLog(pipelineId, 'info', 'Resuming pipeline...');
+    
+    try {
+      const result = await orchestrator.value.resumePipeline(pipelineId);
+      
+      execution.status = result.status === 'completed' ? 'completed' : 'failed';
+      execution.result = result;
+      
+      addLog(pipelineId, 'info', `Pipeline resumed: ${result.status}`);
+    } catch (error: any) {
+      execution.status = 'failed';
+      execution.error = error.message;
+      addLog(pipelineId, 'error', `Resume failed: ${error.message}`);
+    }
+  }
+  
+  async function approvePipeline(pipelineId: string, approved: boolean, reason?: string) {
+    if (!orchestrator.value) return;
+    
+    const execution = activePipelines.value.get(pipelineId);
+    if (!execution) return;
+    
+    addLog(pipelineId, 'info', `Approval: ${approved ? 'Approved' : 'Rejected'}${reason ? ` - ${reason}` : ''}`);
+    
+    try {
+      const result = await orchestrator.value.approvePipeline(pipelineId, approved, reason);
+      
+      execution.status = result.status === 'completed' ? 'completed' : 'failed';
+      execution.result = result;
+      
+      if (!approved) {
+        execution.status = 'failed';
+        pipelineHistory.value.unshift(execution);
+        activePipelines.value.delete(pipelineId);
+      }
+    } catch (error: any) {
+      execution.status = 'failed';
+      execution.error = error.message;
+      addLog(pipelineId, 'error', `Approval handling failed: ${error.message}`);
+    }
+  }
+  
+  async function cancelPipeline(pipelineId: string) {
+    const execution = activePipelines.value.get(pipelineId);
+    if (!execution) return;
+    
+    execution.status = 'failed';
+    execution.endTime = new Date().toISOString();
+    execution.error = 'Cancelled by user';
+    
+    addLog(pipelineId, 'warning', 'Pipeline cancelled by user');
+    
+    pipelineHistory.value.unshift(execution);
+    activePipelines.value.delete(pipelineId);
+  }
+  
+  async function refreshStatus() {
+    if (!orchestrator.value) return;
+    
+    try {
+      systemStatus.value = await orchestrator.value.getStatus();
+      
+      // Update provider status
+      providers.value = [
+        {
+          name: 'Anthropic',
+          available: true,
+          dailyCost: systemStatus.value.budget.daily.spent * 0.6, // Estimate
+          rateLimit: {
+            remaining: 100,
+            reset: new Date(Date.now() + 3600000).toISOString()
+          }
+        },
+        {
+          name: 'OpenAI',
+          available: true,
+          dailyCost: systemStatus.value.budget.daily.spent * 0.4, // Estimate
+          rateLimit: {
+            remaining: 200,
+            reset: new Date(Date.now() + 3600000).toISOString()
+          }
+        }
+      ];
+    } catch (error: any) {
+      console.error('Failed to refresh status:', error);
+    }
+  }
+  
+  function addLog(pipelineId: string | null, level: LogEntry['level'], message: string, metadata?: any) {
+    const logEntry: LogEntry = {
+      timestamp: new Date().toISOString(),
+      level,
+      message,
+      metadata
+    };
+    
+    if (pipelineId) {
+      const execution = activePipelines.value.get(pipelineId);
+      if (execution) {
+        execution.logs.push(logEntry);
+        
+        // Keep only last 500 logs
+        if (execution.logs.length > 500) {
+          execution.logs = execution.logs.slice(-500);
+        }
+      }
+    }
+    
+    // Also log to console
+    const logFn = level === 'error' ? console.error : level === 'warning' ? console.warn : console.log;
+    logFn(`[Agent Orchestration] ${message}`, metadata);
+  }
+  
+  function updatePipelineProgress(pipelineId: string, progress: number, currentAgent?: string) {
+    const execution = activePipelines.value.get(pipelineId);
+    if (execution) {
+      execution.progress = Math.min(100, Math.max(0, progress));
+      if (currentAgent) {
+        execution.currentAgent = currentAgent;
+      }
+    }
+  }
+  
+  function clearHistory() {
+    pipelineHistory.value = [];
+  }
+  
+  function setSelectedAgents(agents: string[]) {
+    selectedAgents.value = agents;
+    localStorage.setItem('selectedAgents', JSON.stringify(agents));
+  }
+  
+  function toggleAgent(agentId: string) {
+    const index = selectedAgents.value.indexOf(agentId);
+    if (index > -1) {
+      selectedAgents.value.splice(index, 1);
+    } else {
+      selectedAgents.value.push(agentId);
+    }
+    localStorage.setItem('selectedAgents', JSON.stringify(selectedAgents.value));
+  }
+  
+  // Status polling
+  let statusInterval: NodeJS.Timer | null = null;
+  
+  function startStatusPolling(intervalMs = 5000) {
+    stopStatusPolling();
+    statusInterval = setInterval(() => {
+      refreshStatus();
+    }, intervalMs);
+  }
+  
+  function stopStatusPolling() {
+    if (statusInterval) {
+      clearInterval(statusInterval);
+      statusInterval = null;
+    }
+  }
+  
+  // Load saved preferences
+  function loadPreferences() {
+    const saved = localStorage.getItem('selectedAgents');
+    if (saved) {
+      try {
+        selectedAgents.value = JSON.parse(saved);
+      } catch (e) {
+        // Invalid JSON, use defaults
+      }
+    }
+    
+    const savedMaxCost = localStorage.getItem('maxCostPerTask');
+    if (savedMaxCost) {
+      maxCostPerTask.value = parseFloat(savedMaxCost);
+    }
+    
+    const savedApprovals = localStorage.getItem('enableApprovals');
+    if (savedApprovals !== null) {
+      enableApprovals.value = savedApprovals === 'true';
+    }
+  }
+  
+  // Initialize preferences on load
+  loadPreferences();
+  
+  return {
+    // State
+    isInitialized,
+    isInitializing,
+    
+    // Pipelines
+    activePipelines,
+    pipelineHistory,
+    selectedPipelineId,
+    selectedPipeline,
+    runningPipelines,
+    completedPipelines,
+    
+    // Agents
+    availableAgents,
+    agentMetrics,
+    selectedAgents,
+    
+    // System
+    systemStatus,
+    providers,
+    totalDailyCost,
+    remainingBudget,
+    
+    // UI
+    showCreateTaskModal,
+    showPipelineDetails,
+    autoScrollLogs,
+    filterLevel,
+    filteredLogs,
+    
+    // Budget
+    maxCostPerTask,
+    dailyBudgetLimit,
+    enableApprovals,
+    enableDryRun,
+    
+    // Actions
+    initialize,
+    createTask,
+    resumePipeline,
+    approvePipeline,
+    cancelPipeline,
+    refreshStatus,
+    updatePipelineProgress,
+    clearHistory,
+    setSelectedAgents,
+    toggleAgent,
+    startStatusPolling,
+    stopStatusPolling
+  };
+});

@@ -41,7 +41,7 @@ export interface StreamingCompletionChunk {
 }
 
 export interface ClaudeCompletionOptions {
-  model: 'claude-sonnet-4-20250514' | 'claude-opus-4-20250514';
+  model: 'claude-sonnet-4-20250514' | 'claude-opus-4-1-20250805';
   temperature?: number;
   maxTokens?: number;
   systemPrompt?: string;

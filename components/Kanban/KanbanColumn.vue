@@ -2,7 +2,7 @@
   <div class="kanban-column">
     <div class="column-header">
       <h4>{{ title }}</h4>
-      <span class="task-count">{{ tasks.length }}</span>
+      <span class="task-count">{{ displayItems.length }}</span>
     </div>
     
     <div
@@ -14,40 +14,50 @@
       :class="{ 'drag-over': isDragOver }"
     >
       <TaskCard
-        v-for="task in tasks"
-        :key="task.id"
-        :task="task"
-        @edit="$emit('edit', task)"
-        @delete="$emit('delete', task)"
-        @click="$emit('task-click', task)"
+        v-for="item in displayItems"
+        :key="item.id"
+        :task="item"
+        :item-type="itemType"
+        @edit="$emit('edit', item)"
+        @delete="$emit('delete', item)"
+        @click="$emit('task-click', item)"
+        @create-story="$emit('create-story', item)"
+        @create-task="$emit('create-task', item)"
       />
       
-      <div v-if="tasks.length === 0" class="empty-state">
+      <div v-if="displayItems.length === 0" class="empty-state">
         <Icon name="mdi:inbox" size="32" />
-        <p>No tasks</p>
+        <p>No {{ itemType }}s</p>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import type { EnhancedTask } from '~/shared/types';
 
 const props = defineProps<{
   title: string;
-  tasks: EnhancedTask[];
-  status: 'backlog' | 'pending' | 'in_progress' | 'completed';
+  items?: any[];
+  tasks?: EnhancedTask[]; // Backward compatibility
+  itemType?: 'task' | 'epic' | 'story';
+  status: string;
 }>();
 
 const emit = defineEmits<{
-  drop: [taskId: string, newStatus: EnhancedTask['status']];
-  edit: [task: EnhancedTask];
-  delete: [task: EnhancedTask];
-  'task-click': [task: EnhancedTask];
+  drop: [itemId: string, newStatus: string];
+  edit: [item: any];
+  delete: [item: any];
+  'task-click': [item: any];
+  'create-story': [epic: any];
+  'create-task': [story: any];
 }>();
 
 const isDragOver = ref(false);
+
+// Support both new items prop and legacy tasks prop
+const displayItems = computed(() => props.items || props.tasks || []);
 
 const onDragOver = (event: DragEvent) => {
   event.preventDefault();

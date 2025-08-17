@@ -7,68 +7,246 @@
         <span>Task Management</span>
       </div>
       
-      <div class="header-actions">
-        <button @click="createNewProject" class="header-button primary" title="Create new project instructions">
-          <Icon name="mdi:rocket-launch" size="18" />
-          <span>New Project</span>
-        </button>
+      <div class="header-controls">
+        <!-- View Switcher -->
+        <div class="view-switcher">
+          <button 
+            v-for="view in viewOptions" 
+            :key="view.id"
+            @click="currentView = view.id"
+            class="view-tab"
+            :class="{ active: currentView === view.id }"
+          >
+            <Icon :name="view.icon" size="16" />
+            {{ view.label }}
+          </button>
+        </div>
         
-        <button @click="createTaskInstructions" class="header-button" title="Create task management instructions">
-          <Icon name="mdi:book-open-page-variant" size="18" />
-          <span>Instructions</span>
-        </button>
+        <!-- Hierarchy Toggle -->
+        <div class="hierarchy-toggle">
+          <button 
+            @click="showHierarchy = !showHierarchy"
+            class="toggle-button"
+            :class="{ active: showHierarchy }"
+            title="Toggle hierarchical view"
+          >
+            <Icon :name="showHierarchy ? 'mdi:view-list' : 'mdi:view-stream'" size="16" />
+            {{ showHierarchy ? 'Flat' : 'Hierarchy' }}
+          </button>
+        </div>
         
-        <button @click="addNewTask" class="header-button" title="Add a new task">
-          <Icon name="mdi:plus" size="18" />
-          <span>Add Task</span>
-        </button>
-        
-        <button @click="openTasksFile" class="header-button" title="View TASKS.md file">
-          <Icon name="mdi:file-document-outline" size="18" />
-          <span>TASKS.md</span>
-        </button>
+        <div class="header-actions">
+          <button @click="createNewProject" class="header-button primary" title="Create new project instructions">
+            <Icon name="mdi:rocket-launch" size="18" />
+            <span>New Project</span>
+          </button>
+          
+          <button @click="createTaskInstructions" class="header-button" title="Create task management instructions">
+            <Icon name="mdi:book-open-page-variant" size="18" />
+            <span>Instructions</span>
+          </button>
+          
+          <button @click="addNewItem" class="header-button" :title="`Add a new ${currentView.slice(0, -1)}`">
+            <Icon name="mdi:plus" size="18" />
+            <span>Add {{ currentView === 'epics' ? 'Epic' : currentView === 'stories' ? 'Story' : 'Task' }}</span>
+          </button>
+          
+          <button @click="openTasksFile" class="header-button" title="View TASKS.md file">
+            <Icon name="mdi:file-document-outline" size="18" />
+            <span>TASKS.md</span>
+          </button>
+        </div>
       </div>
     </div>
     
     <!-- Kanban board content -->
     <div class="board-content">
-      <!-- Kanban columns -->
-      <div class="board-columns">
-        <KanbanColumn
-          title="Backlog"
-          :tasks="backlogTasks"
-          status="backlog"
-          @drop="onTaskDrop"
-          @edit="editTask"
-          @delete="deleteTask"
-        />
+      <!-- Unified Hierarchical View -->
+      <div v-if="showHierarchy && currentView === 'tasks'" class="hierarchical-board">
+        <!-- Epic Swimlanes -->
+        <div v-for="epic in allEpics" :key="epic.id" class="epic-swimlane">
+          <EpicSwimlane
+            :epic="epic"
+            :stories="getStoriesByEpic(epic.id)"
+            :tasks="getTasksByEpic(epic.id)"
+            @edit-epic="editEpic"
+            @delete-epic="deleteEpic"
+            @create-story="createStoryFromEpic"
+            @edit-story="editStory"
+            @delete-story="deleteStory"
+            @create-task="createTaskFromStory"
+            @edit-task="editTask"
+            @delete-task="deleteTask"
+            @drop-story="onStoryDrop"
+            @drop-task="onTaskDrop"
+          />
+        </div>
         
-        <KanbanColumn
-          title="To Do"
-          :tasks="todoTasks"
-          status="pending"
-          @drop="onTaskDrop"
-          @edit="editTask"
-          @delete="deleteTask"
-        />
+        <!-- Unassigned Stories -->
+        <div v-if="unassignedStories.length > 0" class="epic-swimlane unassigned">
+          <UnassignedSwimlane
+            title="Unassigned Stories"
+            :stories="unassignedStories"
+            :tasks="unassignedTasks"
+            @edit-story="editStory"
+            @delete-story="deleteStory"
+            @create-task="createTaskFromStory"
+            @edit-task="editTask"
+            @delete-task="deleteTask"
+            @drop-story="onStoryDrop"
+            @drop-task="onTaskDrop"
+          />
+        </div>
         
-        <KanbanColumn
-          title="In Progress"
-          :tasks="inProgressTasks"
-          status="in_progress"
-          @drop="onTaskDrop"
-          @edit="editTask"
-          @delete="deleteTask"
-        />
-        
-        <KanbanColumn
-          title="Done"
-          :tasks="completedTasks"
-          status="completed"
-          @drop="onTaskDrop"
-          @edit="editTask"
-          @delete="deleteTask"
-        />
+        <!-- Orphaned Tasks -->
+        <div v-if="orphanedTasks.length > 0" class="epic-swimlane orphaned">
+          <OrphanedTasksSwimlane
+            :tasks="orphanedTasks"
+            @edit-task="editTask"
+            @delete-task="deleteTask"
+            @drop-task="onTaskDrop"
+          />
+        </div>
+      </div>
+      
+      <!-- Flat Views -->
+      <div v-else>
+        <!-- Epic View -->
+        <div v-if="currentView === 'epics'" class="board-columns">
+          <KanbanColumn
+            title="Backlog"
+            :items="backlogEpics"
+            item-type="epic"
+            status="backlog"
+            @drop="onEpicDrop"
+            @edit="editEpic"
+            @delete="deleteEpic"
+            @create-story="createStoryFromEpic"
+          />
+          
+          <KanbanColumn
+            title="Ready"
+            :items="readyEpics"
+            item-type="epic"
+            status="ready"
+            @drop="onEpicDrop"
+            @edit="editEpic"
+            @delete="deleteEpic"
+            @create-story="createStoryFromEpic"
+          />
+          
+          <KanbanColumn
+            title="In Progress"
+            :items="inProgressEpics"
+            item-type="epic"
+            status="in_progress"
+            @drop="onEpicDrop"
+            @edit="editEpic"
+            @delete="deleteEpic"
+            @create-story="createStoryFromEpic"
+          />
+          
+          <KanbanColumn
+            title="Done"
+            :items="doneEpics"
+            item-type="epic"
+            status="done"
+            @drop="onEpicDrop"
+            @edit="editEpic"
+            @delete="deleteEpic"
+            @create-story="createStoryFromEpic"
+          />
+        </div>
+
+        <!-- Story View -->
+        <div v-else-if="currentView === 'stories'" class="board-columns">
+          <KanbanColumn
+            title="Backlog"
+            :items="backlogStories"
+            item-type="story"
+            status="backlog"
+            @drop="onStoryDrop"
+            @edit="editStory"
+            @delete="deleteStory"
+            @create-task="createTaskFromStory"
+          />
+          
+          <KanbanColumn
+            title="Ready"
+            :items="readyStories"
+            item-type="story"
+            status="ready"
+            @drop="onStoryDrop"
+            @edit="editStory"
+            @delete="deleteStory"
+            @create-task="createTaskFromStory"
+          />
+          
+          <KanbanColumn
+            title="In Progress"
+            :items="inProgressStories"
+            item-type="story"
+            status="in_progress"
+            @drop="onStoryDrop"
+            @edit="editStory"
+            @delete="deleteStory"
+            @create-task="createTaskFromStory"
+          />
+          
+          <KanbanColumn
+            title="Done"
+            :items="doneStories"
+            item-type="story"
+            status="done"
+            @drop="onStoryDrop"
+            @edit="editStory"
+            @delete="deleteStory"
+            @create-task="createTaskFromStory"
+          />
+        </div>
+
+        <!-- Task View (existing) -->
+        <div v-else class="board-columns">
+          <KanbanColumn
+            title="Backlog"
+            :items="backlogTasks"
+            item-type="task"
+            status="backlog"
+            @drop="onTaskDrop"
+            @edit="editTask"
+            @delete="deleteTask"
+          />
+          
+          <KanbanColumn
+            title="To Do"
+            :items="todoTasks"
+            item-type="task"
+            status="pending"
+            @drop="onTaskDrop"
+            @edit="editTask"
+            @delete="deleteTask"
+          />
+          
+          <KanbanColumn
+            title="In Progress"
+            :items="inProgressTasks"
+            item-type="task"
+            status="in_progress"
+            @drop="onTaskDrop"
+            @edit="editTask"
+            @delete="deleteTask"
+          />
+          
+          <KanbanColumn
+            title="Done"
+            :items="completedTasks"
+            item-type="task"
+            status="completed"
+            @drop="onTaskDrop"
+            @edit="editTask"
+            @delete="deleteTask"
+          />
+        </div>
       </div>
     </div>
 
@@ -266,11 +444,43 @@ const taskForm = ref({
   resources: [] as ResourceReference[]
 });
 
+// View switching
+const currentView = ref('tasks');
+const showHierarchy = ref(true);
+const viewOptions = [
+  { id: 'epics', label: 'Epics', icon: 'mdi:flag' },
+  { id: 'stories', label: 'Stories', icon: 'mdi:book-open-variant' },
+  { id: 'tasks', label: 'Tasks', icon: 'mdi:checkbox-marked-outline' }
+];
+
+// Task computed properties
 const backlogTasks = computed(() => tasksStore.backlogTasks);
 const todoTasks = computed(() => tasksStore.todoTasks);
 const inProgressTasks = computed(() => tasksStore.inProgressTasks);
 const completedTasks = computed(() => tasksStore.completedTasks);
 const taskCount = computed(() => tasksStore.taskCount);
+
+// Epic computed properties
+const backlogEpics = computed(() => tasksStore.epics.filter(epic => epic.status === 'backlog'));
+const readyEpics = computed(() => tasksStore.epics.filter(epic => epic.status === 'ready'));
+const inProgressEpics = computed(() => tasksStore.epics.filter(epic => epic.status === 'in_progress'));
+const doneEpics = computed(() => tasksStore.epics.filter(epic => epic.status === 'done'));
+
+// Story computed properties
+const backlogStories = computed(() => tasksStore.stories.filter(story => story.status === 'backlog'));
+const readyStories = computed(() => tasksStore.stories.filter(story => story.status === 'ready'));
+const inProgressStories = computed(() => tasksStore.stories.filter(story => story.status === 'in_progress'));
+const doneStories = computed(() => tasksStore.stories.filter(story => story.status === 'done'));
+
+// Hierarchical computed properties
+const allEpics = computed(() => tasksStore.epics);
+const unassignedStories = computed(() => tasksStore.stories.filter(story => !story.epicId));
+const unassignedTasks = computed(() => tasksStore.tasks.filter(task => !task.storyId && !task.epicId));
+const orphanedTasks = computed(() => tasksStore.tasks.filter(task => !task.storyId && !task.epicId));
+
+const getStoriesByEpic = (epicId: string) => tasksStore.getStoriesByEpic(epicId);
+const getTasksByEpic = (epicId: string) => tasksStore.getTasksByEpic(epicId);
+const getTasksByStory = (storyId: string) => tasksStore.getTasksByStory(storyId);
 
 // Helper function to save tasks using the service layer
 const saveTasks = async () => {
@@ -363,7 +573,59 @@ const onTaskDrop = async (taskId: string, newStatus: SimpleTask['status']) => {
   }
 };
 
+const onEpicDrop = async (epicId: string, newStatus: string) => {
+  tasksStore.moveEpic(epicId, newStatus as any);
+  if (isRemote.value) {
+    await saveTasks();
+  }
+};
+
+const onStoryDrop = async (storyId: string, newStatus: string) => {
+  tasksStore.moveStory(storyId, newStatus as any);
+  if (isRemote.value) {
+    await saveTasks();
+  }
+};
+
+const editEpic = (epic: any) => {
+  console.log('Editing epic:', epic);
+  // TODO: Implement epic editing
+};
+
+const editStory = (story: any) => {
+  console.log('Editing story:', story);
+  // TODO: Implement story editing
+};
+
+const deleteEpic = (epic: any) => {
+  tasksStore.deleteEpic(epic.id);
+};
+
+const deleteStory = (story: any) => {
+  tasksStore.deleteStory(story.id);
+};
+
+const createStoryFromEpic = (epic: any) => {
+  console.log('Creating story from epic:', epic);
+  // TODO: Implement story creation from epic
+};
+
+const createTaskFromStory = (story: any) => {
+  console.log('Creating task from story:', story);
+  // TODO: Implement task creation from story
+};
+
 // Removed sync functions since file watching handles it automatically
+
+const addNewItem = () => {
+  if (currentView.value === 'epics') {
+    addNewEpic();
+  } else if (currentView.value === 'stories') {
+    addNewStory();
+  } else {
+    addNewTask();
+  }
+};
 
 const addNewTask = () => {
   editingTask.value = null;
@@ -377,6 +639,16 @@ const addNewTask = () => {
     resources: []
   };
   showModal.value = true;
+};
+
+const addNewEpic = () => {
+  // TODO: Implement epic creation modal
+  console.log('Creating new epic');
+};
+
+const addNewStory = () => {
+  // TODO: Implement story creation modal
+  console.log('Creating new story');
 };
 
 const editTask = (task: SimpleTask) => {
@@ -1306,6 +1578,53 @@ onUnmounted(() => {
   text-transform: uppercase;
 }
 
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 1;
+}
+
+.view-switcher {
+  display: flex;
+  background: #383838;
+  border-radius: 6px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.view-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: #cccccc;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.view-tab:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.view-tab.active {
+  background: #007acc;
+  color: #ffffff;
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-left: auto;
+}
+
 .board-content {
   display: flex;
   flex: 1;
@@ -1655,6 +1974,58 @@ onUnmounted(() => {
   color: #d4d4d4;
 }
 
+/* Hierarchy Toggle Styles */
+.hierarchy-toggle {
+  display: flex;
+  align-items: center;
+  margin-left: 8px;
+}
+
+.toggle-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #3e3e42;
+  border: 1px solid #6c6c6c;
+  border-radius: 4px;
+  color: #cccccc;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 12px;
+}
+
+.toggle-button:hover {
+  background: #4e4e52;
+  border-color: #007acc;
+}
+
+.toggle-button.active {
+  background: #007acc;
+  border-color: #007acc;
+  color: #ffffff;
+}
+
+/* Hierarchical Board Styles */
+.hierarchical-board {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.epic-swimlane {
+  margin-bottom: 24px;
+}
+
+.epic-swimlane.unassigned {
+  margin-bottom: 20px;
+}
+
+.epic-swimlane.orphaned {
+  margin-bottom: 16px;
+}
+
 /* Responsive breakpoints */
 @media (max-width: 768px) {
   .board-header {
@@ -1694,6 +2065,14 @@ onUnmounted(() => {
   .board-columns {
     flex-direction: column;
     overflow-y: auto;
+  }
+  
+  .hierarchical-board {
+    padding: 8px;
+  }
+  
+  .epic-swimlane {
+    margin-bottom: 16px;
   }
 }
 

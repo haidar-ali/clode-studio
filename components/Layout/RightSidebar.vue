@@ -216,7 +216,13 @@ const moduleComponents = {
   prompts: defineAsyncComponent(() => import('~/components/Prompts/PromptStudio.vue')),
   terminal: defineAsyncComponent(() => import('~/components/Terminal/TerminalWithSidebar.vue')),
   explorer: defineAsyncComponent(() => import('~/components/FileExplorer/FileTree.vue')),
-  'explorer-editor': defineAsyncComponent(() => import('~/components/Modules/ExplorerEditor.vue'))
+  'explorer-editor': defineAsyncComponent(() => import('~/components/Modules/ExplorerEditor.vue')),
+  agents: defineAsyncComponent(() => import('~/components/Agents/AgentOrchestrationPanel.vue')),
+  epics: defineAsyncComponent(() => import('~/components/Agents/EpicManagementPanel.vue')),
+  monitoring: defineAsyncComponent(() => import('~/components/Agents/MonitoringDashboard.vue')),
+  'knowledge-validation': defineAsyncComponent(() => import('~/components/Knowledge/KnowledgeValidationPanel.vue')),
+  'knowledge-graph': defineAsyncComponent(() => import('~/components/Knowledge/KnowledgeGraphViewer.vue')),
+  'context-budgeter': defineAsyncComponent(() => import('~/components/Agents/ContextBudgeterPanel.vue'))
 };
 
 // Module configuration for labels and icons
@@ -231,7 +237,13 @@ const moduleConfig: Record<ModuleId, { label: string; icon: string }> = {
   context: { label: 'Context', icon: 'mdi:brain' },
   knowledge: { label: 'Knowledge', icon: 'mdi:book-open-page-variant' },
   prompts: { label: 'Prompts', icon: 'mdi:lightning-bolt' },
-  claude: { label: 'Claude AI', icon: 'simple-icons:anthropic' }
+  claude: { label: 'Claude AI', icon: 'simple-icons:anthropic' },
+  agents: { label: 'Agent Orchestration', icon: 'mdi:robot' },
+  epics: { label: 'Epic Management', icon: 'mdi:chart-gantt' },
+  monitoring: { label: 'Agent Monitoring', icon: 'mdi:monitor-dashboard' },
+  'knowledge-validation': { label: 'Knowledge Validation', icon: 'mdi:brain' },
+  'knowledge-graph': { label: 'Knowledge Graph', icon: 'mdi:graph' },
+  'context-budgeter': { label: 'Context Budgeter', icon: 'mdi:credit-card-outline' }
 };
 
 // Get modules in right dock
@@ -299,6 +311,18 @@ const getModuleColor = (moduleId: ModuleId): string => {
       return '#ef5350'; // Red for prompts
     case 'terminal':
       return '#78909c'; // Blue-grey for terminal
+    case 'agents':
+      return '#4fc3f7'; // Light blue for agents
+    case 'epics':
+      return '#66bb6a'; // Green for epic management
+    case 'monitoring':
+      return '#ff9800'; // Orange for monitoring dashboard
+    case 'knowledge-validation':
+      return '#e91e63'; // Pink for knowledge validation
+    case 'knowledge-graph':
+      return '#673ab7'; // Deep purple for knowledge graph
+    case 'context-budgeter':
+      return '#ffc107'; // Amber for context budgeter
     default:
       return '#858585'; // Default grey
   }

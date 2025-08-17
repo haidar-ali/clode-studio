@@ -34,7 +34,7 @@ export interface AutocompleteSettings {
       contextLines: number;
       useCache: boolean;
       cacheTTL: number;
-      model: 'claude-sonnet-4-20250514' | 'claude-opus-4-20250514';
+      model: 'claude-sonnet-4-20250514' | 'claude-opus-4-1-20250805';
     };
     cache: {
       enabled: boolean;

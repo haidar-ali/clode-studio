@@ -150,6 +150,37 @@ const activityItems = computed<ActivityItem[]>(() => {
       id: 'prompts',
       label: 'Prompt Studio',
       icon: 'mdi:lightning-bolt'
+    },
+    {
+      id: 'agents',
+      label: 'Agent Orchestration',
+      icon: 'mdi:robot'
+    },
+    {
+      id: 'epics',
+      label: 'Epic Management',
+      icon: 'mdi:chart-gantt',
+      badge: tasksStore.activeEpics.length
+    },
+    {
+      id: 'monitoring',
+      label: 'Agent Monitoring',
+      icon: 'mdi:monitor-dashboard'
+    },
+    {
+      id: 'knowledge-validation',
+      label: 'Knowledge Validation',
+      icon: 'mdi:brain'
+    },
+    {
+      id: 'knowledge-graph',
+      label: 'Knowledge Graph',
+      icon: 'mdi:graph'
+    },
+    {
+      id: 'context-budgeter',
+      label: 'Context Budgeter',
+      icon: 'mdi:credit-card-outline'
     }
   ];
   
@@ -231,6 +262,16 @@ const getIconColor = (moduleId: string): string => {
       return '#ef5350'; // Red for prompts
     case 'terminal':
       return '#78909c'; // Blue-grey for terminal
+    case 'agents':
+      return '#9c27b0'; // Purple for agent orchestration
+    case 'monitoring':
+      return '#ff9800'; // Orange for monitoring dashboard
+    case 'knowledge-validation':
+      return '#e91e63'; // Pink for knowledge validation
+    case 'knowledge-graph':
+      return '#673ab7'; // Deep purple for knowledge graph
+    case 'context-budgeter':
+      return '#ffc107'; // Amber for context budgeter
     default:
       return '#858585'; // Default grey
   }

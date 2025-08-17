@@ -1733,6 +1733,627 @@ ipcMain.handle('claude:sdk:updateTodo', async (event, todoId: string, newStatus:
   }
 });
 
+// Agent Orchestration operations
+ipcMain.handle('agent:initialize', async (event, workspacePath: string) => {
+  try {
+    // For now, we'll return a mock success response
+    // In the future, this would initialize the actual agent orchestration system
+    console.log('[Agent Orchestration] Initializing for workspace:', workspacePath);
+    return { 
+      success: true, 
+      message: 'Agent orchestration initialized',
+      capabilities: {
+        hasClaudeCode: await ClaudeDetector.detectClaude(workspacePath) !== null,
+        maxConcurrentAgents: 3,
+        availableAgents: ['architect', 'developer', 'qa', 'documenter']
+      }
+    };
+  } catch (error) {
+    console.error('Error initializing agent orchestration:', error);
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+ipcMain.handle('agent:executeTask', async (event, action: string, params: any) => {
+  try {
+    console.log('[Agent Orchestration] Executing action:', action, 'with params:', params);
+    
+    switch (action) {
+      case 'initialize':
+        // Already handled above, but included for consistency
+        return { success: true, message: 'Initialized' };
+        
+      case 'createTask':
+        // Use Claude SDK to create and execute a task
+        const { task, options } = params;
+        console.log('[Agent Orchestration] Creating task:', task.title);
+        console.log('[Agent Orchestration] Using workspace:', options.workspacePath);
+        
+        // Use Claude SDK to process the task
+        if (claudeCodeService) {
+          // Build a comprehensive task description including requirements
+          const taskDescription = [
+            task.title,
+            task.description,
+            ...(task.requirements || []).map((r: string) => `- ${r}`)
+          ].join('\n');
+          
+          const todos = await claudeCodeService.createTodosForTask(
+            taskDescription,
+            options.workspacePath || process.cwd()
+          );
+          
+          return {
+            success: true,
+            result: {
+              taskId: task.id,
+              todos: todos.todos,
+              status: 'created'
+            }
+          };
+        }
+        
+        return { success: true, result: { taskId: task.id, status: 'simulated' } };
+        
+      case 'getStatus':
+        // Return current status of agent orchestration
+        return {
+          success: true,
+          status: {
+            isRunning: false,
+            activeTasks: [],
+            queuedTasks: []
+          }
+        };
+        
+      case 'cancelTask':
+        const { taskId } = params;
+        console.log('[Agent Orchestration] Cancelling task:', taskId);
+        return { success: true, message: `Task ${taskId} cancelled` };
+        
+      case 'createEpic':
+        console.log('[Agent Orchestration] Creating epic:', params.epic.title);
+        // TODO: Integrate with orchestration system
+        return { success: true, result: { epicId: 'epic-' + Date.now() } };
+        
+      case 'decomposeEpic':
+        console.log('[Agent Orchestration] Decomposing epic:', params.epicId);
+        // TODO: Use AI to decompose epic into stories and tasks
+        return { success: true, result: { stories: [], tasks: [] } };
+        
+      case 'createStory':
+        console.log('[Agent Orchestration] Creating story:', params.story.title);
+        return { success: true, result: { storyId: 'story-' + Date.now() } };
+        
+      case 'getEpics':
+        console.log('[Agent Orchestration] Getting epics');
+        return { success: true, result: [] };
+        
+      default:
+        return { success: false, error: `Unknown action: ${action}` };
+    }
+  } catch (error) {
+    console.error('Error executing agent task:', error);
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+// Monitoring operations
+ipcMain.handle('monitoring:executeTask', async (event, action: string, params: any) => {
+  try {
+    console.log('[Monitoring] Executing action:', action, 'with params:', params);
+    
+    switch (action) {
+      case 'getRecentAlerts':
+        // Mock alerts for now - will be replaced with actual CostTracker
+        return {
+          success: true,
+          alerts: [
+            {
+              type: 'daily',
+              severity: 'warning',
+              message: 'Daily budget at 85.5% ($42.75/$50.00)',
+              currentSpent: 42.75,
+              limit: 50.00,
+              percentage: 85.5,
+              timestamp: new Date().toISOString()
+            }
+          ]
+        };
+        
+      case 'getCostSummary':
+        // Mock cost summary for now - will be replaced with actual CostTracker
+        return {
+          success: true,
+          summary: {
+            dailySpent: 42.75,
+            monthlySpent: 856.30,
+            totalSpent: 1234.56,
+            dailyRemaining: 7.25,
+            monthlyRemaining: 643.70,
+            byProvider: {
+              'anthropic': 35.20,
+              'openai': 7.55
+            },
+            byAgent: {
+              'developer': 25.80,
+              'architect': 10.40,
+              'qa': 6.55
+            },
+            byDate: {
+              '2025-01-17': 42.75,
+              '2025-01-16': 38.50,
+              '2025-01-15': 41.20
+            }
+          }
+        };
+        
+      case 'getBudgetConfig':
+        // Mock budget config for now - will be replaced with actual CostTracker
+        return {
+          success: true,
+          config: {
+            dailyLimit: 50.0,
+            monthlyLimit: 1500.0,
+            perExecutionLimit: 5.0,
+            perAgentDailyLimit: 20.0,
+            alertThresholds: {
+              daily: 80,
+              monthly: 85,
+              perExecution: 90
+            }
+          }
+        };
+        
+      case 'getRecentExecutions':
+        const { limit = 20 } = params;
+        // Mock execution history for now - will be replaced with actual CostTracker
+        return {
+          success: true,
+          executions: [
+            {
+              id: 'exec-' + Date.now(),
+              timestamp: new Date().toISOString(),
+              agentId: 'developer',
+              provider: 'anthropic',
+              model: 'claude-3-5-sonnet-20241022',
+              tokensUsed: 8245,
+              cost: 0.0824
+            },
+            {
+              id: 'exec-' + (Date.now() - 1000),
+              timestamp: new Date(Date.now() - 60000).toISOString(),
+              agentId: 'architect',
+              provider: 'anthropic',
+              model: 'claude-3-5-sonnet-20241022',
+              tokensUsed: 5670,
+              cost: 0.0567
+            }
+          ].slice(0, limit)
+        };
+        
+      case 'updateBudgetConfig':
+        const { config } = params;
+        console.log('[Monitoring] Updating budget config:', config);
+        // TODO: Implement actual budget config persistence
+        return { success: true, message: 'Budget configuration updated' };
+        
+      case 'clearAlerts':
+        console.log('[Monitoring] Clearing alerts');
+        // TODO: Implement actual alert clearing
+        return { success: true, message: 'Alerts cleared' };
+        
+      default:
+        return { success: false, error: `Unknown monitoring action: ${action}` };
+    }
+  } catch (error) {
+    console.error('Error executing monitoring task:', error);
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+// Knowledge Validation operations
+ipcMain.handle('knowledge:executeTask', async (event, action: string, params: any) => {
+  try {
+    console.log('[Knowledge] Executing action:', action, 'with params:', params);
+    
+    switch (action) {
+      case 'getPatterns':
+        // Mock patterns for now - will be replaced with actual KnowledgeValidationWorkflow
+        return {
+          success: true,
+          patterns: [
+            {
+              id: 'pattern-react-component',
+              name: 'React Functional Component Pattern',
+              description: 'Standard pattern for creating reusable React functional components with TypeScript',
+              category: 'implementation',
+              tags: ['react', 'typescript', 'components', 'functional'],
+              problem: 'Need to create reusable, type-safe UI components in React',
+              solution: 'Use functional components with TypeScript interfaces for props and proper component structure',
+              context: { language: 'typescript', framework: 'react' },
+              examples: [
+                {
+                  title: 'Button Component',
+                  description: 'A reusable button component with variant support',
+                  code: `interface ButtonProps {\n  variant: 'primary' | 'secondary';\n  children: React.ReactNode;\n  onClick?: () => void;\n}\n\nexport const Button: React.FC<ButtonProps> = ({ variant, children, onClick }) => {\n  return (\n    <button className={\`btn btn-\${variant}\`} onClick={onClick}>\n      {children}\n    </button>\n  );\n};`
+                }
+              ],
+              metrics: {
+                successRate: 0.95,
+                avgExecutionTime: 150,
+                avgTokensUsed: 800,
+                avgCost: 0.02,
+                errorRate: 0.05,
+                adoptionRate: 0.85
+              },
+              validation: { 
+                status: 'validated',
+                validatedAt: new Date().toISOString()
+              },
+              metadata: {
+                createdAt: new Date(Date.now() - 86400000).toISOString(),
+                updatedAt: new Date().toISOString(),
+                sourceAgents: ['developer'],
+                sourceTasks: ['task-component-refactor'],
+                confidence: 0.95,
+                usageCount: 25
+              }
+            },
+            {
+              id: 'pattern-error-handling',
+              name: 'Error Boundary Pattern',
+              description: 'Pattern for handling errors gracefully in React applications',
+              category: 'debugging',
+              tags: ['react', 'error-handling', 'resilience'],
+              problem: 'Need to catch and handle JavaScript errors in React component tree',
+              solution: 'Implement Error Boundary components to catch errors and display fallback UI',
+              context: { language: 'typescript', framework: 'react' },
+              examples: [],
+              metrics: {
+                successRate: 0.88,
+                avgExecutionTime: 200,
+                avgTokensUsed: 1200,
+                avgCost: 0.035,
+                errorRate: 0.12,
+                adoptionRate: 0.65
+              },
+              validation: { 
+                status: 'pending'
+              },
+              metadata: {
+                createdAt: new Date(Date.now() - 172800000).toISOString(),
+                updatedAt: new Date(Date.now() - 86400000).toISOString(),
+                sourceAgents: ['developer', 'qa'],
+                sourceTasks: ['task-error-improvement'],
+                confidence: 0.78,
+                usageCount: 12
+              }
+            },
+            {
+              id: 'pattern-api-client',
+              name: 'Type-Safe API Client Pattern',
+              description: 'Pattern for creating type-safe API clients with proper error handling',
+              category: 'architecture',
+              tags: ['api', 'typescript', 'client', 'networking'],
+              problem: 'Need to create reliable, type-safe API communication layer',
+              solution: 'Use fetch wrapper with TypeScript interfaces, error handling, and request/response transformation',
+              context: { language: 'typescript', tools: ['fetch', 'zod'] },
+              examples: [],
+              metrics: {
+                successRate: 0.92,
+                avgExecutionTime: 300,
+                avgTokensUsed: 1500,
+                avgCost: 0.045,
+                errorRate: 0.08,
+                adoptionRate: 0.75
+              },
+              validation: { 
+                status: 'validated',
+                validatedAt: new Date(Date.now() - 43200000).toISOString()
+              },
+              metadata: {
+                createdAt: new Date(Date.now() - 259200000).toISOString(),
+                updatedAt: new Date(Date.now() - 43200000).toISOString(),
+                sourceAgents: ['architect', 'developer'],
+                sourceTasks: ['task-api-refactor'],
+                confidence: 0.89,
+                usageCount: 18
+              }
+            }
+          ]
+        };
+        
+      case 'getLearningEvents':
+        const { limit = 10 } = params;
+        // Mock learning events for now
+        return {
+          success: true,
+          events: [
+            {
+              id: 'event-1',
+              timestamp: new Date(Date.now() - 3600000).toISOString(),
+              type: 'discovery',
+              agentId: 'developer',
+              taskId: 'task-component-refactor',
+              description: 'Discovered React component pattern during UI refactoring',
+              impact: 'medium',
+              automated: true
+            },
+            {
+              id: 'event-2',
+              timestamp: new Date(Date.now() - 7200000).toISOString(),
+              type: 'validation',
+              agentId: 'kb-builder',
+              taskId: 'pattern-api-client',
+              description: 'Validated API client pattern with 92% success rate',
+              impact: 'high',
+              automated: false
+            },
+            {
+              id: 'event-3',
+              timestamp: new Date(Date.now() - 10800000).toISOString(),
+              type: 'failure',
+              agentId: 'qa',
+              taskId: 'task-test-automation',
+              description: 'Learned from test automation failure - missing async handling',
+              impact: 'medium',
+              automated: true
+            }
+          ].slice(0, limit)
+        };
+        
+      case 'getStatistics':
+        // Mock statistics for now
+        return {
+          success: true,
+          statistics: {
+            totalPatterns: 3,
+            validatedPatterns: 2,
+            pendingPatterns: 1,
+            avgConfidence: 0.87
+          }
+        };
+        
+      case 'validatePattern':
+        const { patternId } = params;
+        console.log('[Knowledge] Validating pattern:', patternId);
+        // TODO: Implement actual pattern validation
+        return { 
+          success: true, 
+          pattern: { id: patternId, validation: { status: 'validated' } }
+        };
+        
+      case 'exportKnowledge':
+        const { format = 'json' } = params;
+        console.log('[Knowledge] Exporting knowledge in format:', format);
+        // TODO: Implement actual knowledge export
+        return { 
+          success: true, 
+          data: JSON.stringify({ patterns: [], events: [] }, null, 2)
+        };
+        
+      case 'updateSettings':
+        const { settings } = params;
+        console.log('[Knowledge] Updating settings:', settings);
+        // TODO: Implement actual settings persistence
+        return { success: true, message: 'Settings updated' };
+        
+      case 'getGraphData':
+        // Mock graph data for now - will be replaced with actual graph builder
+        return {
+          success: true,
+          data: {
+            nodes: [
+              // Patterns
+              { id: 'pattern-1', label: 'React Component', type: 'pattern', description: 'React functional component pattern', metadata: { confidence: 0.95, usageCount: 25, category: 'implementation', createdAt: new Date(Date.now() - 86400000).toISOString() } },
+              { id: 'pattern-2', label: 'Error Boundary', type: 'pattern', description: 'Error handling pattern', metadata: { confidence: 0.78, usageCount: 12, category: 'debugging', createdAt: new Date(Date.now() - 172800000).toISOString() } },
+              { id: 'pattern-3', label: 'API Client', type: 'pattern', description: 'Type-safe API client', metadata: { confidence: 0.89, usageCount: 18, category: 'architecture', createdAt: new Date(Date.now() - 259200000).toISOString() } },
+              
+              // Tasks
+              { id: 'task-1', label: 'Component Refactor', type: 'task', description: 'Refactor UI components', metadata: { createdAt: new Date(Date.now() - 43200000).toISOString() } },
+              { id: 'task-2', label: 'Error Handling', type: 'task', description: 'Improve error handling', metadata: { createdAt: new Date(Date.now() - 86400000).toISOString() } },
+              { id: 'task-3', label: 'API Integration', type: 'task', description: 'Integrate external APIs', metadata: { createdAt: new Date(Date.now() - 129600000).toISOString() } },
+              
+              // Agents
+              { id: 'agent-dev', label: 'Developer', type: 'agent', description: 'Code development agent', metadata: { usageCount: 45 } },
+              { id: 'agent-arch', label: 'Architect', type: 'agent', description: 'System architecture agent', metadata: { usageCount: 28 } },
+              { id: 'agent-qa', label: 'QA Engineer', type: 'agent', description: 'Quality assurance agent', metadata: { usageCount: 22 } },
+              
+              // Categories
+              { id: 'cat-impl', label: 'Implementation', type: 'category', description: 'Implementation patterns' },
+              { id: 'cat-arch', label: 'Architecture', type: 'category', description: 'Architectural patterns' },
+              { id: 'cat-debug', label: 'Debugging', type: 'category', description: 'Debugging patterns' },
+              
+              // Epics/Stories
+              { id: 'epic-1', label: 'UI Modernization', type: 'epic', description: 'Modernize user interface', metadata: { createdAt: new Date(Date.now() - 604800000).toISOString() } },
+              { id: 'story-1', label: 'Component Library', type: 'story', description: 'Build component library', metadata: { createdAt: new Date(Date.now() - 518400000).toISOString() } },
+              
+              // Snapshots
+              { id: 'snapshot-1', label: 'Component Snapshot', type: 'snapshot', description: 'Snapshot after component refactor', metadata: { createdAt: new Date(Date.now() - 21600000).toISOString() } },
+              { id: 'snapshot-2', label: 'API Snapshot', type: 'snapshot', description: 'Snapshot after API integration', metadata: { createdAt: new Date(Date.now() - 64800000).toISOString() } }
+            ],
+            links: [
+              // Pattern relationships
+              { id: 'link-1', source: 'pattern-1', target: 'cat-impl', type: 'relates_to', label: 'belongs to', strength: 1 },
+              { id: 'link-2', source: 'pattern-2', target: 'cat-debug', type: 'relates_to', label: 'belongs to', strength: 1 },
+              { id: 'link-3', source: 'pattern-3', target: 'cat-arch', type: 'relates_to', label: 'belongs to', strength: 1 },
+              
+              // Task relationships
+              { id: 'link-4', source: 'task-1', target: 'pattern-1', type: 'implements', label: 'implements', strength: 0.9 },
+              { id: 'link-5', source: 'task-2', target: 'pattern-2', type: 'implements', label: 'implements', strength: 0.8 },
+              { id: 'link-6', source: 'task-3', target: 'pattern-3', type: 'implements', label: 'implements', strength: 0.9 },
+              
+              // Agent relationships
+              { id: 'link-7', source: 'agent-dev', target: 'task-1', type: 'uses', label: 'executes', strength: 0.9 },
+              { id: 'link-8', source: 'agent-dev', target: 'task-2', type: 'uses', label: 'executes', strength: 0.8 },
+              { id: 'link-9', source: 'agent-arch', target: 'task-3', type: 'uses', label: 'executes', strength: 0.9 },
+              { id: 'link-10', source: 'agent-qa', target: 'pattern-2', type: 'validates', label: 'validates', strength: 0.7 },
+              
+              // Epic/Story relationships
+              { id: 'link-11', source: 'epic-1', target: 'story-1', type: 'contains', label: 'contains', strength: 1 },
+              { id: 'link-12', source: 'story-1', target: 'task-1', type: 'contains', label: 'contains', strength: 1 },
+              
+              // Cross-pattern relationships
+              { id: 'link-13', source: 'pattern-1', target: 'pattern-3', type: 'uses', label: 'uses', strength: 0.6 },
+              { id: 'link-14', source: 'pattern-2', target: 'pattern-1', type: 'derives_from', label: 'extends', strength: 0.5 },
+              
+              // Snapshot relationships
+              { id: 'link-15', source: 'task-1', target: 'snapshot-1', type: 'validates', label: 'creates', strength: 1 },
+              { id: 'link-16', source: 'task-3', target: 'snapshot-2', type: 'validates', label: 'creates', strength: 1 },
+              { id: 'link-17', source: 'snapshot-1', target: 'pattern-1', type: 'validates', label: 'validates', strength: 0.9 },
+              { id: 'link-18', source: 'snapshot-2', target: 'pattern-3', type: 'validates', label: 'validates', strength: 0.9 }
+            ]
+          }
+        };
+        
+      default:
+        return { success: false, error: `Unknown knowledge action: ${action}` };
+    }
+  } catch (error) {
+    console.error('Error executing knowledge task:', error);
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
+// Context Budgeter handlers
+ipcMain.handle('contextBudgeter:executeTask', async (event, action: string, data: any) => {
+  try {
+    console.log('[Context Budgeter] Executing action:', action, 'with data:', data);
+    
+    switch (action) {
+      case 'getBudgetStatus':
+        return {
+          success: true,
+          data: {
+            totalBudget: 100.0,
+            totalAllocated: 75.0,
+            totalUsed: 42.5,
+            agents: [
+              {
+                id: 'frontend-agent',
+                name: 'Frontend Agent',
+                allocated: 25.0,
+                used: 12.5,
+                remaining: 12.5,
+                percentage: 33.3,
+                status: 'active'
+              },
+              {
+                id: 'backend-agent', 
+                name: 'Backend Agent',
+                allocated: 30.0,
+                used: 18.0,
+                remaining: 12.0,
+                percentage: 40.0,
+                status: 'active'
+              },
+              {
+                id: 'testing-agent',
+                name: 'Testing Agent', 
+                allocated: 20.0,
+                used: 12.0,
+                remaining: 8.0,
+                percentage: 26.7,
+                status: 'idle'
+              }
+            ]
+          }
+        };
+
+      case 'getContextWindows':
+        return {
+          success: true,
+          data: [
+            {
+              id: 'frontend-agent',
+              agentId: 'frontend-agent',
+              title: 'React Dashboard Development',
+              totalTokens: 3500,
+              maxTokens: 8000,
+              utilizationPercent: 43.75,
+              messageCount: 12,
+              canCompress: true,
+              compressionRatio: 0.3,
+              lastActivity: new Date().toISOString()
+            },
+            {
+              id: 'backend-agent',
+              agentId: 'backend-agent', 
+              title: 'API Authentication System',
+              totalTokens: 6200,
+              maxTokens: 8000,
+              utilizationPercent: 77.5,
+              messageCount: 18,
+              canCompress: true,
+              compressionRatio: 0.4,
+              lastActivity: new Date(Date.now() - 300000).toISOString()
+            },
+            {
+              id: 'testing-agent',
+              agentId: 'testing-agent',
+              title: 'E2E Test Suite',
+              totalTokens: 1800,
+              maxTokens: 4000,
+              utilizationPercent: 45.0,
+              messageCount: 8,
+              canCompress: false,
+              compressionRatio: 0.0,
+              lastActivity: new Date(Date.now() - 600000).toISOString()
+            }
+          ]
+        };
+
+      case 'estimateTokens':
+        const { text, model } = data;
+        // Simple token estimation: ~4 characters per token
+        const estimatedTokens = Math.ceil((text?.length || 0) / 4);
+        const cost = estimatedTokens * 0.00003; // Mock pricing
+        
+        return {
+          success: true,
+          data: {
+            inputTokens: estimatedTokens,
+            outputTokens: Math.floor(estimatedTokens * 0.3),
+            totalTokens: Math.floor(estimatedTokens * 1.3),
+            cost: cost,
+            model: model || 'claude-sonnet-4-20250514',
+            willExceedBudget: cost > 10.0,
+            compressionSuggested: estimatedTokens > 6000
+          }
+        };
+
+      case 'updateBudgetSettings':
+        return {
+          success: true,
+          data: {
+            message: 'Budget settings updated successfully'
+          }
+        };
+
+      case 'compressContext':
+        const { agentId, strategy } = data;
+        return {
+          success: true,
+          data: {
+            originalTokens: 6200,
+            compressedTokens: 4500,
+            reduction: 1700,
+            reductionPercentage: 27.4,
+            strategy: strategy || 'summarize',
+            agentId: agentId
+          }
+        };
+        
+      default:
+        return { success: false, error: `Unknown context budgeter action: ${action}` };
+    }
+  } catch (error) {
+    console.error('Error executing context budgeter task:', error);
+    return { success: false, error: error instanceof Error ? error.message : String(error) };
+  }
+});
+
 // Search operations
 ipcMain.handle('search:findInFiles', async (event, options) => {
 

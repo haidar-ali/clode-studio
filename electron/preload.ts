@@ -62,6 +62,24 @@ const electronAPI = {
       ipcRenderer.removeListener(channel, listener);
     }
   },
+  agent: {
+    initialize: (workspacePath: string) => 
+      ipcRenderer.invoke('agent:initialize', workspacePath),
+    executeTask: (action: string, params: any) => 
+      ipcRenderer.invoke('agent:executeTask', action, params)
+  },
+  monitoring: {
+    executeTask: (action: string, params: any) => 
+      ipcRenderer.invoke('monitoring:executeTask', action, params)
+  },
+  knowledge: {
+    executeTask: (action: string, params: any) => 
+      ipcRenderer.invoke('knowledge:executeTask', action, params)
+  },
+  contextBudgeter: {
+    executeTask: (action: string, data: any) => 
+      ipcRenderer.invoke('contextBudgeter:executeTask', action, data)
+  },
   claude: {
     start: (instanceId: string, workingDirectory: string, instanceName?: string, runConfig?: { command?: string; args?: string[] }): Promise<{
       success: boolean;
