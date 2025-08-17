@@ -12,7 +12,7 @@ export default defineEventHandler(async (event) => {
   // Store workspace path in global variable
   global.__currentWorkspace = workspacePath;
   
-  // console.log('[API] Workspace set to:', workspacePath);
+  // 
   
   return {
     success: true,

@@ -203,7 +203,7 @@ const removeInstance = async (id: string) => {
 };
 
 const updateInstanceStatus = (id: string, status: any, pid?: number) => {
-  console.log(`[ClaudeTerminalTabs] Updating status for ${id}: ${status}, pid: ${pid}`);
+  
   instancesStore.updateInstanceStatus(id, status, pid);
 };
 

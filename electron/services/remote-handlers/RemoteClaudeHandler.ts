@@ -450,33 +450,33 @@ export class RemoteClaudeHandler {
       if (!isDesktop && this.instances.has(request.payload.instanceId)) {
         // Instance already exists, but in headless mode we should update its status to connected
         if (!this.mainWindow) {
-          console.log(`[RemoteClaudeHandler] Instance ${request.payload.instanceId} already exists, checking status...`);
+          
           try {
             const { claudeInstanceManager } = await import('../claude-instance-manager.js');
             const existingInstance = this.instances.get(request.payload.instanceId);
             
-            console.log(`[RemoteClaudeHandler] Existing instance has PTY: ${!!existingInstance?.pty}, is in ClaudeInstanceManager: ${claudeInstanceManager.hasInstance(request.payload.instanceId)}`);
+            
             
             if (existingInstance && existingInstance.pty && claudeInstanceManager.hasInstance(request.payload.instanceId)) {
               // Update status to connected since the PTY is still active
               const updated = claudeInstanceManager.reconnectInstance(request.payload.instanceId, existingInstance.pty);
-              console.log(`[RemoteClaudeHandler] Updated existing instance ${request.payload.instanceId} to connected status, pid: ${updated?.pid}`);
+              
               
               // Broadcast the status update
               const { getRemoteServer } = await import('../../main.js');
               const remoteServer = getRemoteServer();
               if (remoteServer && updated) {
-                console.log(`[RemoteClaudeHandler] Broadcasting status update for ${request.payload.instanceId}`);
+                
                 remoteServer.broadcastClaudeStatusUpdate(request.payload.instanceId, 'connected', updated.pid);
               }
             } else {
-              console.log(`[RemoteClaudeHandler] Cannot update status - missing PTY or not in ClaudeInstanceManager`);
+              
             }
           } catch (error) {
             console.error('[RemoteClaudeHandler] Failed to update instance status:', error);
           }
         } else {
-          console.log(`[RemoteClaudeHandler] Not in headless mode, skipping status update`);
+          
         }
         
         return callback({
@@ -586,7 +586,7 @@ export class RemoteClaudeHandler {
           if (claudeInstanceManager.hasInstance(request.payload.instanceId)) {
             // Reconnect existing instance with new PTY
             updatedMetadata = claudeInstanceManager.reconnectInstance(request.payload.instanceId, claudePty);
-            console.log(`[RemoteClaudeHandler] Reconnected instance ${request.payload.instanceId} in ClaudeInstanceManager`);
+            
           } else {
             // Add new instance
             updatedMetadata = claudeInstanceManager.addInstance(request.payload.instanceId, claudePty, {
@@ -594,7 +594,7 @@ export class RemoteClaudeHandler {
               workingDirectory: workingDir,
               isHeadless: true
             });
-            console.log(`[RemoteClaudeHandler] Added instance ${request.payload.instanceId} to ClaudeInstanceManager`);
+            
           }
           
           // Broadcast the status update
@@ -970,7 +970,7 @@ export class RemoteClaudeHandler {
       if (instance && instance.pty) {
         try {
           instance.pty.resize(cols, rows);
-          console.log(`[RemoteClaudeHandler] Resized Claude PTY ${instanceId} to ${cols}x${rows}`);
+          
         } catch (error) {
           console.error(`[RemoteClaudeHandler] Failed to resize PTY for ${instanceId}:`, error);
         }
@@ -1095,7 +1095,7 @@ export class RemoteClaudeHandler {
       try {
         const { claudeInstanceManager } = await import('../claude-instance-manager.js');
         const updated = claudeInstanceManager.disconnectInstance(instanceId);
-        console.log(`[RemoteClaudeHandler] Marked instance ${instanceId} as disconnected in ClaudeInstanceManager`);
+        
         
         // Broadcast the status update
         const { getRemoteServer } = await import('../../main.js');
@@ -1130,20 +1130,20 @@ export class RemoteClaudeHandler {
       
       // In headless mode, mainWindow is null, so get instances from main process
       if (!this.mainWindow) {
-        console.log('[RemoteClaudeHandler] Headless mode detected, getting instances from main process');
+        
         try {
           // Directly access the instance manager from the main process
           const { claudeInstanceManager } = await import('../claude-instance-manager.js');
           
           // Get workspace from global variable (set in main.ts for headless mode)
           const currentWorkspace = (global as any).__currentWorkspace || process.cwd();
-          console.log('[RemoteClaudeHandler] Current workspace from global:', currentWorkspace);
+          
           
           const allInstances = claudeInstanceManager.getAllInstances();
-          console.log('[RemoteClaudeHandler] All instances:', allInstances);
+          
           
           const instances = claudeInstanceManager.getInstancesByWorkspace(currentWorkspace);
-          console.log('[RemoteClaudeHandler] Workspace instances:', instances);
+          
           
           desktopInstances = instances.map((instance: any) => ({
             instanceId: instance.id,

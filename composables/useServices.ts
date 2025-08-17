@@ -48,13 +48,13 @@ async function initializeServices() {
 export function useServices() {
   // Set up event listener immediately (not in onMounted) to catch early events
   if (typeof window !== 'undefined') {
-    console.log('[useServices] Setting up remote-connection-ready event listener');
+    
     const updateSocket = async () => {
-      console.log('[useServices] Remote connection ready event received');
+      
       
       // If services haven't been initialized yet, do it now
       if (!serviceProvider.value && !initPromise) {
-        console.log('[useServices] Initializing services first...');
+        
         await initializeServices();
       }
       
@@ -66,11 +66,11 @@ export function useServices() {
       }
       
       if (serviceProvider.value && 'updateSocket' in serviceProvider.value) {
-        console.log('[useServices] Updating socket in service provider');
+        
         await (serviceProvider.value as any).updateSocket();
-        console.log('[useServices] Socket updated successfully');
+        
       } else {
-        console.log('[useServices] Service provider not ready or doesn\'t support updateSocket');
+        
       }
     };
     

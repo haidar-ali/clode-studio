@@ -28,8 +28,8 @@ export default defineEventHandler(async (event) => {
       workspacePath = '/Users/alihaidar/cc-studio/clode-studio';
     }
     
-    // console.log('[API] /files/list - Using workspace:', workspacePath);
-    // console.log('[API] /files/list - Requested path:', requestPath);
+    // 
+    // 
     
     const fullPath = path.join(workspacePath, requestPath);
     

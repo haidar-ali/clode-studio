@@ -851,7 +851,6 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
       
       // Send data with instance ID to all windows
       const windows = BrowserWindow.getAllWindows();
-      console.log(`Sending Claude output to frontend for ${instanceId}, length: ${data.length}, windows: ${windows.length}`);
       
       if (windows.length === 0) {
         console.warn('No windows available to send Claude output to!');
@@ -873,7 +872,6 @@ ipcMain.handle('claude:start', async (event, instanceId: string, workingDirector
       } else {
         windows.forEach(window => {
           if (!window.isDestroyed()) {
-            console.log(`Sending to window ${window.id}`);
             window.webContents.send(`claude:output:${instanceId}`, data);
           }
         });
@@ -992,7 +990,6 @@ ipcMain.handle('claude:stop', async (event, instanceId: string) => {
     
     // Clean up pending output for this instance
     if (global.pendingClaudeOutput?.has(instanceId)) {
-      console.log(`Cleaning up pending output for stopped instance ${instanceId}`);
       global.pendingClaudeOutput.delete(instanceId);
     }
     
@@ -2148,7 +2145,6 @@ ipcMain.handle('autocomplete:getLSPStatus', async () => {
 
 // LSP Bridge handlers for codemirror-languageservice
 ipcMain.handle('lsp:getCompletions', async (event, params) => {
-  console.log('[LSP-4] IPC lsp:getCompletions called with params:', params.filepath);
   try {
     const completions = await lspManager.getCompletions(
       params.filepath,

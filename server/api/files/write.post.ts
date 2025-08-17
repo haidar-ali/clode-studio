@@ -35,7 +35,7 @@ export default defineEventHandler(async (event) => {
     // Write file
     await fs.writeFile(fullPath, content, 'utf-8');
     
-    // console.log('[API] File written:', filePath);
+    // 
     
     return {
       success: true,

@@ -33,7 +33,7 @@ class ClaudeInstanceManager {
   private loadPersistedInstances() {
     try {
       const persisted = (this.store as any).get('claudeInstances', {}) as Record<string, ClaudeInstanceMetadata>;
-      console.log('[ClaudeInstanceManager] Loading persisted instances:', Object.keys(persisted));
+      
       
       // Mark all persisted instances as disconnected initially
       for (const [id, metadata] of Object.entries(persisted)) {
@@ -50,7 +50,7 @@ class ClaudeInstanceManager {
           }
         }
       }
-      console.log('[ClaudeInstanceManager] Loaded instances:', Array.from(this.instances.keys()));
+      
     } catch (error) {
       console.error('Failed to load persisted Claude instances:', error);
     }

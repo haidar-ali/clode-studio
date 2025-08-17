@@ -276,7 +276,7 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
     },
 
     updateInstanceStatus(id: string, status: ClaudeInstance['status'], pid?: number) {
-      console.log(`[Store] Updating instance status for ${id}: ${status}, pid: ${pid}`);
+      
       const instance = this.instances.get(id);
       if (instance) {
         const oldStatus = instance.status;
@@ -295,7 +295,7 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
         this.instances.delete(id);
         this.instances.set(id, updatedInstance);
         
-        console.log(`[Store] Instance ${id} status changed from ${oldStatus} to ${status}`);
+        
         
         // DON'T save instances when updating runtime status
         // Runtime status (connected/connecting/disconnected) shouldn't be persisted
@@ -597,7 +597,7 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
       }
       
       this.reloadTimeout = setTimeout(async () => {
-        console.log('[Store] Reloading instances from storage...');
+        
         
         if (typeof window === 'undefined' || !window.electronAPI?.store) {
           return;
@@ -609,7 +609,7 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
         this.instances.forEach((inst, id) => {
           currentStatuses.set(id, { status: inst.status, pid: inst.pid });
           if (inst.status !== 'disconnected') {
-            console.log(`[Store] Preserving runtime status for ${id}: ${inst.status}, pid: ${inst.pid}`);
+            
           }
         });
         
@@ -636,7 +636,7 @@ export const useClaudeInstancesStore = defineStore('claudeInstances', {
               instance.status = currentStatus.status;
               instance.pid = currentStatus.pid;
               if (currentStatus.status !== 'disconnected') {
-                console.log(`[Store] Restored runtime status for ${instance.id}: ${instance.status}, pid: ${instance.pid}`);
+                
               }
             }
             

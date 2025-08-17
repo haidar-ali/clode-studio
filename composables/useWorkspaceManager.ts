@@ -56,7 +56,7 @@ export function useWorkspaceManager() {
             method: 'POST',
             body: { workspacePath: savedPath }
           });
-          console.log('Initial workspace synced to server:', savedPath);
+          
         } catch (error) {
           console.error('Failed to sync initial workspace to server:', error);
         }
@@ -108,7 +108,7 @@ export function useWorkspaceManager() {
           method: 'POST',
           body: { workspacePath: path }
         });
-        console.log('Workspace synced to server:', path);
+        
       } catch (error) {
         console.error('Failed to sync workspace to server:', error);
       }

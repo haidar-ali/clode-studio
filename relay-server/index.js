@@ -26,15 +26,15 @@ if (REDIS_URL && REDIS_URL !== 'none') {
     redis = new Redis(REDIS_URL);
     redis.on('error', (err) => {
       console.error('Redis connection error:', err);
-      console.log('Falling back to in-memory storage');
+      
       redis = null;
     });
-    console.log('Using Redis for session storage');
+    
   } catch (err) {
-    console.log('Redis not available, using in-memory storage');
+    
   }
 } else {
-  console.log('Using in-memory storage (no Redis configured)');
+  
 }
 
 // Middleware
@@ -56,7 +56,7 @@ app.use((req, res, next) => {
         // Only log non-asset requests to reduce noise
         const isAsset = req.url && (req.url.includes('/_nuxt/') || req.url.includes('/node_modules/'));
         if (!isAsset && req.url !== '/favicon.ico') {
-          console.log(`[Relay] Session ${req.sessionId}: ${req.method} ${req.url}`);
+          
         }
       }
     }
@@ -147,7 +147,7 @@ class ConnectionManager {
       connectUrl: `${sessionUrl}?token=${token}`
     });
     
-    console.log(`Desktop registered: ${sessionId} from ${auth.deviceId}`);
+    
     
     return desktopInfo;
   }
@@ -178,7 +178,7 @@ class ConnectionManager {
     // Set up bidirectional relay
     this.setupRelay(clientSocket, desktopSocket, sessionId);
     
-    console.log(`Client connected to session: ${sessionId}`);
+    
     
     return { success: true };
   }
@@ -201,7 +201,7 @@ class ConnectionManager {
     // Forward events from client to desktop
     clientSocket.onAny((event, ...args) => {
       if (!event.startsWith('$') && !event.startsWith('relay:') && !event.startsWith('bridge:')) {
-        console.log(`[Relay] Client→Desktop: ${event}`);
+        
         
         // Check if last argument is a callback (Socket.IO acknowledgment)
         const lastArg = args[args.length - 1];
@@ -239,7 +239,7 @@ class ConnectionManager {
     // Store the handler so we can remove it later
     const bridgeResponseHandler = (data) => {
       const { requestId, response } = data;
-      console.log(`[Relay] Desktop response for request ${requestId}`);
+      
       
       if (pendingRequests.has(requestId)) {
         const callback = pendingRequests.get(requestId);
@@ -257,7 +257,7 @@ class ConnectionManager {
     // Forward regular events from desktop to client
     const forwardToClient = (event, ...args) => {
       if (!event.startsWith('$') && !event.startsWith('relay:') && !event.startsWith('bridge:')) {
-        console.log(`[Relay] Desktop→Client: ${event}`);
+        
         clientSocket.emit(event, ...args);
       }
     };
@@ -306,7 +306,7 @@ const manager = new ConnectionManager();
 
 // Add middleware to log all Socket.IO connection attempts
 io.use((socket, next) => {
-  console.log('[Socket.IO] Connection attempt from:', socket.handshake.address, 'Auth:', socket.handshake.auth);
+  
   next();
 });
 
@@ -315,7 +315,7 @@ io.on('connection', (socket) => {
   const auth = socket.handshake.auth;
   const { role, sessionId } = auth;
   
-  console.log('[Socket.IO] New connection - Role:', role, 'SessionId:', sessionId, 'Auth:', auth);
+  
   
   if (role === 'desktop') {
     // Desktop registering
@@ -343,7 +343,7 @@ io.on('connection', (socket) => {
           } else {
             memoryStore.delete(`desktop:${info.sessionId}`);
           }
-          console.log(`Desktop disconnected: ${info.sessionId}`);
+          
         });
       })
       .catch(err => {
@@ -354,7 +354,7 @@ io.on('connection', (socket) => {
       
   } else if (role === 'client' && sessionId) {
     // Client connecting to session via relay
-    console.log(`Client connecting to session ${sessionId}`);
+    
     manager.connectClient(socket, sessionId, auth)
       .then(() => {
         socket.emit('connected', { success: true });
@@ -366,7 +366,7 @@ io.on('connection', (socket) => {
       });
   } else if (sessionId) {
     // Legacy: Client connecting without explicit role
-    console.log(`Legacy client connecting to session ${sessionId}`);
+    
     manager.connectClient(socket, sessionId, auth)
       .then(() => {
         socket.emit('connected', { success: true });
@@ -419,7 +419,7 @@ app.use('*', async (req, res, next) => {
   }
   
   if (!desktopData) {
-    console.log(`[Relay] Session ${sessionId} not found in storage`);
+    
     return res.status(404).send(`Session ${sessionId} not found`);
   }
   
@@ -430,7 +430,7 @@ app.use('*', async (req, res, next) => {
   const desktopSocket = io.sockets.sockets.get(desktopSocketId);
   if (!desktopSocket || !desktopSocket.connected) {
     // Desktop might be connected to a different instance
-    console.log(`[Relay] Desktop for session ${sessionId} is on a different instance or offline`);
+    
     return res.status(503).send('Desktop is connected to a different relay instance. Try refreshing.');
   }
   
@@ -487,7 +487,7 @@ if (!redis) {
 
 // Start server
 httpServer.listen(PORT, () => {
-  console.log(`Clode Relay Server running on port ${PORT}`);
-  console.log(`Domain: ${DOMAIN}`);
-  console.log(`Storage: ${redis ? 'Redis' : 'In-memory'}`);
+  
+  
+  
 });

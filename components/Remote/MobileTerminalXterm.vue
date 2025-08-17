@@ -117,7 +117,7 @@ async function loadTerminalsWithRetry(maxRetries = 2, delay = 500) {
       await loadTerminals();
       return; // Success, exit retry loop
     } catch (error) {
-      console.log(`[MobileTerminal] Attempt ${i + 1}/${maxRetries} failed, retrying in ${delay}ms...`);
+      
       if (i < maxRetries - 1) {
         await new Promise(resolve => setTimeout(resolve, delay));
         delay *= 1.5; // Gentler exponential backoff

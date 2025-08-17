@@ -807,7 +807,7 @@ onMounted(async () => {
     // Get workspace from remote connection or API
     const remoteWorkspace = (window as any).__remoteWorkspace;
     if (remoteWorkspace?.path) {
-      console.log('[SourceControlV2] Initializing with remote workspace:', remoteWorkspace.path);
+      
       await sourceControl.initialize(remoteWorkspace.path);
     } else {
       // Try to get it from the API
@@ -815,7 +815,7 @@ onMounted(async () => {
         const response = await window.fetch('/api/workspace/current');
         const data = await response.json();
         if (data.path) {
-          console.log('[SourceControlV2] Initializing with workspace from API:', data.path);
+          
           await sourceControl.initialize(data.path);
         }
       } catch (error) {

@@ -4,11 +4,11 @@ import * as lsp from 'vscode-languageserver-protocol';
 import { v4 as uuidv4 } from 'uuid';
 
 // Debug: Log module evaluation
-console.log('[LSP-MODULE] lsp-manager.js module evaluated at', new Date().toISOString());
+
 
 // Global singleton check
 if (global._lspManagerInstance) {
-  console.log('[LSP-SINGLETON] Using existing global LSPManager instance');
+  
 }
 
 /**
@@ -18,7 +18,7 @@ if (global._lspManagerInstance) {
 export class LSPManager {
   constructor() {
     this.instanceId = Math.random().toString(36).substring(7);
-    console.log('[LSP-1] LSPManager constructor called, instance ID:', this.instanceId);
+    
     this.servers = new Map(); // language -> server info
     this.connections = new Map(); // language -> connection
     this.pendingConnections = new Map(); // language -> Promise<connection>
@@ -191,17 +191,17 @@ export class LSPManager {
     
     // Check if server is already running
     if (this.connections.has(language)) {
-      console.log(`[LSP-13] Using existing connection for ${language}`);
+      
       return this.connections.get(language);
     }
     
     // Check if server is currently being started
     if (this.pendingConnections.has(language)) {
-      console.log(`[LSP-14] Waiting for pending connection for ${language}, pending keys:`, Array.from(this.pendingConnections.keys()));
+      
       return await this.pendingConnections.get(language);
     }
     
-    console.log(`[LSP-15] Starting new server for ${language}, instance:`, this.instanceId, 'pending before set:', Array.from(this.pendingConnections.keys()));
+    
     
     // Create and store the promise SYNCHRONOUSLY before any async work
     let resolvePromise, rejectPromise;
@@ -212,7 +212,7 @@ export class LSPManager {
     
     // Store the promise IMMEDIATELY, synchronously
     this.pendingConnections.set(language, connectionPromise);
-    console.log(`[LSP-16] Pending connection stored for ${language}, pending after set:`, Array.from(this.pendingConnections.keys()));
+    
     
     // Now do the async work
     (async () => {
@@ -224,17 +224,17 @@ export class LSPManager {
           // Connection is now stored in this.connections by startServer
           // Only NOW is it safe to remove from pending
           this.pendingConnections.delete(language);
-          console.log(`[LSP-17] Removed from pending, connection ready for ${language}`);
+          
           resolvePromise(connection);
         } else {
           // Server failed to start, remove from pending
           this.pendingConnections.delete(language);
-          console.log(`[LSP-19] Server returned null for ${language}, removed from pending`);
+          
           resolvePromise(null);
         }
       } catch (error) {
         this.pendingConnections.delete(language);
-        console.log(`[LSP-18] Removed from pending due to error for ${language}:`, error.message);
+        
         rejectPromise(error);
       }
     })();
@@ -281,7 +281,7 @@ export class LSPManager {
    * Start a language server
    */
   async startServer(language, workspaceUri = null) {
-    console.log('[LSP-10] Starting LSP server for language:', language);
+    
     // Skip if we know this server is unavailable
     if (this.unavailableServers.has(language)) {
       return null;
@@ -815,7 +815,7 @@ export class LSPManager {
     }
     
     if (error.code === 'ENOENT') {
-      console.log(`[LSP] ${language} server not found. Install with: ${config.install}`);
+      
       // Mark this language as unavailable to prevent repeated attempts
       this.unavailableServers.add(language);
     }
@@ -825,7 +825,7 @@ export class LSPManager {
    * Get completions from LSP
    */
   async getCompletions(filepath, content, position, context = null) {
-    console.log('[LSP-3] getCompletions called for', filepath, 'at position', position);
+    
     // Extract triggerCharacter from context if provided, otherwise use the parameter
     const triggerCharacter = context?.triggerCharacter || null;
     const language = this.detectLanguage(filepath);
@@ -1536,10 +1536,10 @@ export class LSPManager {
 
 // Export singleton instance - use global to ensure true singleton
 if (!global._lspManagerInstance) {
-  console.log('[LSP-2] Creating NEW global LSPManager instance');
+  
   global._lspManagerInstance = new LSPManager();
 } else {
-  console.log('[LSP-2-REUSE] Reusing existing global LSPManager instance');
+  
 }
 
 export const lspManager = global._lspManagerInstance;

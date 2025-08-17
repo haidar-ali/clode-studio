@@ -48,12 +48,12 @@ export class RemoteDesktopFeaturesService {
   }
   
   async storeFeatures(features: DesktopFeatures): Promise<void> {
-    console.log('[RemoteDesktopFeaturesService] Storing desktop features on server');
+    
     await this.request('desktop:features:store', features);
   }
   
   async getFeatures(): Promise<DesktopFeatures | null> {
-    console.log('[RemoteDesktopFeaturesService] Getting desktop features from server');
+    
     try {
       return await this.request('desktop:features:get', {});
     } catch (error) {

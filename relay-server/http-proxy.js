@@ -17,7 +17,7 @@ export class HttpProxy extends EventEmitter {
     // Log request for debugging (but throttle for assets)
     const isAsset = fullUrl && (fullUrl.includes('/_nuxt/') || fullUrl.includes('/node_modules/'));
     if (!isAsset) {
-      console.log(`[HttpProxy] Forwarding ${req.method} ${fullUrl} to desktop`);
+      
     }
     
     // Prepare request data

@@ -34,23 +34,15 @@ export class TokenStore {
         const deviceTokenList = this.deviceTokens.get(deviceId) || [];
         deviceTokenList.push(token);
         this.deviceTokens.set(deviceId, deviceTokenList);
-        console.log(`[TokenStore] Stored token for device ${deviceName} (${deviceId})`);
     }
     /**
      * Validate an incoming connection
      */
     validateConnection(token, deviceId, pairingCode) {
-        console.log(`[TokenStore] Validating connection:`);
-        console.log(`  Token: ${token?.substring(0, 8)}...`);
-        console.log(`  DeviceId: ${deviceId}`);
-        console.log(`  PairingCode: ${pairingCode}`);
-        console.log(`  Stored tokens: ${this.tokens.size}`);
         // Check if token exists
         const storedToken = this.tokens.get(token);
         if (!storedToken) {
-            console.log(`[TokenStore] Token not found in store. Available tokens:`);
             for (const [key, value] of this.tokens.entries()) {
-                console.log(`  - ${key.substring(0, 8)}... for device ${value.deviceId}`);
             }
             return { valid: false, reason: 'Invalid token' };
         }
@@ -114,7 +106,6 @@ export class TokenStore {
                 this.deviceTokens.delete(storedToken.deviceId);
             }
         }
-        console.log(`[TokenStore] Revoked token for device ${storedToken.deviceName}`);
         return true;
     }
     /**
@@ -130,7 +121,6 @@ export class TokenStore {
             }
         }
         if (removed > 0) {
-            console.log(`[TokenStore] Cleaned up ${removed} expired tokens`);
         }
     }
     /**
@@ -139,6 +129,5 @@ export class TokenStore {
     clearAll() {
         this.tokens.clear();
         this.deviceTokens.clear();
-        console.log('[TokenStore] Cleared all tokens');
     }
 }

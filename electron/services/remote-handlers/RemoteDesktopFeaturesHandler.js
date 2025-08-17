@@ -59,16 +59,13 @@ export class RemoteDesktopFeaturesHandler {
             ...features,
             lastSync: Date.now()
         };
-        console.log('[RemoteDesktopFeaturesHandler] Stored desktop features');
     }
     async getDesktopFeatures() {
         // If we have stored features, return them
         if (this.storedFeatures) {
-            console.log('[RemoteDesktopFeaturesHandler] Returning stored features');
             return this.storedFeatures;
         }
         // Otherwise, get them directly from the main process
-        console.log('[RemoteDesktopFeaturesHandler] Getting features directly from desktop');
         try {
             // Get the actual data from Claude settings and file system
             const { claudeSettingsManager } = await import('../../claude-settings-manager.js');
@@ -83,18 +80,14 @@ export class RemoteDesktopFeaturesHandler {
             const store = new Store();
             const workspacePath = store.get('workspacePath') || process.cwd();
             // Get hooks from Claude settings
-            console.log('[RemoteDesktopFeaturesHandler] Getting hooks from Claude settings');
             const hooks = await claudeSettingsManager.getHooks();
-            console.log('[RemoteDesktopFeaturesHandler] Got hooks:', hooks?.length || 0);
             // Get MCP servers by running claude mcp list
             let mcpServers = [];
             try {
-                console.log('[RemoteDesktopFeaturesHandler] Running claude mcp list in:', workspacePath);
                 const { stdout } = await execAsync('claude mcp list', {
                     cwd: workspacePath,
                     env: process.env
                 });
-                console.log('[RemoteDesktopFeaturesHandler] MCP list output:', stdout);
                 // Parse MCP output
                 if (!stdout.includes('No MCP servers configured')) {
                     const lines = stdout.trim().split('\n');

@@ -27,11 +27,11 @@ export class ClaudeDetector {
     
     // In production, check for bundled Claude FIRST
     if (app && app.isPackaged) {
-      console.log('App is packaged, looking for bundled Claude...');
+      
       const appPath = app.getAppPath();
-      console.log('App path:', appPath);
+      
       const unpackedPath = appPath.replace('app.asar', 'app.asar.unpacked');
-      console.log('Unpacked path:', unpackedPath);
+      
       
       const bundledPaths = [
         join(unpackedPath, 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js'),
@@ -42,9 +42,9 @@ export class ClaudeDetector {
       ];
       
       for (const bundledPath of bundledPaths) {
-        console.log('Checking bundled path:', bundledPath, 'exists:', existsSync(bundledPath));
+        
         if (existsSync(bundledPath)) {
-          console.log('Found bundled Claude at:', bundledPath);
+          
           
           let version = 'bundled';
           try {
@@ -64,13 +64,13 @@ export class ClaudeDetector {
             source: 'bundled'
           };
           
-          console.log('Returning bundled Claude info:', this.cachedInfo);
+          
           return this.cachedInfo;
         }
       }
-      console.log('No bundled Claude found, falling back to system detection');
+      
     } else {
-      console.log('App is not packaged or app is undefined');
+      
     }
     
     // Only try shell detection if not in production
@@ -123,7 +123,7 @@ export class ClaudeDetector {
     
     // In production, only check bundled paths
     if (app && app.isPackaged) {
-      console.log('Production mode: Only checking bundled paths in fallback');
+      
       // In packaged app, the unpacked Claude will be in app.asar.unpacked
       const appPath = app.getAppPath();
       const unpackedPath = appPath.replace('app.asar', 'app.asar.unpacked');
@@ -155,7 +155,7 @@ export class ClaudeDetector {
     
     for (const path of fallbackPaths) {
       if (existsSync(path)) {
-        console.log('Found Claude at fallback path:', path);
+        
         
         // Try to get version
         let version = 'unknown';
@@ -203,7 +203,7 @@ export class ClaudeDetector {
           source
         };
         
-        console.log('Returning Claude info from fallback:', this.cachedInfo);
+        
         return this.cachedInfo;
       }
     }
@@ -301,7 +301,7 @@ export class ClaudeDetector {
           let nodeCommand: string | null = null;
           for (const nodePath of nodePaths) {
             if (existsSync(nodePath)) {
-              console.log('Found system Node.js at:', nodePath);
+              
               nodeCommand = nodePath;
               break;
             }
@@ -316,8 +316,8 @@ export class ClaudeDetector {
             };
           } else {
             // Fallback to Electron's built-in Node.js
-            console.log('No system Node.js found, using Electron built-in:', process.execPath);
-            console.log('Note: This may cause dock icons on macOS 15+ due to system bug');
+            
+            
             
             // Spawn using Electron as Node.js (env will be set in pty.spawn)
             return {

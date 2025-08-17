@@ -51,7 +51,7 @@ const appClasses = computed(() => ({
 
 // Handle successful connection from modal
 const onConnected = async () => {
-  console.log('Connected to remote server!');
+  
   isConnected.value = true;
   
   try {
@@ -63,7 +63,7 @@ const onConnected = async () => {
     // Check if we have workspace info from Socket.IO
     const remoteWorkspace = (window as any).__remoteWorkspace;
     if (remoteWorkspace?.path) {
-      console.log('Setting workspace from Socket.IO:', remoteWorkspace.path);
+      
       // Sync workspace to server for API calls
       await $fetch('/api/workspace/set', {
         method: 'POST',
@@ -73,7 +73,7 @@ const onConnected = async () => {
     
     // Notify components that connection is ready by emitting a global event
     if (typeof window !== 'undefined') {
-      console.log('[RemoteApp] Dispatching remote-connection-ready event');
+      
       window.dispatchEvent(new CustomEvent('remote-connection-ready'));
     }
     
@@ -87,7 +87,7 @@ const onConnected = async () => {
 // Initialize on mount
 onMounted(async () => {
   // RemoteConnectionModal will handle everything
-  console.log('RemoteApp mounted, waiting for connection...');
+  
 });
 </script>
 

@@ -459,7 +459,7 @@ async function copyTunnelUrl() {
   try {
     await navigator.clipboard.writeText(tunnelStatus.value.url);
     // You could show a toast notification here
-    console.log('Tunnel URL copied to clipboard');
+    
   } catch (error) {
     console.error('Failed to copy tunnel URL:', error);
   }
@@ -498,7 +498,7 @@ function getLocalUrl() {
 async function copyLocalUrl() {
   try {
     await navigator.clipboard.writeText(getLocalUrl());
-    console.log('Local URL copied to clipboard');
+    
   } catch (error) {
     console.error('Failed to copy local URL:', error);
   }

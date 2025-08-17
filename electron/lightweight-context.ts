@@ -140,7 +140,7 @@ export class LightweightContext {
   async scanWorkspace(): Promise<void> {
     // Prevent concurrent scans
     if (this.scanningInProgress) {
-      console.log('Scan already in progress, skipping...');
+      
       return;
     }
     
@@ -156,7 +156,7 @@ export class LightweightContext {
       this.projectInfo = this.analyzeProject(files);
       this.lastScanTime = Date.now();
       
-      console.log(`Workspace scan completed: ${files.length} files in ${Date.now() - startTime}ms, errors: ${this.errorCount}`);
+      
     } finally {
       this.scanningInProgress = false;
     }
@@ -527,7 +527,7 @@ export class LightweightContext {
     
     // Don't watch if project has too many files
     if (this.fileCache.size > 1000) {
-      console.log(`Project has ${this.fileCache.size} files, skipping file watching for performance`);
+      
       return;
     }
     

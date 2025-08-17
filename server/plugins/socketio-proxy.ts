@@ -13,14 +13,14 @@ export default defineNitroPlugin((nitroApp) => {
     logLevel: 'warn', // Reduce log level to warn
     // Handle WebSocket upgrade
     onProxyReqWs: (proxyReq, req, socket, options, head) => {
-      console.log(`[Socket.IO Proxy] WebSocket upgrade for ${req.url}`);
+      
       // Ensure proper headers for WebSocket
       proxyReq.setHeader('Origin', 'http://localhost:3789');
     },
     onProxyReq: (proxyReq, req, res) => {
       // Only log non-polling requests to reduce noise
       if (!req.url?.includes('transport=polling')) {
-        console.log(`[Socket.IO Proxy] ${req.method} ${req.url}`);
+        
       }
     },
     onError: (err, req, res) => {

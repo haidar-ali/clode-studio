@@ -226,7 +226,7 @@ async function loadClaudeInstancesWithRetry(maxRetries = 2, delay = 500) {
       await loadClaudeInstances();
       return; // Success, exit retry loop
     } catch (error) {
-      console.log(`[MobileClaude] Attempt ${i + 1}/${maxRetries} failed, retrying in ${delay}ms...`);
+      
       if (i < maxRetries - 1) {
         await new Promise(resolve => setTimeout(resolve, delay));
         delay *= 1.5; // Gentler exponential backoff
@@ -247,16 +247,16 @@ const setupSocketListeners = async () => {
         const { remoteConnection } = await import('~/services/remote-client/RemoteConnectionSingleton');
         socket = remoteConnection.getSocket();
       } catch (e) {
-        console.log('[MobileClaude] Could not get socket from singleton:', e);
+        
       }
     }
     
     if (socket) {
-      console.log('[MobileClaude] Socket found, setting up listeners');
+      
       
       // Add connection listener to retry loading instances when connected
       socket.on('connect', async () => {
-        console.log('[MobileClaude] Socket connected, loading instances...');
+        
         setTimeout(async () => {
           await loadClaudeInstancesWithRetry();
         }, 500);
@@ -264,7 +264,7 @@ const setupSocketListeners = async () => {
       
       // If socket is already connected, load instances
       if (socket.connected) {
-        console.log('[MobileClaude] Socket already connected, loading instances...');
+        
         setTimeout(async () => {
           await loadClaudeInstancesWithRetry();
         }, 500);
@@ -277,7 +277,7 @@ const setupSocketListeners = async () => {
 
 // Handler for connection ready event
 const onConnectionReady = async () => {
-  console.log('[MobileClaude] Remote connection ready, setting up socket listeners');
+  
   // Wait a bit for services to update
   await new Promise(resolve => setTimeout(resolve, 500));
   
@@ -307,7 +307,7 @@ onMounted(async () => {
   // Try to set up socket listeners immediately
   const hasSocket = await setupSocketListeners();
   if (!hasSocket) {
-    console.log('[MobileClaude] No socket yet, waiting for remote-connection-ready event');
+    
   }
   
   // Listen for remote connection ready event
@@ -321,11 +321,11 @@ onMounted(async () => {
       socket.off('claude:instances:updated');
       
       socket.on('claude:instances:updated', async (data: any) => {
-        console.log('[MobileClaude] Claude instances updated event received:', data);
+        
         
         // If we have specific instance status update, handle it directly
         if (data && data.instanceId && data.status) {
-          console.log(`[MobileClaude] Instance ${data.instanceId} status changed to ${data.status}`);
+          
           // Update the specific instance status in the store
           claudeStore.updateInstanceStatus(data.instanceId, data.status);
         }
@@ -349,7 +349,7 @@ onMounted(async () => {
               (session as any).dataHandler = session.terminal.onData((data: string) => {
                 session.lastUserInputTime = Date.now();
                 if (services.value && activeInstance.value.status === 'connected') {
-                  console.log('[MobileClaude] Sending input after update:', data.charCodeAt(0));
+                  
                   services.value.claude.send(activeInstance.value.id, data);
                   
                   // Only start refresh for actual character input, not control sequences
@@ -417,7 +417,7 @@ async function loadClaudeInstances() {
   // Check if connected before attempting to load instances
   const socket = (services.value as any)?.getSocket?.() || (services.value as any)?.__socket;
   if (!socket?.connected) {
-    console.log('[MobileClaude] Not connected to remote server, skipping instance load');
+    
     return;
   }
   
@@ -471,7 +471,7 @@ async function loadClaudeInstances() {
               } catch (spawnError: any) {
                 // If instance already exists, that's fine - mark as spawned
                 if (spawnError?.message?.includes('already exists')) {
-                  console.log('[MobileClaude] Instance already exists, marking as spawned');
+                  
                   session.spawned = true;
                 } else {
                   console.error('[MobileClaude] Failed to spawn:', spawnError);
@@ -687,7 +687,7 @@ async function initializeClaudeSession(instance: any) {
     }
     
     // Check if instance is already connected
-    console.log('[MobileClaude] Instance status:', instance.id, instance.status);
+    
     
     if (instance.status === 'connected') {
       terminal.write(`\x1b[32mConnected to ${instance.name}\x1b[0m\r\n`);
@@ -705,7 +705,7 @@ async function initializeClaudeSession(instance: any) {
         } catch (spawnError: any) {
           // If instance already exists, that's fine - it means it's already spawned
           if (spawnError?.message?.includes('already exists')) {
-            console.log('[MobileClaude] Instance already spawned, proceeding to get buffer');
+            
             session.spawned = true;
           } else {
             console.error('[MobileClaude] Failed to spawn:', spawnError);
@@ -714,33 +714,33 @@ async function initializeClaudeSession(instance: any) {
       }
       
       // Get and restore buffer immediately (or after a short delay)
-      console.log('[MobileClaude] Checking buffer restore status:', session.bufferRestored);
+      
       if (!session.bufferRestored) {
-        console.log('[MobileClaude] Setting up buffer fetch...');
+        
         // Small delay to ensure spawn is complete and terminal is ready
         setTimeout(async () => {
           try {
-            console.log('[MobileClaude] Fetching buffer for:', instance.id);
+            
             const buffer = await services.value!.claude.getClaudeBuffer(instance.id);
-            console.log('[MobileClaude] Got buffer for connected instance:', buffer?.length || 0, 'bytes');
+            
             if (buffer && buffer.length > 0) {
               // Write the buffer to the terminal
               terminal.write(buffer);
               session.bufferRestored = true;
               autoScrollIfNeeded(session);
             } else {
-              console.log('[MobileClaude] Buffer was empty or null');
+              
             }
           } catch (error) {
             console.error('[MobileClaude] Failed to get buffer:', error);
           }
         }, 500); // Wait 500ms for terminal to be ready
       } else {
-        console.log('[MobileClaude] Buffer already restored, skipping');
+        
       }
     } else {
       // Instance is disconnected - show message but don't start it
-      console.log('[MobileClaude] Instance is disconnected:', instance.id);
+      
       terminal.write(`\x1b[33m${instance.name} is not running on desktop\x1b[0m\r\n`);
       terminal.write(`\x1b[90mStart it on desktop first to connect from mobile\x1b[0m\r\n\r\n`);
     }
@@ -824,7 +824,7 @@ async function createNewInstance() {
       try {
         const workspaceInfo = await $fetch('/api/workspace/current');
         workspace = workspaceInfo.path || process.env.HOME || '/';
-        console.log('[MobileClaude] Got workspace from server:', workspace);
+        
       } catch (error) {
         console.error('[MobileClaude] Failed to get workspace from server:', error);
         workspace = process.env.HOME || '/';
@@ -942,7 +942,7 @@ async function startClaude(instanceId: string) {
       session.lastUserInputTime = Date.now();
       
       if (services.value && instance.status === 'connected') {
-        console.log('[MobileClaude] Sending input to Claude:', data.charCodeAt(0));
+        
         // Send to Claude
         services.value.claude.send(instance.id, data);
         
@@ -1034,7 +1034,7 @@ async function stopClaude(instanceId: string) {
   // Clear any running continuous refresh for this instance
   const existingInterval = continuousRefreshIntervals.get(instanceId);
   if (existingInterval) {
-    console.log('[MobileClaude] Clearing continuous refresh for stopped instance', instanceId);
+    
     clearInterval(existingInterval);
     continuousRefreshIntervals.delete(instanceId);
   }
@@ -1229,12 +1229,12 @@ function startContinuousRefresh(instanceId: string) {
   // Clear any existing interval first
   const existingInterval = continuousRefreshIntervals.get(instanceId);
   if (existingInterval) {
-    console.log('[MobileClaude] Clearing existing refresh interval for', instanceId);
+    
     clearInterval(existingInterval);
     continuousRefreshIntervals.delete(instanceId);
   }
   
-  console.log('[MobileClaude] Starting continuous refresh for', instanceId);
+  
   
   let refreshCount = 0;
   const maxRefreshes = 1; // 1 second total (10 * 100ms)
@@ -1331,22 +1331,22 @@ watch(activeInstanceId, (newId, oldId) => {
 
 // Cleanup
 onUnmounted(() => {
-  console.log('[MobileClaude] Component unmounting, cleaning up intervals');
+  
   
   // Clear all auto-refresh timeouts
   clearAutoRefresh();
   
   // Clear all continuous refresh intervals - be extra thorough
-  console.log('[MobileClaude] Clearing', continuousRefreshIntervals.size, 'continuous refresh intervals');
+  
   for (const [instanceId, interval] of continuousRefreshIntervals.entries()) {
-    console.log('[MobileClaude] Clearing interval for instance', instanceId);
+    
     clearInterval(interval);
   }
   continuousRefreshIntervals.clear();
   
   // Clear all debounce timers
   for (const [instanceId, timer] of debounceTimers.entries()) {
-    console.log('[MobileClaude] Clearing debounce timer for instance', instanceId);
+    
     clearTimeout(timer);
   }
   debounceTimers.clear();

@@ -65,7 +65,6 @@ export class RemoteSessionManager {
         // Store session
         this.sessions.set(sessionId, session);
         this.socketToSession.set(socket.id, sessionId);
-        console.log(`[SessionManager] Created session for ${deviceName || userId} (${deviceId || 'anonymous'})`);
         return session;
     }
     /**
@@ -166,7 +165,6 @@ export class RemoteSessionManager {
         // Validate token with token store
         const validation = tokenStore.validateConnection(token, deviceId, pairingCode);
         if (!validation.valid) {
-            console.log(`[SessionManager] Authentication failed: ${validation.reason}`);
             return {
                 user: null,
                 error: validation.reason

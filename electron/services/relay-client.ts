@@ -41,7 +41,7 @@ export class RelayClient extends EventEmitter {
       }
       
       // Connect to relay server
-      console.log(`[RelayClient] Connecting to relay: ${this.relayUrl}`);
+      
       this.relaySocket = io(this.relayUrl, {
         auth: {
           role: 'desktop',
@@ -57,7 +57,7 @@ export class RelayClient extends EventEmitter {
       
       // Handle registration
       this.relaySocket.once('registered', (info: RelayInfo) => {
-        console.log(`[RelayClient] Registered with session: ${info.sessionId}`);
+        
         this.relayInfo = info;
         
         // Set up HTTP proxy handlers
@@ -80,12 +80,12 @@ export class RelayClient extends EventEmitter {
       
       // Handle reconnection
       this.relaySocket.on('reconnect', (attemptNumber: number) => {
-        console.log(`[RelayClient] Reconnected after ${attemptNumber} attempts`);
+        
         this.emit('reconnected');
       });
       
       this.relaySocket.on('reconnect_attempt', (attemptNumber: number) => {
-        console.log(`[RelayClient] Reconnection attempt ${attemptNumber}`);
+        
         this.reconnectAttempts = attemptNumber;
       });
       
@@ -96,7 +96,7 @@ export class RelayClient extends EventEmitter {
       
       // Handle disconnect
       this.relaySocket.on('disconnect', (reason: string) => {
-        console.log(`[RelayClient] Disconnected: ${reason}`);
+        
         if (reason === 'io server disconnect') {
           // Server initiated disconnect, don't auto-reconnect
           this.relaySocket?.connect();
@@ -109,14 +109,14 @@ export class RelayClient extends EventEmitter {
     if (!this.relaySocket) return;
     
     // Connect to local Socket.IO server (port 3789, not HTTP port 3000)
-    console.log(`[RelayClient] Connecting to local Socket.IO server on port ${this.socketIoPort}`);
+    
     this.localSocket = io(`http://localhost:${this.socketIoPort}`, {
       transports: ['websocket'],
       reconnection: true
     });
     
     this.localSocket.on('connect', () => {
-      console.log('[RelayClient] Connected to local server');
+      
       
       // Request-response tracking for callback preservation
       const pendingRequests = new Map<string, any>();
@@ -124,11 +124,11 @@ export class RelayClient extends EventEmitter {
       // Handle special request-response pattern from relay
       this.relaySocket!.on('bridge:request', (data: any) => {
         const { requestId, event, args } = data;
-        console.log(`[RelayClient] Relay→Local request: ${event} (${requestId})`);
+        
         
         // Emit to local with callback that sends response back through relay
         this.localSocket!.emit(event, ...args, (response: any) => {
-          console.log(`[RelayClient] Local response for ${event} (${requestId})`);
+          
           this.relaySocket!.emit('bridge:response', {
             requestId,
             response
@@ -141,7 +141,7 @@ export class RelayClient extends EventEmitter {
         // Skip internal events and bridge events
         if (event.startsWith('$') || event.startsWith('relay:') || event.startsWith('bridge:')) return;
         
-        console.log(`[RelayClient] Relay→Local: ${event}`);
+        
         this.localSocket!.emit(event, ...args);
       });
       
@@ -150,7 +150,7 @@ export class RelayClient extends EventEmitter {
         // Skip internal events
         if (event.startsWith('$')) return;
         
-        console.log(`[RelayClient] Local→Relay: ${event}`);
+        
         this.relaySocket!.emit(event, ...args);
       });
     });
@@ -185,7 +185,7 @@ export class RelayClient extends EventEmitter {
   }
   
   disconnect() {
-    console.log('[RelayClient] Disconnecting...');
+    
     this.localSocket?.disconnect();
     this.relaySocket?.disconnect();
     this.relayInfo = null;

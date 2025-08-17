@@ -94,7 +94,7 @@ if (flags.version) {
   const packageJson = JSON.parse(
     fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8')
   );
-  console.log(`Clode Studio v${packageJson.version}`);
+  
   process.exit(0);
 }
 
@@ -110,7 +110,7 @@ if (flags.hybrid) {
 
 // Check if running in a headless environment
 if (!process.env.DISPLAY && process.platform === 'linux' && mode === 'desktop') {
-  console.log('No display detected, switching to headless mode...');
+  
   mode = 'headless';
 }
 
@@ -218,16 +218,16 @@ const passThroughArgs = args.filter(arg =>
 launchArgs.push(...passThroughArgs);
 
 // Display startup message
-console.log(`Starting Clode Studio in ${mode} mode...`);
+
 if (mode === 'hybrid') {
-  console.log('Remote access will be available once the app starts.');
-  console.log('Look for the QR code and connection URLs in the app.');
+  
+  
 }
 if (mode === 'headless') {
-  console.log('Starting in headless mode. No GUI will be shown.');
-  console.log(`Server will be available on port ${env.CLODE_SERVER_PORT || 3789}`);
+  
+  
   if (flags.workspace) {
-    console.log(`Workspace: ${flags.workspace}`);
+    
   }
 }
 

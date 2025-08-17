@@ -366,11 +366,11 @@ const setupClaudeListeners = () => {
   // Remove any existing listeners for this instance
   removeClaudeListeners();
 
-  console.log(`Setting up Claude listeners for instance ${props.instance.id}, terminal ready: ${!!terminal}`);
+  
 
   // Setup output listener
   cleanupOutputListener = window.electronAPI.claude.onOutput(props.instance.id, async (data: string) => {
-    console.log(`Received output for ${props.instance.id}, terminal exists: ${!!terminal}, length: ${data.length}`);
+    
     
     // Wait for terminal if not ready yet
     if (!terminal) {
@@ -431,7 +431,7 @@ const setupClaudeListeners = () => {
 
   // Setup exit listener
   cleanupExitListener = window.electronAPI.claude.onExit(props.instance.id, (code: number | null) => {
-    console.log(`Claude process exited for ${props.instance.id} with code ${code}`);
+    
     if (terminal) {
       terminal.writeln(`\r\n\x1b[33mClaude process exited with code ${code}\x1b[0m`);
       autoScrollIfNeeded();
@@ -442,11 +442,11 @@ const setupClaudeListeners = () => {
   });
 
   listenersSetup = true;
-  console.log(`Claude listeners setup complete for ${props.instance.id}`);
+  
 };
 
 const removeClaudeListeners = () => {
-  console.log(`Removing Claude listeners for ${props.instance.id}, listenersSetup: ${listenersSetup}`);
+  
   if (listenersSetup) {
     // Call cleanup functions
     if (cleanupOutputListener) {
@@ -577,7 +577,7 @@ const startClaude = async () => {
     } : undefined
   );
 
-  console.log(`Claude start result for ${props.instance.id}:`, result);
+  
 
   if (result.success) {
     emit('status-change', 'connected', result.pid);
@@ -729,7 +729,7 @@ const toggleChatInput = () => {
 // Handle chat sent event (no longer needed for input tracking)
 
 onMounted(async () => {
-  console.log(`ClaudeTerminalTab mounted for instance ${props.instance.id}, status: ${currentInstance.value.status}`);
+  
   
   // Initialize command store if not already done
   if (commandsStore.allCommands.length === 0) {
@@ -743,7 +743,7 @@ onMounted(async () => {
     
     // If Claude is already connected on mount, setup listeners after terminal init
     if (currentInstance.value.status === 'connected') {
-      console.log('Claude already connected on mount, setting up listeners');
+      
       setTimeout(() => {
         setupClaudeListeners();
       }, 100);
@@ -833,10 +833,10 @@ let startedByUs = false;
 
 // Watch for external status changes
 watch(() => currentInstance.value.status, async (newStatus, oldStatus) => {
-  console.log(`Status watcher: ${props.instance.id} changed from ${oldStatus} to ${newStatus}, startedByUs: ${startedByUs}`);
+  
   if (oldStatus === 'connected' && newStatus === 'disconnected' && terminal) {
     // Instance was disconnected externally
-    console.log(`Status changed to disconnected, removing listeners`);
+    
     removeClaudeListeners();
     terminal.writeln('\r\n\x1b[33mClaude process disconnected.\x1b[0m');
     startedByUs = false;

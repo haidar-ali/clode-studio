@@ -125,7 +125,7 @@ export const useSourceControlStore = defineStore('source-control', () => {
       } else {
         // Remote mode - ensure workspace is set on server first
         if (repoPath) {
-          console.log('[SourceControl] Setting workspace on server:', repoPath);
+          
           await window.fetch('/api/workspace/set', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -137,7 +137,7 @@ export const useSourceControlStore = defineStore('source-control', () => {
         const response = await window.fetch('/api/git/status');
         const data = await response.json();
         
-        console.log('[SourceControl] Git status response:', data);
+        
         
         if (data.success && data.isRepo) {
           isGitRepository.value = true;

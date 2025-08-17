@@ -154,7 +154,7 @@ export class RemoteServer {
       });
     }
     
-    console.log('[RemoteServer] Updated mainWindow reference and re-registered handlers for existing connections');
+    
   }
   
   async start(): Promise<void> {
@@ -376,7 +376,7 @@ export class RemoteServer {
               socket.disconnect(true);
             }, 100);
             
-            console.log(`[RemoteServer] Disconnected device due to token revocation: ${session.deviceName}`);
+            
           }
         }
       }
@@ -391,7 +391,7 @@ export class RemoteServer {
     // Find the session
     const session = this.sessionManager.getSession(sessionId);
     if (!session) {
-      console.log(`[RemoteServer] Session not found: ${sessionId}`);
+      
       return false;
     }
     
@@ -409,11 +409,11 @@ export class RemoteServer {
         socket.disconnect(true);
       }, 100);
       
-      console.log(`[RemoteServer] Disconnected device: ${session.deviceName} (${session.deviceId})`);
+      
       return true;
     }
     
-    console.log(`[RemoteServer] Socket not found for session: ${sessionId}`);
+    
     return false;
   }
 
@@ -462,7 +462,7 @@ export class RemoteServer {
   broadcastClaudeStatusUpdate(instanceId: string, status: 'connected' | 'disconnected' | 'connecting', pid?: number): void {
     if (!this.io) return;
     
-    console.log(`[RemoteServer] Broadcasting Claude status update for ${instanceId}: ${status}, pid: ${pid}`);
+    
     
     // Broadcast to all connected clients with the status payload
     this.io.emit(RemoteEvent.CLAUDE_INSTANCES_UPDATED, {
@@ -605,7 +605,7 @@ export class RemoteServer {
     // Handle document lifecycle events
     socket.on('lsp:didOpen', async (params: any) => {
       // Forward to desktop LSP
-      console.log('[Server LSP] Document opened:', params.uri);
+      
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
         try {
           await this.mainWindow.webContents.executeJavaScript(`
@@ -672,7 +672,7 @@ export class RemoteServer {
     
     socket.on('lsp:didClose', async (params: any) => {
       // Forward to desktop LSP
-      console.log('[Server LSP] Document closed:', params.uri);
+      
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
         try {
           await this.mainWindow.webContents.executeJavaScript(`

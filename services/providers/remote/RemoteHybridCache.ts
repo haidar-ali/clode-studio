@@ -19,7 +19,7 @@ export class RemoteHybridCache extends RemoteMemoryCache {
     
     // For desktop feature keys, check the server
     if (key.startsWith('desktop:')) {
-      console.log(`[RemoteHybridCache] Checking server for ${key}`);
+      
       
       try {
         const features = await this.desktopFeaturesService.getFeatures();

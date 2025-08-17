@@ -282,7 +282,7 @@ const saveCurrentFile = async () => {
     // Mark tab as clean by setting isDirty to false
     activeTab.value.isDirty = false;
     
-    console.log('File saved successfully:', activeTab.value.path);
+    
   } catch (error) {
     console.error('Failed to save file:', error);
   }

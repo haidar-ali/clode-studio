@@ -261,7 +261,7 @@ const loadWorkspaceFiles = async (workspacePath: string) => {
     
     try {
       if (depth === 0) {
-        console.log('[ResourceSelector] Starting directory walk from:', dir);
+        
       }
       
       let result;
@@ -274,12 +274,12 @@ const loadWorkspaceFiles = async (workspacePath: string) => {
         try {
           // Convert absolute path to relative path for API
           const relativePath = dir.replace(baseDir, '').replace(/^\//, '') || '.';
-          console.log('[ResourceSelector] Fetching files from API, relative path:', relativePath);
+          
           const response = await $fetch('/api/files/list', {
             query: { path: relativePath }
           });
           
-          console.log('[ResourceSelector] API response:', response);
+          
           
           // The API returns { entries: [...], currentPath, workspacePath }
           if (response && response.entries) {
@@ -388,7 +388,7 @@ const filteredKnowledge = computed(() => {
 
 const availableHooks = computed(() => {
   const hooks = hooksStore.hooks || [];
-  console.log('[ResourceSelector] Computing availableHooks, store hooks:', hooks.length);
+  
   if (!Array.isArray(hooks)) return [];
   
   const result = hooks.map(hook => ({
@@ -400,7 +400,7 @@ const availableHooks = computed(() => {
     disabled: hook.disabled
   })).filter(hook => !hook.disabled);
   
-  console.log('[ResourceSelector] Available hooks computed:', result.length);
+  
   return result;
 });
 
@@ -420,7 +420,7 @@ const connectedServers = computed(() => {
 
 const availableCommands = computed(() => {
   const commands = commandsStore.allCommands || [];
-  console.log('[ResourceSelector] Available commands computed:', commands.length);
+  
   return commands;
 });
 
@@ -617,11 +617,11 @@ const initializeData = async () => {
     
     if (exists) {
       // Load all workspace files
-      console.log('[ResourceSelector] Loading files from workspace:', workspace);
+      
       isLoadingFiles.value = true;
       try {
         const files = await loadWorkspaceFiles(workspace);
-        console.log('[ResourceSelector] Loaded files:', files.length);
+        
         
         allFiles.value = files;
       } catch (error) {
@@ -630,7 +630,7 @@ const initializeData = async () => {
         isLoadingFiles.value = false;
       }
     } else {
-      console.log('[ResourceSelector] Workspace does not exist or cannot be checked');
+      
     }
   } else {
     console.warn('ResourceSelector: No workspace path available');
@@ -639,7 +639,7 @@ const initializeData = async () => {
 
 // Load data on mount
 onMounted(async () => {
-  console.log('[ResourceSelector] Mounting component...');
+  
   try {
     // Initialize services first (for desktop mode)
     if (window.electronAPI) {
@@ -665,16 +665,16 @@ onMounted(async () => {
       }
     }
     
-    console.log('[ResourceSelector] Workspace:', workspace);
+    
     
     // Load hooks
-    console.log('[ResourceSelector] Loading hooks, current:', hooksStore.hooks?.length || 0);
+    
     if (!hooksStore.hooks || hooksStore.hooks.length === 0) {
       // Load hooks through store (handles both desktop and remote)
       await hooksStore.loadHooks();
-      console.log('[ResourceSelector] Hooks after load:', hooksStore.hooks?.length || 0);
+      
     } else {
-      console.log('[ResourceSelector] Hooks already loaded:', hooksStore.hooks.length);
+      
     }
     
     // Initialize context search to get files
@@ -689,7 +689,7 @@ onMounted(async () => {
         const response = await $fetch('/api/knowledge/list');
         // Use store's patch method to avoid proxy issues
         knowledgeStore.$patch({ entries: response.entries || [] });
-        console.log('[ResourceSelector] Knowledge loaded from API:', knowledgeStore.entries?.length || 0);
+        
       } catch (error) {
         console.error('[ResourceSelector] Failed to load knowledge from API:', error);
       }
@@ -702,26 +702,26 @@ onMounted(async () => {
     }
     
     // Load MCP servers
-    console.log('[ResourceSelector] Loading MCP servers, current:', mcpStore.servers?.length || 0);
+    
     if (!mcpStore.servers || mcpStore.servers.length === 0) {
       // Load servers through store (handles both desktop and remote)
       await mcpStore.loadServers();
-      console.log('[ResourceSelector] MCP servers after load:', mcpStore.servers?.length || 0);
+      
     } else {
-      console.log('[ResourceSelector] MCP servers already loaded:', mcpStore.servers.length);
+      
     }
     
     // Load commands
-    console.log('[ResourceSelector] Loading commands, current:', commandsStore.allCommands?.length || 0);
+    
     if (!commandsStore.allCommands || commandsStore.allCommands.length === 0) {
       // Load commands through store (handles both desktop and remote)
       if (workspace) {
         await commandsStore.initialize(workspace);
       }
       await commandsStore.loadCommands();
-      console.log('[ResourceSelector] Commands after load:', commandsStore.allCommands?.length || 0);
+      
     } else {
-      console.log('[ResourceSelector] Commands already loaded:', commandsStore.allCommands.length);
+      
     }
   } catch (error) {
     console.error('Error loading resource data:', error);
@@ -765,7 +765,7 @@ watch(() => allFiles.value.length, (newLength) => {
 
 // Debug function to manually check localStorage
 const debugCheckLocalStorage = async () => {
-  console.log('=== Manual localStorage Check ===');
+  
   
   // Check localStorage
   const hooksStr = localStorage.getItem('desktop:hooks:items');
@@ -780,16 +780,16 @@ const debugCheckLocalStorage = async () => {
   
   if (hooksStr) {
     const hooks = JSON.parse(hooksStr);
-    console.log('Hooks data:', hooks);
+    
   }
   
   if (commandsStr) {
     const commands = JSON.parse(commandsStr);
-    console.log('Commands data:', commands);
+    
   }
   
   // Try reloading stores
-  console.log('Reloading stores...');
+  
   await hooksStore.loadHooks();
   await commandsStore.loadCommands();
   

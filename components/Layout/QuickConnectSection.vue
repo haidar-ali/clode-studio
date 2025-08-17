@@ -128,7 +128,7 @@ let tunnelCheckInterval: NodeJS.Timer;
 onMounted(async () => {
   // First try to load existing persisted token
   if (await loadPersistedToken()) {
-    console.log('[QuickConnect] Loaded persisted token');
+    
   } else {
     // Generate new if no persisted token
     await generateConnectionInfo();
@@ -141,7 +141,7 @@ onMounted(async () => {
       if (window.electronAPI?.relay?.getInfo) {
         const relayInfo = await window.electronAPI.relay.getInfo();
         if (relayInfo?.url) {
-          console.log('[QuickConnect] Relay became available, regenerating connection info');
+          
           await generateConnectionInfo();
           return;
         }
@@ -151,7 +151,7 @@ onMounted(async () => {
       if (window.electronAPI?.tunnel?.getInfo) {
         const tunnelInfo = await window.electronAPI.tunnel.getInfo();
         if (tunnelInfo?.url && tunnelInfo.status === 'ready') {
-          console.log('[QuickConnect] Tunnel became available, regenerating connection info');
+          
           await generateConnectionInfo();
         }
       }
@@ -182,31 +182,31 @@ async function generateConnectionInfo() {
     
     // Check relay first (preferred)
     const relayInfo = await window.electronAPI?.relay?.getInfo?.();
-    console.log('[QuickConnect] Relay info:', relayInfo);
+    
     
     if (relayInfo?.url) {
       // Use relay URL if available (subdomain-based now)
       // The relay server will return the subdomain URL
       baseUrl = relayInfo.url;
       tunnelUrl.value = relayInfo.url;
-      console.log('[QuickConnect] Using relay URL (subdomain):', baseUrl);
+      
     } else {
       // Fall back to tunnel info
       const tunnelInfo = await window.electronAPI?.tunnel?.getInfo?.();
-      console.log('[QuickConnect] Tunnel info:', tunnelInfo);
+      
       
       if (tunnelInfo?.url && tunnelInfo.status === 'ready') {
         // Use tunnel URL if available
         baseUrl = tunnelInfo.url;
         tunnelUrl.value = tunnelInfo.url;
-        console.log('[QuickConnect] Using tunnel URL:', baseUrl);
+        
       } else {
         // Fall back to local URL
         const socketUrl = appStatus.serverUrl.value || `http://localhost:3789`;
         // Convert to web UI URL (change port from 3789 to 3000)
         baseUrl = socketUrl.replace(':3789', ':3000');
         tunnelUrl.value = '';
-        console.log('[QuickConnect] Using local URL:', baseUrl);
+        
       }
     }
     
@@ -234,8 +234,8 @@ async function generateConnectionInfo() {
     localUrl.searchParams.set('token', deviceAuth.token);
     localUrl.searchParams.set('pairing', connectionInfo.pairingCode);  // Use same pairing code
     
-    console.log('[QuickConnect] Generated local URL:', localUrl.toString());
-    console.log('[QuickConnect] Previous local URL:', localNetworkUrl.value);
+    
+    
     localNetworkUrl.value = localUrl.toString();
     
     // Store token on server for validation (only in Electron)
@@ -248,14 +248,14 @@ async function generateConnectionInfo() {
           pairingCode: connectionInfo.pairingCode,
           expiresAt: deviceAuth.expiresAt
         });
-        console.log('[QuickConnect] Token stored for validation');
+        
       } catch (error) {
         console.error('[QuickConnect] Failed to store token:', error);
       }
     } else {
       // In browser mode, we can't store tokens server-side
       // The remote server will need to handle this differently
-      console.log('[QuickConnect] Running in browser mode - token validation handled differently');
+      
     }
     
     // Persist token data to workspace for reuse
@@ -269,7 +269,7 @@ async function generateConnectionInfo() {
           connectionUrl: connectionInfo.url,
           expiresAt: deviceAuth.expiresAt
         });
-        console.log('[QuickConnect] Token persisted to workspace');
+        
       } catch (error) {
         console.error('[QuickConnect] Failed to persist token:', error);
       }

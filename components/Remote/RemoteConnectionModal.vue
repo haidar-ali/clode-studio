@@ -81,9 +81,9 @@ const debugInfo = ref({
 const hasCredentials = computed(() => !!(deviceId.value && deviceToken.value));
 
 async function attemptConnection() {
-  console.log('[RemoteConnection] attemptConnection called');
+  
   if (!hasCredentials.value) {
-    console.log('[RemoteConnection] No credentials, aborting');
+    
     return;
   }
   
@@ -114,7 +114,7 @@ async function attemptConnection() {
     const maxAttempts = 20;
     
     while (attempts < maxAttempts && connecting.value && !connected.value && !connectionError.value) {
-      console.log(`[RemoteConnection] Waiting for connection... attempt ${attempts + 1}/${maxAttempts}`);
+      
       await new Promise(resolve => setTimeout(resolve, 500));
       attempts++;
     }
@@ -126,12 +126,12 @@ async function attemptConnection() {
     });
     
     if (connected.value) {
-      console.log('[RemoteConnection] Connected! Emitting event');
+      
       emit('connected');
     } else if (connectionError.value) {
-      console.log('[RemoteConnection] Connection failed with error:', connectionError.value);
+      
     } else {
-      console.log('[RemoteConnection] Connection timed out');
+      
       validationError.value = 'Connection timed out. Please try again.';
     }
   } catch (err) {
@@ -207,7 +207,7 @@ onMounted(() => {
   deviceToken.value = extractedToken;
   pairingCode.value = extractedPairing || '';
   
-  console.log('[RemoteConnection] URL validated successfully');
+  
   console.log('[RemoteConnection] Credentials:', {
     deviceId: deviceId.value,
     hasToken: !!deviceToken.value,
@@ -217,7 +217,7 @@ onMounted(() => {
   
   // Auto-connect if credentials exist
   if (hasCredentials.value) {
-    console.log('[RemoteConnection] Auto-connecting...');
+    
     // Use nextTick to ensure DOM is updated
     nextTick(() => {
       attemptConnection();

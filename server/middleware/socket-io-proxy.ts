@@ -15,7 +15,7 @@ export default defineEventHandler(async (event) => {
   const url = event.node.req.url;
   const targetUrl = `http://localhost:3789${url}`;
 
-  console.log('[Socket.IO Proxy] Proxying:', event.node.req.method, url);
+  
 
   try {
     // Read body for POST requests

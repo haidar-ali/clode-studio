@@ -32,7 +32,6 @@ export class HttpHandler {
             // Only log non-asset requests to reduce noise
             const isAsset = url.includes('/_nuxt/') || url.includes('/node_modules/');
             if (!isAsset) {
-                console.log(`[HttpHandler] Proxying ${method} ${url}`);
             }
             // Prepare request options
             const options = {

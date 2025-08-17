@@ -96,7 +96,7 @@ export class RemoteServiceProvider implements IServiceProvider {
     // Check if we already have a connection from remoteConnection singleton
     const existingSocket = remoteConnection.getSocket();
     if (existingSocket && existingSocket.connected) {
-      console.log('[RemoteServiceProvider] Using existing socket connection');
+      
       this.socket = existingSocket;
       this.setupSocketHandlers();
       // Mark connectionManager as connected since we're reusing an existing connection
@@ -108,12 +108,12 @@ export class RemoteServiceProvider implements IServiceProvider {
     // If no existing connection and autoConnect is enabled, try to connect
     if (this.config.autoConnect !== false) {
       // For remote mode, don't wait here - let the event system handle it
-      console.log('[RemoteServiceProvider] Deferring connection - will wait for remote-connection-ready event');
+      
       
       // Quick check if connection is already available
       const socket = remoteConnection.getSocket();
       if (socket && socket.connected) {
-        console.log('[RemoteServiceProvider] Connection already available');
+        
         this.socket = socket;
         this.setupSocketHandlers();
         (connectionManager as any).currentState = ConnectionState.CONNECTED;
@@ -122,7 +122,7 @@ export class RemoteServiceProvider implements IServiceProvider {
       }
       
       // Otherwise, we'll wait for the remote-connection-ready event to call updateSocket()
-      console.log('[RemoteServiceProvider] No Socket.IO connection yet - services will use API fallback until connected');
+      
     }
   }
   
@@ -141,7 +141,7 @@ export class RemoteServiceProvider implements IServiceProvider {
     if (sharedSocket && sharedSocket.connected) {
       // Update even if we already have a socket (it might be disconnected)
       if (!this.socket || !this.socket.connected) {
-        console.log('[RemoteServiceProvider] Updating with new socket connection');
+        
         this.socket = sharedSocket;
         this.setupSocketHandlers();
         
@@ -149,13 +149,13 @@ export class RemoteServiceProvider implements IServiceProvider {
         (connectionManager as any).currentState = ConnectionState.CONNECTED;
         (connectionManager as any).socket = sharedSocket;
         
-        console.log('[RemoteServiceProvider] Socket updated successfully');
+        
         // The services already use () => this.socket, so they'll get the updated socket automatically
       } else {
-        console.log('[RemoteServiceProvider] Socket already connected, no update needed');
+        
       }
     } else {
-      console.log('[RemoteServiceProvider] No connected socket available for update');
+      
     }
   }
   

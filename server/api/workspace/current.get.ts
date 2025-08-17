@@ -4,7 +4,7 @@ export default defineEventHandler(async (event) => {
     const workspacePath = global.__currentWorkspace || null;
     const workspaceName = workspacePath ? workspacePath.split('/').pop() : null;
     
-    // console.log('[API] Getting current workspace:', workspacePath);
+    // 
     
     return {
       path: workspacePath,

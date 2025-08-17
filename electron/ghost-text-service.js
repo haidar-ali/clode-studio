@@ -23,7 +23,7 @@ class GhostTextService {
       const claudeInfo = await ClaudeDetector.detectClaude();
       if (claudeInfo && claudeInfo.path) {
         this.claudePath = claudeInfo.path;
-        console.log('[GhostTextService] Using Claude at:', this.claudePath);
+        
       } else {
         console.error('[GhostTextService] Claude not found');
         this.isAvailable = false;

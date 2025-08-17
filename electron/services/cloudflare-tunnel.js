@@ -28,7 +28,6 @@ export class CloudflareTunnel {
             return this.getInfo();
         }
         try {
-            console.log('🚀 Starting Cloudflare tunnel...');
             this.updateStatus('starting');
             // Use the cloudflared binary from npm package
             this.process = spawn(cloudflareBin, [
@@ -53,13 +52,11 @@ export class CloudflareTunnel {
                         clearTimeout(timeout);
                         this.url = urlMatch[0];
                         this.updateStatus('ready');
-                        console.log('✅ Tunnel ready:', this.url);
                         resolve(this.getInfo());
                     }
                 };
                 this.process.stdout?.on('data', (data) => {
                     const output = data.toString();
-                    console.log('[Cloudflare] ', output);
                     checkForUrl(data);
                 });
                 this.process.stderr?.on('data', (data) => {
@@ -74,7 +71,6 @@ export class CloudflareTunnel {
                 });
                 this.process.on('exit', (code, signal) => {
                     clearTimeout(timeout);
-                    console.log(`🔌 Tunnel process exited: code=${code}, signal=${signal}`);
                     this.cleanup();
                     if (code !== 0 && this.status !== 'stopped') {
                         const error = `Process exited with code ${code}`;
@@ -93,7 +89,6 @@ export class CloudflareTunnel {
     }
     stop() {
         if (this.process) {
-            console.log('🔌 Stopping Cloudflare tunnel...');
             this.process.kill('SIGTERM');
             // Force kill after 5 seconds
             setTimeout(() => {

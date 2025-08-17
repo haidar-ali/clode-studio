@@ -46,7 +46,7 @@ function getLatestModTime(dir, extensions = ['.vue', '.ts', '.js', '.css']) {
 
 // Check if output exists
 if (!fs.existsSync(OUTPUT_FILE)) {
-  console.log('Build needed: No output found');
+  
   process.exit(1); // Build needed
 }
 
@@ -68,9 +68,9 @@ for (const source of SOURCE_INDICATORS) {
 
 // Compare timestamps
 if (latestSourceTime > outputTime) {
-  console.log('Build needed: Source files have changed');
+  
   process.exit(1); // Build needed
 } else {
-  console.log('Build up to date: Using existing build');
+  
   process.exit(0); // Build not needed
 }

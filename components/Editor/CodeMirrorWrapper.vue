@@ -40,7 +40,7 @@ import KnowledgeMetadataBar from '~/components/Knowledge/KnowledgeMetadataBar.vu
 const editorStore = useEditorStore();
 const autocompleteStore = useAutocompleteStore();
 const { getLanguageSupport, getLanguageName } = useCodeMirrorLanguages();
-console.log('[LSP-8] CodeMirrorWrapper setting up LSP composables');
+
 const { createLSPCompletionSource } = useLSPBridge();
 const { createGhostTextExtension } = useGhostText();
 const { createLSPHoverTooltip } = useLSPHover();
@@ -158,7 +158,7 @@ const createEnhancedLSPCompletionSource = () => {
 
 // Create editor extensions based on file type
 const createEditorExtensions = (filename?: string): any[] => {
-  console.log('[LSP-9] Creating editor extensions for file:', filename);
+  
   const extensions: any[] = [
     // Basic editor features (replacing basicSetup but without default autocompletion)
     lineNumbers(),

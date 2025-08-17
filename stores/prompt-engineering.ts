@@ -521,11 +521,11 @@ Output Format: ${agent.outputFormat}
     
     // In desktop mode, we need projectPath
     if (window.electronAPI && !tasksStore.projectPath) {
-      console.log('[PromptEngineering] Skipping template load - no projectPath in desktop mode');
+      
       return;
     }
 
-    console.log('[PromptEngineering] Loading templates, remote mode:', !window.electronAPI);
+    
 
     try {
       const templatesPath = '.claude/prompts';
@@ -537,11 +537,11 @@ Output Format: ${agent.outputFormat}
         result = await window.electronAPI.fs.readDir(fullPath);
       } else {
         // Remote mode - use API (server will use global.__currentWorkspace)
-        console.log('[PromptEngineering] Loading templates from API:', templatesPath);
+        
         result = await $fetch('/api/files/readdir', {
           query: { path: templatesPath }
         });
-        console.log('[PromptEngineering] API result:', result);
+        
       }
 
       if (result.success && result.files) {
@@ -590,11 +590,11 @@ Output Format: ${agent.outputFormat}
     
     // In desktop mode, we need projectPath
     if (window.electronAPI && !tasksStore.projectPath) {
-      console.log('[PromptEngineering] Skipping template save - no projectPath in desktop mode');
+      
       return;
     }
 
-    console.log('[PromptEngineering] Saving template:', template.id, 'remote mode:', !window.electronAPI);
+    
 
     try {
       const templatesPath = '.claude/prompts';
@@ -609,7 +609,7 @@ Output Format: ${agent.outputFormat}
         await window.electronAPI.fs.writeFile(filePath, content);
       } else {
         // Remote mode - use API (server will use global.__currentWorkspace)
-        console.log('[PromptEngineering] Ensuring directory:', templatesPath);
+        
         // Ensure directory exists
         await $fetch('/api/files/ensuredir', {
           method: 'POST',
@@ -619,12 +619,12 @@ Output Format: ${agent.outputFormat}
         const filePath = `${templatesPath}/${template.id}.json`;
         const content = JSON.stringify(template, null, 2);
 
-        console.log('[PromptEngineering] Writing file:', filePath);
+        
         await $fetch('/api/files/write', {
           method: 'POST',
           body: { path: filePath, content }
         });
-        console.log('[PromptEngineering] Template saved successfully');
+        
       }
     } catch (error) {
       console.error('Failed to save template:', error);

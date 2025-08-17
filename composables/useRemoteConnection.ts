@@ -28,7 +28,7 @@ export function useRemoteConnection() {
     // Check if we already have a connection in the singleton
     const existingSocket = remoteConnection.getSocket();
     if (existingSocket && existingSocket.connected) {
-      console.log('[useRemoteConnection] Reusing existing socket connection');
+      
       socket.value = existingSocket;
       connected.value = true;
       connecting.value = false;
@@ -36,7 +36,7 @@ export function useRemoteConnection() {
     }
     
     if (connecting.value || connected.value) {
-      console.log('[useRemoteConnection] Already connecting or connected');
+      
       return;
     }
     
@@ -75,18 +75,18 @@ export function useRemoteConnection() {
           // Subdomain relay mode - extract session and use same origin
           const sessionId = hostParts[0].toUpperCase();
           serverUrl = window.location.origin;
-          console.log('[useRemoteConnection] Subdomain relay mode, session:', sessionId, 'origin:', serverUrl);
+          
           // Store session ID for auth
           (options as any).sessionId = sessionId;
         } else if (isTunnel || port === '3000') {
           // Use the same origin - Socket.IO is now on the same port via Nitro/proxy
           serverUrl = window.location.origin;
-          console.log('[useRemoteConnection] Tunnel/proxy detected, using origin:', serverUrl);
+          
         } else {
           // Legacy: Direct connection on local network - use port 3789
           // This is for backward compatibility with existing setups
           serverUrl = `${protocol}//${hostname}:3789`;
-          console.log('[useRemoteConnection] Local network mode, using port 3789:', serverUrl);
+          
         }
       }
       
@@ -120,14 +120,14 @@ export function useRemoteConnection() {
       socket.value.on('connect', async () => {
         connected.value = true;
         connecting.value = false;
-        console.log('[useRemoteConnection] Connected to relay');
+        
         
         // For relay connections, immediately request workspace after connecting
         if ((options as any).sessionId) {
-          console.log('[useRemoteConnection] Relay connection detected, fetching workspace');
+          
           try {
             const workspace = await request('workspace:get', {});
-            console.log('[useRemoteConnection] Received workspace:', workspace);
+            
             
             if (workspace?.path) {
               // Store in window for immediate access
@@ -143,7 +143,7 @@ export function useRemoteConnection() {
                   method: 'POST',
                   body: { workspacePath: workspace.path }
                 });
-                console.log('[useRemoteConnection] Workspace synced to server:', workspace.path);
+                
               } catch (error) {
                 console.error('[useRemoteConnection] Failed to sync workspace to server:', error);
               }
@@ -155,7 +155,7 @@ export function useRemoteConnection() {
       });
       
       socket.value.on('connection:ready', async (data) => {
-        console.log('[useRemoteConnection] Connection ready, fetching workspace');
+        
         
         // Check if socket still exists before making request
         if (!socket.value || !connected.value) {
@@ -166,7 +166,7 @@ export function useRemoteConnection() {
         // Request workspace information from desktop
         try {
           const workspace = await request('workspace:get', {});
-          console.log('[useRemoteConnection] Received workspace:', workspace);
+          
           
           // Store workspace info in a way components can access
           if (workspace?.path) {
@@ -183,7 +183,7 @@ export function useRemoteConnection() {
                 method: 'POST',
                 body: { workspacePath: workspace.path }
               });
-              console.log('[useRemoteConnection] Workspace synced to server:', workspace.path);
+              
             } catch (error) {
               console.error('[useRemoteConnection] Failed to sync workspace to server:', error);
             }
@@ -195,12 +195,12 @@ export function useRemoteConnection() {
       
       socket.value.on('disconnect', () => {
         connected.value = false;
-        console.log('Disconnected from remote server');
+        
       });
       
       // Handle server-initiated disconnection
       socket.value.on('server:disconnected', (data: { reason: string; message: string }) => {
-        console.log('Server disconnected:', data);
+        
         error.value = data.message || 'Disconnected by server';
         
         // Show alert to user

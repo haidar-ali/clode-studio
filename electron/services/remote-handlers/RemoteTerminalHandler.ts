@@ -84,9 +84,9 @@ export class RemoteTerminalHandler {
   ): Promise<void> {
     try {
       // Check session and permissions
-      console.log('[RemoteTerminalHandler] Creating terminal, socket.id:', socket.id);
+      
       const session = this.sessionManager.getSessionBySocket(socket.id);
-      console.log('[RemoteTerminalHandler] Session found:', !!session, session?.id);
+      
       
       if (!session) {
         console.error('[RemoteTerminalHandler] No session found for socket:', socket.id);
@@ -117,7 +117,7 @@ export class RemoteTerminalHandler {
                               (global as any).__currentWorkspace || 
                               process.env.HOME;
       
-      console.log('[RemoteTerminalHandler] Creating terminal with cwd:', workingDirectory);
+      
       
       const termPty = pty.spawn(shell, [], {
         name: 'xterm-256color',
@@ -444,9 +444,9 @@ export class RemoteTerminalHandler {
     callback: (response: RemoteResponse<any>) => void
   ): Promise<void> {
     try {
-      console.log('[RemoteTerminalHandler] Listing terminals, socket.id:', socket.id);
+      
       const session = this.sessionManager.getSessionBySocket(socket.id);
-      console.log('[RemoteTerminalHandler] Session found for list:', !!session, session?.id);
+      
       
       if (!session) {
         console.error('[RemoteTerminalHandler] No session found for list, socket:', socket.id);

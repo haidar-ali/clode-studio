@@ -19,9 +19,9 @@ export default defineEventHandler(async (event) => {
     const fullPath = path.join(workspacePath, dirPath);
     
     // Debug logging
-    console.log('[API] /files/readdir - workspace:', workspacePath);
-    console.log('[API] /files/readdir - dirPath:', dirPath);
-    console.log('[API] /files/readdir - fullPath:', fullPath);
+    
+    
+    
     
     // Security check - ensure we're not going outside workspace
     const normalizedPath = path.normalize(fullPath);

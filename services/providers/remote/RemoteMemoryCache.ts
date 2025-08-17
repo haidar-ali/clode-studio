@@ -39,22 +39,22 @@ export class RemoteMemoryCache implements IPerformanceCache {
     };
     
     this.storage.set(key, entry);
-    console.log(`[RemoteMemoryCache] Cached ${key}, size: ${entry.size} bytes`);
+    
   }
   
   async get<T = any>(key: string): Promise<T | null> {
-    console.log(`[RemoteMemoryCache] Getting ${key}, storage size: ${this.storage.size}`);
+    
     const entry = this.storage.get(key);
     
     if (!entry) {
-      console.log(`[RemoteMemoryCache] Cache miss for ${key}`);
+      
       this.totalMisses++;
       return null;
     }
     
     // Check if expired
     if (Date.now() - entry.cachedAt > entry.ttl) {
-      console.log(`[RemoteMemoryCache] Cache expired for ${key}`);
+      
       this.storage.delete(key);
       this.totalMisses++;
       return null;
@@ -62,7 +62,7 @@ export class RemoteMemoryCache implements IPerformanceCache {
     
     entry.hits++;
     this.totalHits++;
-    console.log(`[RemoteMemoryCache] Cache hit for ${key}`);
+    
     return entry.value as T;
   }
   
