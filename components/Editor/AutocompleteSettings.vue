@@ -235,9 +235,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { useAutocompleteStore } from '~/stores/autocomplete';
 import LSPStatus from './LSPStatus.vue';
+
+const props = defineProps<{
+  isOpen?: boolean;
+}>();
 
 const autocompleteStore = useAutocompleteStore();
 
@@ -245,6 +249,14 @@ const autocompleteStore = useAutocompleteStore();
 const settings = ref(JSON.parse(JSON.stringify(autocompleteStore.settings)));
 const metrics = computed(() => autocompleteStore.metrics);
 const newPattern = ref('');
+
+// Refresh settings when modal opens
+watch(() => props.isOpen, (isOpen) => {
+  if (isOpen) {
+    // Get fresh settings from store when modal opens
+    settings.value = JSON.parse(JSON.stringify(autocompleteStore.settings));
+  }
+}, { immediate: true });
 
 // Update settings in store
 const updateSettings = () => {

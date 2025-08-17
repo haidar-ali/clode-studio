@@ -79,6 +79,9 @@ async function onWorkspaceReady(workspace: string) {
     // Now proceed with normal workspace setup
     await workspaceManager.changeWorkspace(workspace);
     
+    // Initialize autocomplete settings from storage
+    await autocompleteStore.init();
+    
     // Mark as ready
     workspaceReady.value = true;
   } catch (error) {

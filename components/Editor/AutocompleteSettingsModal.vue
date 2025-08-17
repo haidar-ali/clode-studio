@@ -10,7 +10,7 @@
             </button>
           </div>
           <div class="modal-content">
-            <AutocompleteSettings />
+            <AutocompleteSettings :is-open="isOpen" />
           </div>
         </div>
       </div>
