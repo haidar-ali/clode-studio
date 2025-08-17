@@ -13,10 +13,15 @@ export default defineNuxtConfig({
     experimental: {
       websocket: true // Enable WebSocket support for Socket.IO integration
     },
-    // Disable server bundle for Electron SPA to prevent SSR build hanging
+    // Force static generation without SSR
     preset: 'static',
+    static: true,
     prerender: {
-      crawlLinks: false
+      crawlLinks: false,
+      routes: ['/']
+    },
+    output: {
+      publicDir: '.output/public'
     },
     devProxy: {
       '/socket.io': {
