@@ -7,7 +7,7 @@
   "main": "electron/main.js",
   "type": "module",
   "scripts": {
-    "build": "nuxt build",
+    "build": "NODE_OPTIONS=\"--max-old-space-size=4096\" nuxt build",
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
@@ -16,7 +16,8 @@
     "electron:preview": "concurrently \"nuxt preview\" \"wait-on http://localhost:3000 && electron .\"",
     "electron:build": "nuxt build && npm run electron:preview",
     "electron:remote": "node scripts/check-build-needed.js && npm run electron:preview || npm run electron:build",
-    "electron:headless": "npm run electron:compile && nuxt build && CLODE_MODE=headless concurrently \"nuxt preview\" \"wait-on http://localhost:3000 && electron .\"",
+    "electron:headless": "npm run electron:compile && NODE_OPTIONS=\"--max-old-space-size=4096\" nuxt generate && CLODE_MODE=headless concurrently \"nuxt preview\" \"wait-on http://localhost:3000 && electron .\"",
+    "electron:headless:server": "npm run electron:compile && NODE_OPTIONS=\"--max-old-space-size=6144\" nuxt generate --preset=static && CLODE_MODE=headless concurrently \"nuxt preview\" \"wait-on http://localhost:3000 && electron .\"",
     "electron:compile": "tsc -p electron/tsconfig.json && tsc -p electron/tsconfig.preload.json",
     "dist": "npm run build && npm run electron:compile && electron-builder",
     "dist:all": "npm run build && npm run electron:compile && electron-builder -mwl",

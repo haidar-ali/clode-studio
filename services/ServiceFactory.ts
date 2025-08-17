@@ -15,14 +15,19 @@ export class ServiceFactory {
    * Get the current app mode from environment or config
    */
   static detectMode(): AppMode {
+    // Guard against SSR/build-time execution
+    if (typeof window === 'undefined') {
+      return AppMode.DESKTOP; // Default for build time
+    }
+    
     // Check for mode override in environment
-    const envMode = import.meta.env.VITE_APP_MODE || process.env.APP_MODE;
+    const envMode = import.meta.env?.VITE_APP_MODE;
     if (envMode && Object.values(AppMode).includes(envMode as AppMode)) {
       return envMode as AppMode;
     }
     
     // Check if running in Electron
-    if (typeof window !== 'undefined' && window.electronAPI) {
+    if (typeof window !== 'undefined' && (window as any).electronAPI) {
       // Check for server/hybrid mode flags
       // For now, default to desktop mode
       // In future phases, we'll check for server components

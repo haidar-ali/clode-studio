@@ -13,6 +13,11 @@ export default defineNuxtConfig({
     experimental: {
       websocket: true // Enable WebSocket support for Socket.IO integration
     },
+    // Disable server bundle for Electron SPA to prevent SSR build hanging
+    preset: 'static',
+    prerender: {
+      crawlLinks: false
+    },
     devProxy: {
       '/socket.io': {
         target: 'http://localhost:3789',
@@ -61,13 +66,34 @@ export default defineNuxtConfig({
   },
   vite: {
     optimizeDeps: {
-      include: ['naive-ui', 'vueuc', 'date-fns-tz/formatInTimeZone', '@iconify/vue']
+      include: ['naive-ui', 'vueuc', 'date-fns-tz/formatInTimeZone', '@iconify/vue'],
+      exclude: ['electron']
     },
     define: {
       global: 'globalThis'
     },
     worker: {
       format: 'es'
+    },
+    build: {
+      chunkSizeWarningLimit: 1000,
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            'codemirror': ['codemirror', '@codemirror/state', '@codemirror/view'],
+            'codemirror-lang': [
+              '@codemirror/lang-javascript',
+              '@codemirror/lang-python',
+              '@codemirror/lang-html',
+              '@codemirror/lang-css',
+              '@codemirror/lang-json',
+              '@codemirror/lang-markdown'
+            ],
+            'ui-libs': ['naive-ui', 'vue', 'vue-router'],
+            'utils': ['date-fns-tz', 'marked']
+          }
+        }
+      }
     },
     server: {
       fs: {
