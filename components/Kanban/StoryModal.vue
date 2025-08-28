@@ -255,6 +255,7 @@ interface Story {
   tags?: string[];
   storyPoints?: number;
   timeEstimate?: string;
+  resources?: ResourceReference[];
 }
 
 interface Task {
@@ -301,13 +302,33 @@ const hasAcceptanceCriteria = computed(() => {
   return acceptanceCriteriaText.value.trim().length > 0;
 });
 
+// Define resetForm before using it in watchers
+const resetForm = () => {
+  form.value = {
+    title: '',
+    userStory: '',
+    description: '',
+    priority: 'normal',
+    status: 'backlog',
+    acceptanceCriteria: [],
+    epicId: props.parentEpic?.id || '',
+    dependencies: [],
+    tags: [],
+    storyPoints: undefined,
+    timeEstimate: ''
+  };
+  acceptanceCriteriaText.value = '';
+  newTag.value = '';
+};
+
 // Watch for story prop changes to populate form
 watch(() => props.story, (story) => {
   if (story) {
     form.value = {
       ...story,
       tags: story.tags || [],
-      dependencies: story.dependencies || []
+      dependencies: story.dependencies || [],
+      resources: story.resources || []
     };
     acceptanceCriteriaText.value = story.acceptanceCriteria.join('\n');
   } else {
@@ -329,24 +350,6 @@ watch(() => props.isOpen, (isOpen) => {
   }
 });
 
-const resetForm = () => {
-  form.value = {
-    title: '',
-    userStory: '',
-    description: '',
-    priority: 'normal',
-    status: 'backlog',
-    acceptanceCriteria: [],
-    epicId: props.parentEpic?.id || '',
-    dependencies: [],
-    tags: [],
-    storyPoints: undefined,
-    timeEstimate: ''
-  };
-  acceptanceCriteriaText.value = '';
-  newTag.value = '';
-};
-
 const closeModal = () => {
   emit('close');
 };
@@ -363,7 +366,9 @@ const saveStory = () => {
   
   const story: Story = {
     ...form.value,
-    acceptanceCriteria: criteria
+    acceptanceCriteria: criteria,
+    // Preserve the ID if editing
+    id: props.story?.id || form.value.id
   };
   
   emit('save', story);
@@ -691,6 +696,87 @@ const getTaskStatusIcon = (status: string) => {
 .status-pending {
   background: rgba(133, 133, 133, 0.2);
   color: #858585;
+}
+
+.resources-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.add-resource-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: #3e3e42;
+  border: 1px dashed #6c6c6c;
+  border-radius: 4px;
+  color: #cccccc;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s;
+  align-self: flex-start;
+}
+
+.add-resource-button:hover {
+  background: #4e4e52;
+  border-style: solid;
+}
+
+.resource-selector-container {
+  background: #252526;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  padding: 12px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.resources-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.resource-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #252526;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.resource-name {
+  flex: 1;
+  color: #d4d4d4;
+}
+
+.resource-type {
+  color: #858585;
+  font-size: 11px;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  background: #3e3e42;
+  border-radius: 3px;
+}
+
+.remove-resource {
+  background: none;
+  border: none;
+  color: #858585;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 3px;
+  transition: all 0.2s;
+}
+
+.remove-resource:hover {
+  background: #f14c4c33;
+  color: #f14c4c;
 }
 
 .form-actions {

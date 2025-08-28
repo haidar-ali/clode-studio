@@ -7,17 +7,32 @@ export const useTasksFileWatcher = () => {
   const chatStore = useChatStore();
   
   const isWatching = ref(false);
-  const tasksFilePath = computed(() => {
+  const watchedFiles = ref<string[]>([]);
+  
+  // Paths for new JSON storage
+  const jsonPaths = computed(() => {
     if (!chatStore.workingDirectory) return null;
-    return `${chatStore.workingDirectory}/TASKS.md`;
+    return {
+      epics: `${chatStore.workingDirectory}/.clode/project/epics.json`,
+      stories: `${chatStore.workingDirectory}/.clode/project/stories.json`,
+      tasks: `${chatStore.workingDirectory}/.clode/project/tasks.json`,
+      tasksMarkdown: `${chatStore.workingDirectory}/TASKS.md`
+    };
   });
   
   // Debounce timer
   let debounceTimer: NodeJS.Timeout | null = null;
   
-  // Handle TASKS.md file changes with debouncing
-  const handleTasksFileChange = async (data: { path: string; content: string }) => {
-    if (!tasksFilePath.value || data.path !== tasksFilePath.value) return;
+  // Handle JSON file changes with debouncing
+  const handleFileChange = async (data: { path: string; content: string }) => {
+    if (!jsonPaths.value) return;
+    
+    // Only handle JSON file changes (not TASKS.md which is just a reference)
+    const isJsonFile = Object.values(jsonPaths.value).some(p => 
+      p !== jsonPaths.value.tasksMarkdown && data.path === p
+    );
+    
+    if (!isJsonFile) return;
     
     // Clear existing timer
     if (debounceTimer) {
@@ -26,65 +41,91 @@ export const useTasksFileWatcher = () => {
     
     // Set new timer to debounce rapid changes
     debounceTimer = setTimeout(async () => {
-      
+      console.log('[FileWatcher] JSON file changed:', data.path);
       
       try {
-        // Replace all tasks with the content from TASKS.md
-        const imported = tasksStore.importTasksFromFile(data.content);
+        // Skip reload if we just saved (within 1 second) to avoid overwriting in-memory changes
+        if (tasksStore.lastSaveTime) {
+          const timeSinceLastSave = Date.now() - tasksStore.lastSaveTime.getTime();
+          if (timeSinceLastSave < 1000) {
+            console.log('[FileWatcher] Skipping reload - just saved', timeSinceLastSave, 'ms ago');
+            return;
+          }
+        }
         
+        // Reload all data from JSON storage
+        await tasksStore.loadTasksFromProject();
         
         // Update last synced time
         tasksStore.lastSyncedWithClaude = new Date();
         
       } catch (error) {
-        console.error('Failed to parse TASKS.md:', error);
+        console.error('Failed to reload from JSON storage:', error);
       }
     }, 500); // 500ms debounce
   };
   
-  // Start watching TASKS.md
+  // Start watching JSON files
   const startWatching = async () => {
-    if (!tasksFilePath.value || isWatching.value) return;
+    if (!jsonPaths.value || isWatching.value) return;
     
     try {
-      // Check if TASKS.md exists
-      const result = await window.electronAPI.fs.readFile(tasksFilePath.value);
-      if (result.success) {
-        // Watch the file
-        await window.electronAPI.fs.watchFile(tasksFilePath.value);
-        isWatching.value = true;
-        
-        
-        // Initial import
-        handleTasksFileChange({ path: tasksFilePath.value, content: result.content });
-      } else {
-        // Create initial TASKS.md
-        await tasksStore.updateTasksMarkdown();
-        // Then watch it
-        await window.electronAPI.fs.watchFile(tasksFilePath.value);
-        isWatching.value = true;
+      // Initialize storage and ensure directories exist
+      await tasksStore.setProjectPath(chatStore.workingDirectory!);
+      
+      // Watch all JSON files
+      const filesToWatch = [
+        jsonPaths.value.epics,
+        jsonPaths.value.stories,
+        jsonPaths.value.tasks
+      ];
+      
+      for (const filePath of filesToWatch) {
+        try {
+          await window.electronAPI.fs.watchFile(filePath);
+          watchedFiles.value.push(filePath);
+          console.log('[FileWatcher] Watching file:', filePath);
+        } catch (error) {
+          console.error(`Failed to watch ${filePath}:`, error);
+        }
       }
+      
+      isWatching.value = watchedFiles.value.length > 0;
+      
+      // Initial load
+      await tasksStore.loadTasksFromProject();
+      
     } catch (error) {
-      console.error('Failed to start watching TASKS.md:', error);
+      console.error('Failed to start watching JSON files:', error);
     }
   };
   
   // Stop watching
   const stopWatching = async () => {
-    if (!tasksFilePath.value || !isWatching.value) return;
+    if (!isWatching.value) return;
     
     try {
-      await window.electronAPI.fs.unwatchFile(tasksFilePath.value);
+      // Unwatch all files
+      for (const filePath of watchedFiles.value) {
+        try {
+          await window.electronAPI.fs.unwatchFile(filePath);
+          console.log('[FileWatcher] Stopped watching:', filePath);
+        } catch (error) {
+          console.error(`Failed to unwatch ${filePath}:`, error);
+        }
+      }
+      
+      watchedFiles.value = [];
       isWatching.value = false;
       
     } catch (error) {
-      console.error('Failed to stop watching TASKS.md:', error);
+      console.error('Failed to stop watching files:', error);
     }
   };
   
   onMounted(() => {
     // Listen for file changes
-    window.electronAPI.fs.onFileChanged(handleTasksFileChange);
+    window.electronAPI.fs.onFileChanged(handleFileChange);
     
     // Start watching if we have a working directory
     if (chatStore.workingDirectory) {

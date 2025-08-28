@@ -95,6 +95,7 @@
             @delete-task="deleteTask"
             @drop-story="onStoryDrop"
             @drop-task="onTaskDrop"
+            @create-story="addNewStory"
           />
         </div>
         
@@ -105,6 +106,8 @@
             @edit-task="editTask"
             @delete-task="deleteTask"
             @drop-task="onTaskDrop"
+            @convert-to-story="convertTaskToStory"
+            @assign-to-story="assignTaskToStory"
           />
         </div>
       </div>
@@ -368,6 +371,34 @@
       @add="handleAddResource"
     />
 
+    <!-- Epic Modal -->
+    <EpicModal
+      :is-open="showEpicModal"
+      :epic="editingEpic"
+      @close="closeEpicModal"
+      @save="saveEpic"
+    />
+
+    <!-- Story Modal -->
+    <StoryModal
+      :is-open="showStoryModal"
+      :story="editingStory"
+      :parent-epic="parentEpic"
+      :available-epics="allEpics"
+      :related-tasks="editingStory ? getTasksByStory(editingStory.id) : []"
+      @close="closeStoryModal"
+      @save="saveStory"
+    />
+
+    <!-- Story Selector Modal -->
+    <StorySelector
+      :is-open="showStorySelector"
+      :task="taskToAssign"
+      title="Select a Story for Task"
+      @close="closeStorySelector"
+      @select="handleStorySelection"
+    />
+    
     <!-- View Modal for remote mode -->
     <div v-if="viewModal" class="modal-overlay" @click="viewModal = false">
       <div class="modal view-modal" @click.stop>
@@ -390,6 +421,13 @@ import { ref, computed, onMounted, onUnmounted, watchEffect } from 'vue';
 import { useTasksStore } from '~/stores/tasks';
 import { useEditorStore } from '~/stores/editor';
 import ResourceModal from '~/components/Prompts/ResourceModal.vue';
+import EpicModal from '~/components/Kanban/EpicModal.vue';
+import StoryModal from '~/components/Kanban/StoryModal.vue';
+import StorySelector from '~/components/Kanban/StorySelector.vue';
+import EpicSwimlane from '~/components/Kanban/EpicSwimlane.vue';
+import UnassignedSwimlane from '~/components/Kanban/UnassignedSwimlane.vue';
+import OrphanedTasksSwimlane from '~/components/Kanban/OrphanedTasksSwimlane.vue';
+import KanbanColumn from '~/components/Kanban/KanbanColumn.vue';
 import type { ResourceReference } from '~/stores/prompt-engineering';
 import { useServices } from '~/composables/useServices';
 import { useRemoteConnection } from '~/composables/useRemoteConnection';
@@ -433,7 +471,13 @@ let cleanupFileWatching: (() => void) | undefined;
 
 const showModal = ref(false);
 const showResourceModal = ref(false);
+const showEpicModal = ref(false);
+const showStoryModal = ref(false);
 const editingTask = ref<SimpleTask | null>(null);
+const editingEpic = ref<any | null>(null);
+const editingStory = ref<any | null>(null);
+const parentEpic = ref<any | null>(null);
+
 const taskForm = ref({
   identifier: '',
   content: '',
@@ -588,13 +632,14 @@ const onStoryDrop = async (storyId: string, newStatus: string) => {
 };
 
 const editEpic = (epic: any) => {
-  console.log('Editing epic:', epic);
-  // TODO: Implement epic editing
+  editingEpic.value = epic;
+  showEpicModal.value = true;
 };
 
 const editStory = (story: any) => {
-  console.log('Editing story:', story);
-  // TODO: Implement story editing
+  editingStory.value = story;
+  parentEpic.value = null; // Clear parent epic when editing existing story
+  showStoryModal.value = true;
 };
 
 const deleteEpic = (epic: any) => {
@@ -606,13 +651,26 @@ const deleteStory = (story: any) => {
 };
 
 const createStoryFromEpic = (epic: any) => {
-  console.log('Creating story from epic:', epic);
-  // TODO: Implement story creation from epic
+  editingStory.value = null;
+  parentEpic.value = epic;
+  showStoryModal.value = true;
 };
 
 const createTaskFromStory = (story: any) => {
-  console.log('Creating task from story:', story);
-  // TODO: Implement task creation from story
+  editingTask.value = null;
+  taskForm.value = {
+    identifier: '',
+    content: '',
+    description: '',
+    priority: 'medium',
+    type: 'feature',
+    assignee: 'claude',
+    resources: []
+  };
+  // Store story context for task creation
+  taskForm.value.storyId = story.id;
+  taskForm.value.epicId = story.epicId;
+  showModal.value = true;
 };
 
 // Removed sync functions since file watching handles it automatically
@@ -642,13 +700,14 @@ const addNewTask = () => {
 };
 
 const addNewEpic = () => {
-  // TODO: Implement epic creation modal
-  console.log('Creating new epic');
+  editingEpic.value = null;
+  showEpicModal.value = true;
 };
 
 const addNewStory = () => {
-  // TODO: Implement story creation modal
-  console.log('Creating new story');
+  editingStory.value = null;
+  parentEpic.value = null;
+  showStoryModal.value = true;
 };
 
 const editTask = (task: SimpleTask) => {
@@ -687,23 +746,41 @@ const saveTask = async () => {
       priority: taskForm.value.priority,
       type: taskForm.value.type,
       assignee: taskForm.value.assignee,
-      resources: taskForm.value.resources
+      resources: taskForm.value.resources,
+      storyId: taskForm.value.storyId,
+      epicId: taskForm.value.epicId
     });
   } else {
+    // Create a new task with all properties
+    const newTaskData = {
+      content: taskForm.value.content,
+      priority: taskForm.value.priority,
+      type: taskForm.value.type,
+      identifier: taskForm.value.identifier,
+      description: taskForm.value.description,
+      assignee: taskForm.value.assignee,
+      resources: taskForm.value.resources,
+      storyId: taskForm.value.storyId,
+      epicId: taskForm.value.epicId
+    };
+    
     tasksStore.addTask(
-      taskForm.value.content,
-      taskForm.value.priority,
-      taskForm.value.type,
-      taskForm.value.identifier
+      newTaskData.content,
+      newTaskData.priority,
+      newTaskData.type,
+      newTaskData.identifier
     );
-    // Update the task with description, assignee, and resources after creation
+    
+    // Update the task with additional properties after creation
     const tasks = tasksStore.tasks;
     const newTask = tasks[tasks.length - 1];
     if (newTask) {
       tasksStore.updateTask(newTask.id, {
-        description: taskForm.value.description,
-        assignee: taskForm.value.assignee,
-        resources: taskForm.value.resources
+        description: newTaskData.description,
+        assignee: newTaskData.assignee,
+        resources: newTaskData.resources,
+        storyId: newTaskData.storyId,
+        epicId: newTaskData.epicId
       });
     }
   }
@@ -719,6 +796,101 @@ const saveTask = async () => {
 const closeModal = () => {
   showModal.value = false;
   editingTask.value = null;
+};
+
+const closeEpicModal = () => {
+  showEpicModal.value = false;
+  editingEpic.value = null;
+};
+
+const closeStoryModal = () => {
+  showStoryModal.value = false;
+  editingStory.value = null;
+  parentEpic.value = null;
+};
+
+const saveEpic = async (epic: any) => {
+  console.log('[KanbanBoard] saveEpic called with:', epic);
+  console.log('[KanbanBoard] editingEpic.value:', editingEpic.value);
+  
+  if (editingEpic.value) {
+    console.log('[KanbanBoard] Updating existing epic with id:', editingEpic.value.id);
+    tasksStore.updateEpic(editingEpic.value.id, epic);
+  } else {
+    console.log('[KanbanBoard] Creating new epic');
+    tasksStore.addEpic(epic);
+  }
+  
+  if (isRemote.value) {
+    await saveTasks();
+  }
+  
+  closeEpicModal();
+};
+
+const saveStory = async (story: any) => {
+  if (editingStory.value) {
+    tasksStore.updateStory(editingStory.value.id, story);
+  } else {
+    // Set epic ID if creating from epic
+    if (parentEpic.value) {
+      story.epicId = parentEpic.value.id;
+    }
+    tasksStore.addStory(story);
+  }
+  
+  if (isRemote.value) {
+    await saveTasks();
+  }
+  
+  closeStoryModal();
+};
+
+const convertTaskToStory = (task: any) => {
+  // Convert task to story by creating a new story with task content
+  editingStory.value = null;
+  parentEpic.value = null;
+  
+  // Pre-fill story form with task information
+  const newStory = {
+    title: task.content,
+    description: task.description || '',
+    userStory: `As a user, I want to ${task.content.toLowerCase()}, so that I can achieve my goals.`,
+    priority: task.priority || 'normal',
+    status: 'backlog'
+  };
+  
+  // Delete the original task
+  tasksStore.deleteTask(task.id);
+  
+  // Open story modal with pre-filled data
+  showStoryModal.value = true;
+  
+  // We could pass the pre-filled data to the modal, but for now
+  // the user will fill it out manually
+};
+
+// Story selector state
+const showStorySelector = ref(false);
+const taskToAssign = ref<any>(null);
+
+const assignTaskToStory = (task: any) => {
+  console.log('Assigning task to story:', task);
+  taskToAssign.value = task;
+  showStorySelector.value = true;
+};
+
+const closeStorySelector = () => {
+  showStorySelector.value = false;
+  taskToAssign.value = null;
+};
+
+const handleStorySelection = (storyId: string) => {
+  if (taskToAssign.value && storyId) {
+    console.log('[KanbanBoard] Assigning task', taskToAssign.value.id, 'to story', storyId);
+    tasksStore.assignTaskToStory(taskToAssign.value.id, storyId);
+  }
+  closeStorySelector();
 };
 
 const openResourceModal = () => {

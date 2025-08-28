@@ -624,8 +624,8 @@ async function refreshData() {
     // Use electron API to get budget data
     if (window.electronAPI?.contextBudgeter) {
       const [statusResult, windowsResult] = await Promise.all([
-        window.electronAPI.contextBudgeterBudgeter.executeTask('getBudgetStatus', {}),
-        window.electronAPI.contextBudgeterBudgeter.executeTask('getContextWindows', {})
+        window.electronAPI.contextBudgeter.executeTask('getBudgetStatus', {}),
+        window.electronAPI.contextBudgeter.executeTask('getContextWindows', {})
       ]);
       
       if (statusResult.success) {
@@ -778,7 +778,10 @@ function createAllocation() {
 }
 
 // Helper functions
-function formatTokens(tokens: number): string {
+function formatTokens(tokens: number | undefined | null): string {
+  if (tokens == null || tokens === undefined) {
+    return '0';
+  }
   if (tokens >= 1000000) {
     return (tokens / 1000000).toFixed(1) + 'M';
   } else if (tokens >= 1000) {

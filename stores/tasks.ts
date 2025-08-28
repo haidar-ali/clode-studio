@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia';
+import { getProjectStorage, type ProjectStorage } from '~/services/ProjectStorage';
 
 // Simple path joining for browser context
 const joinPath = (...parts: string[]) => {
@@ -33,7 +34,7 @@ interface SimpleTask {
 }
 
 // Epic type for high-level features
-interface Epic {
+export interface Epic {
   id: string;
   title: string;
   description: string;
@@ -45,12 +46,16 @@ interface Epic {
   createdAt: Date;
   updatedAt: Date;
   tags?: string[];
+  resources?: ResourceReference[];
+  estimatedStoryPoints?: number;
+  targetTimeline?: string;
+  dependencies?: string[];
 }
 
 // Story type for feature decomposition
-interface Story {
+export interface Story {
   id: string;
-  epicId: string;
+  epicId?: string; // Made optional for unassigned stories
   title: string;
   description: string;
   userStory: string; // As a... I want... So that...
@@ -62,6 +67,9 @@ interface Story {
   createdAt: Date;
   updatedAt: Date;
   tags?: string[];
+  resources?: ResourceReference[];
+  storyPoints?: number;
+  timeEstimate?: string;
 }
 
 // Import type from prompt-engineering store
@@ -82,10 +90,13 @@ export const useTasksStore = defineStore('tasks', {
     projectPath: '',
     isAutoSaveEnabled: true,
     lastSyncedWithClaude: null as Date | null,
+    lastSaveTime: null as Date | null, // Track last save to avoid reload conflicts
     claudeNativeTodos: [] as Array<{content: string, status: string, priority: string, id: string}>,
     isImportingFromFile: false,
     isInitialized: false,
-    hierarchyConnected: false // Track if connected to agent task hierarchy
+    hierarchyConnected: false, // Track if connected to agent task hierarchy
+    storage: null as ProjectStorage | null,
+    isUsingNewStorage: true // Flag to use new JSON storage
   }),
 
   getters: {
@@ -139,8 +150,14 @@ export const useTasksStore = defineStore('tasks', {
   },
 
   actions: {
-    setProjectPath(path: string) {
+    async setProjectPath(path: string) {
       this.projectPath = path;
+      
+      // Initialize storage for the new path
+      if (path) {
+        this.storage = getProjectStorage(path);
+        await this.storage.initialize();
+      }
     },
 
     // Initialize the store
@@ -289,7 +306,7 @@ export const useTasksStore = defineStore('tasks', {
       }
     },
 
-    // Load tasks from project
+    // Load tasks from project using new storage system
     async loadTasksFromProject() {
       if (!this.projectPath) return;
       
@@ -297,6 +314,62 @@ export const useTasksStore = defineStore('tasks', {
       if (!window.electronAPI?.fs) {
         return;
       }
+      
+      // Initialize storage if not already done
+      if (!this.storage) {
+        this.storage = getProjectStorage(this.projectPath);
+        await this.storage.initialize();
+      }
+      
+      try {
+        // Try new storage format first
+        const { epics, stories, tasks } = await this.storage.loadAll();
+        
+        if (epics.length > 0 || stories.length > 0 || tasks.length > 0) {
+          console.log('[TasksStore] Loaded from new JSON storage:', {
+            epics: epics.length,
+            stories: stories.length,
+            tasks: tasks.length
+          });
+          
+          // Convert dates from strings
+          this.epics = epics.map(e => ({
+            ...e,
+            createdAt: new Date(e.createdAt),
+            updatedAt: new Date(e.updatedAt)
+          }));
+          
+          this.stories = stories.map(s => ({
+            ...s,
+            createdAt: new Date(s.createdAt),
+            updatedAt: new Date(s.updatedAt)
+          }));
+          
+          this.tasks = tasks.map(t => ({
+            ...t,
+            createdAt: t.createdAt ? new Date(t.createdAt) : undefined,
+            updatedAt: t.updatedAt ? new Date(t.updatedAt) : undefined
+          }));
+          
+          // Generate and save the lightweight TASKS.md reference
+          const reference = await this.storage.generateTasksReference(this.epics, this.stories, this.tasks);
+          await window.electronAPI.fs.writeFile(`${this.projectPath}/TASKS.md`, reference);
+          
+          return; // Successfully loaded from new format
+        }
+        
+        // Fall back to old format if new format is empty
+        await this.loadTasksFromOldFormat();
+        
+      } catch (error) {
+        console.error('[TasksStore] Failed to load from new storage, trying old format:', error);
+        await this.loadTasksFromOldFormat();
+      }
+    },
+    
+    // Load from old format (fallback)
+    async loadTasksFromOldFormat() {
+      if (!this.projectPath) return;
       
       const filePath = joinPath(this.projectPath, '.claude', 'simple-tasks.json');
       
@@ -308,8 +381,8 @@ export const useTasksStore = defineStore('tasks', {
           // Load tasks
           this.tasks = (data.tasks || []).map((task: any) => ({
             ...task,
-            createdAt: new Date(task.createdAt),
-            updatedAt: new Date(task.updatedAt)
+            createdAt: task.createdAt ? new Date(task.createdAt) : undefined,
+            updatedAt: task.updatedAt ? new Date(task.updatedAt) : undefined
           }));
           
           // Load epics
@@ -326,32 +399,62 @@ export const useTasksStore = defineStore('tasks', {
             updatedAt: new Date(story.updatedAt)
           }));
           
+          // Migrate to new format
+          if (this.storage && (this.epics.length > 0 || this.stories.length > 0 || this.tasks.length > 0)) {
+            console.log('[TasksStore] Migrating from old format to new storage');
+            await this.storage.migrateFromTasksMd('', this.epics, this.stories, this.tasks);
+          }
         }
       } catch (error) {
-        
+        console.error('[TasksStore] Failed to load from old format:', error);
       }
     },
 
-    // Save tasks to project
+    // Save tasks to project using new storage system
     async saveTasksToProject() {
-      if (!this.projectPath) return;
+      if (!this.projectPath || this.isImportingFromFile) return;
+      
+      // Initialize storage if not already done
+      if (!this.storage) {
+        this.storage = getProjectStorage(this.projectPath);
+        await this.storage.initialize();
+      }
       
       try {
-        // Save to JSON
-        await this.saveTasksToProjectJSON();
+        // Save to separate JSON files
+        await Promise.all([
+          this.storage.saveEpics(this.epics),
+          this.storage.saveStories(this.stories),
+          this.storage.saveTasks(this.tasks)
+        ]);
         
-        // Only update TASKS.md if not importing from file (to prevent infinite loop)
-        if (!this.isImportingFromFile) {
-          await this.updateTasksMarkdown();
-        }
+        // Track save time to avoid reload conflicts
+        this.lastSaveTime = new Date();
+        
+        console.log('[TasksStore] Saved to JSON storage:', {
+          epics: this.epics.length,
+          stories: this.stories.length,
+          tasks: this.tasks.length
+        });
+        
+        // Generate and save the lightweight TASKS.md reference
+        const reference = await this.storage.generateTasksReference(this.epics, this.stories, this.tasks);
+        await window.electronAPI.fs.writeFile(`${this.projectPath}/TASKS.md`, reference);
+        
       } catch (error) {
-        console.error('Failed to save tasks:', error);
+        console.error('[TasksStore] Failed to save to JSON storage:', error);
       }
     },
 
-    // Save tasks to project JSON only
+    // Save tasks to project JSON only (for backwards compatibility)
     async saveTasksToProjectJSON() {
-      if (!this.projectPath) return;
+      // This now just calls the main save method
+      await this.saveTasksToProject();
+    },
+
+    // Generate TASKS.md file (now just a lightweight reference)
+    async updateTasksMarkdown() {
+      if (!this.projectPath || !this.storage) return;
       
       // Skip if not in desktop mode (remote mode saves through service layer)
       if (!window.electronAPI?.fs) {
@@ -359,254 +462,206 @@ export const useTasksStore = defineStore('tasks', {
       }
       
       try {
-        // Ensure .claude directory exists
-        const claudeDir = joinPath(this.projectPath, '.claude');
-        await window.electronAPI.fs.ensureDir(claudeDir);
-        
-        // Save complete hierarchy (tasks, epics, stories)
-        const filePath = joinPath(this.projectPath, '.claude', 'simple-tasks.json');
-        const data = {
-          tasks: this.tasks,
-          epics: this.epics,
-          stories: this.stories,
-          lastSyncedWithClaude: this.lastSyncedWithClaude,
-          lastUpdated: new Date()
-        };
-        await window.electronAPI.fs.writeFile(filePath, JSON.stringify(data, null, 2));
+        // Generate and save the lightweight TASKS.md reference
+        const reference = await this.storage.generateTasksReference(this.epics, this.stories, this.tasks);
+        await window.electronAPI.fs.writeFile(`${this.projectPath}/TASKS.md`, reference);
       } catch (error) {
-        console.error('Failed to save tasks JSON:', error);
+        console.error('[TasksStore] Failed to update TASKS.md:', error);
       }
-    },
-
-    // Generate TASKS.md file with epic/story hierarchy
-    async updateTasksMarkdown() {
-      if (!this.tasksMarkdownPath) return;
       
-      const formatTask = (task: SimpleTask, indent = 0, isCompleted = false) => {
-        const indentStr = '  '.repeat(indent);
-        const checkbox = isCompleted ? '[x]' : '[ ]';
-        const title = isCompleted ? `~~${task.content}~~` : `**${task.content}**`;
-        const emoji = task.status === 'in_progress' ? ' ⏳' : '';
-        
-        let text = `${indentStr}- ${checkbox} ${title}${emoji}`;
-        
-        // Add identifier if present
-        if (task.identifier) {
-          const id = isCompleted ? `~~ID: ${task.identifier}~~` : `ID: ${task.identifier}`;
-          text += `\n${indentStr}  - ${id}`;
+      return; // The old implementation below is no longer needed
+
+      // Check if TASKS.md already exists
+      let existingContent = '';
+      try {
+        const result = await window.electronAPI.fs.readFile(this.tasksMarkdownPath);
+        if (result.success && result.content) {
+          existingContent = result.content;
         }
+      } catch (error) {
+        // File doesn't exist, will create new one
+        console.log('TASKS.md does not exist, creating new file');
+      }
+
+      // Format task for simple list (existing format without emojis)
+      const formatSimpleTask = (task: SimpleTask) => {
+        const status = task.status === 'completed' ? '✓' : 
+                      task.status === 'in_progress' ? '→' : '○';
+        let text = `${status} ${task.content}`;
         
         // Add epic/story reference if present
-        if (task.epicId) {
-          const epic = this.epics.find(e => e.id === task.epicId);
-          if (epic) {
-            const epicRef = isCompleted ? `~~Epic: ${epic.title}~~` : `Epic: ${epic.title}`;
-            text += `\n${indentStr}  - ${epicRef}`;
+        if (task.epicId || task.storyId) {
+          const refs = [];
+          if (task.epicId) {
+            const epic = this.epics.find(e => e.id === task.epicId);
+            if (epic) refs.push(`Epic: ${epic.title}`);
           }
-        }
-        
-        if (task.storyId) {
-          const story = this.stories.find(s => s.id === task.storyId);
-          if (story) {
-            const storyRef = isCompleted ? `~~Story: ${story.title}~~` : `Story: ${story.title}`;
-            text += `\n${indentStr}  - ${storyRef}`;
+          if (task.storyId) {
+            const story = this.stories.find(s => s.id === task.storyId);
+            if (story) refs.push(`Story: ${story.title}`);
           }
-        }
-        
-        // Add structured metadata
-        const assignee = isCompleted ? `~~Assignee: ${task.assignee || 'Claude'}~~` : `Assignee: ${task.assignee || 'Claude'}`;
-        const type = isCompleted ? `~~Type: ${task.type || 'feature'}~~` : `Type: ${task.type || 'feature'}`;
-        const priority = isCompleted ? `~~Priority: ${task.priority}~~` : `Priority: ${task.priority}`;
-        
-        text += `\n${indentStr}  - ${assignee}`;
-        text += `\n${indentStr}  - ${type}`;
-        text += `\n${indentStr}  - ${priority}`;
-        
-        if (task.description) {
-          const desc = isCompleted ? `~~Description: ${task.description}~~` : `Description: ${task.description}`;
-          text += `\n${indentStr}  - ${desc}`;
-        }
-        
-        // Add dependencies if present
-        if (task.dependencies && task.dependencies.length > 0) {
-          const deps = task.dependencies.join(', ');
-          const depsText = isCompleted ? `~~Dependencies: ${deps}~~` : `Dependencies: ${deps}`;
-          text += `\n${indentStr}  - ${depsText}`;
-        }
-        
-        // Format resources if present
-        if (task.resources && task.resources.length > 0) {
-          const resourceTexts = task.resources.map(r => {
-            if (r.type === 'task') {
-              return `Task: ${r.name}`;
-            } else if (r.type === 'file') {
-              return `File: ${r.name}`;
-            } else {
-              return `${r.type}: ${r.name}`;
-            }
-          });
-          const resourcesStr = resourceTexts.slice(0, 3).join(', ') + (resourceTexts.length > 3 ? '...' : '');
-          const resourcesText = isCompleted ? `~~Resources: ${resourcesStr}~~` : `Resources: ${resourcesStr}`;
-          text += `\n${indentStr}  - ${resourcesText}`;
+          if (refs.length > 0) {
+            text += ` [${refs.join(', ')}]`;
+          }
         }
         
         return text;
       };
       
-      // Format epics section
-      let epicsSection = '';
-      if (this.epics.length > 0) {
-        epicsSection = `## Epics (${this.epics.length})\n\n`;
+      // Build hierarchy reference section (only if we have epics/stories)
+      let hierarchyReference = '';
+      if (this.epics.length > 0 || this.stories.length > 0) {
+        hierarchyReference = '## Epic/Story/Task Hierarchy Reference\n\n';
+        
+        // List epics with their stories and tasks
         for (const epic of this.epics) {
-          epicsSection += `### ${epic.title}\n`;
-          epicsSection += `- **Status**: ${epic.status}\n`;
-          epicsSection += `- **Priority**: ${epic.priority}\n`;
-          epicsSection += `- **Business Value**: ${epic.businessValue}\n`;
-          epicsSection += `- **Acceptance Criteria**:\n`;
-          epicsSection += epic.acceptanceCriteria.map(ac => `  - ${ac}`).join('\n') + '\n\n';
+          hierarchyReference += `### ${epic.title}\n`;
+          hierarchyReference += `Status: ${epic.status} | Priority: ${epic.priority}\n\n`;
           
-          // List stories under each epic
+          // List stories under this epic
           const stories = this.stories.filter(s => s.epicId === epic.id);
           if (stories.length > 0) {
-            epicsSection += `#### Stories:\n`;
-            for (const story of stories) {
-              epicsSection += `- **${story.title}** (${story.status})\n`;
-              epicsSection += `  - User Story: ${story.userStory}\n`;
-              epicsSection += `  - Tasks: ${story.taskIds.length}\n`;
-            }
-            epicsSection += '\n';
-          }
-        }
-      }
-      
-      // Enhanced format with hierarchical view
-      const formatEpic = (epic: Epic, isCompleted = false) => {
-        const checkbox = isCompleted ? '[x]' : '[ ]';
-        const title = isCompleted ? `~~${epic.title}~~` : `**${epic.title}**`;
-        const emoji = epic.status === 'in_progress' ? ' ⏳' : '';
-        
-        let text = `- ${checkbox} ${title}${emoji} *(Epic)*`;
-        text += `\n  - ID: ${epic.id}`;
-        text += `\n  - Status: ${epic.status}`;
-        text += `\n  - Priority: ${epic.priority}`;
-        text += `\n  - Business Value: ${epic.businessValue}`;
-        
-        if (epic.description) {
-          text += `\n  - Description: ${epic.description}`;
-        }
-        
-        if (epic.acceptanceCriteria.length > 0) {
-          text += `\n  - Acceptance Criteria:`;
-          epic.acceptanceCriteria.forEach(criterion => {
-            text += `\n    - ${criterion}`;
-          });
-        }
-        
-        // Show story count and progress
-        const stories = this.stories.filter(s => s.epicId === epic.id);
-        const completedStories = stories.filter(s => s.status === 'done').length;
-        text += `\n  - Stories: ${completedStories}/${stories.length} completed`;
-        
-        return text;
-      };
-      
-      const formatStory = (story: Story, isCompleted = false) => {
-        const checkbox = isCompleted ? '[x]' : '[ ]';
-        const title = isCompleted ? `~~${story.title}~~` : `**${story.title}**`;
-        const emoji = story.status === 'in_progress' ? ' ⏳' : '';
-        
-        let text = `- ${checkbox} ${title}${emoji} *(Story)*`;
-        text += `\n  - ID: ${story.id}`;
-        text += `\n  - Status: ${story.status}`;
-        text += `\n  - Priority: ${story.priority}`;
-        text += `\n  - User Story: ${story.userStory}`;
-        
-        if (story.description) {
-          text += `\n  - Description: ${story.description}`;
-        }
-        
-        if (story.epicId) {
-          const epic = this.epics.find(e => e.id === story.epicId);
-          if (epic) {
-            text += `\n  - Epic: ${epic.title}`;
-          }
-        }
-        
-        if (story.acceptanceCriteria.length > 0) {
-          text += `\n  - Acceptance Criteria:`;
-          story.acceptanceCriteria.forEach(criterion => {
-            text += `\n    - ${criterion}`;
-          });
-        }
-        
-        // Show task count and progress
-        const tasks = this.tasks.filter(t => t.storyId === story.id);
-        const completedTasks = tasks.filter(t => t.status === 'completed').length;
-        text += `\n  - Tasks: ${completedTasks}/${tasks.length} completed`;
-        
-        return text;
-      };
-      
-      // Enhanced epics section with hierarchical view
-      let hierarchySection = '';
-      if (this.epics.length > 0 || this.stories.length > 0) {
-        hierarchySection = `## 📋 Epic/Story/Task Hierarchy\n\n`;
-        
-        for (const epic of this.epics) {
-          const isEpicCompleted = epic.status === 'done';
-          hierarchySection += formatEpic(epic, isEpicCompleted) + '\n\n';
-          
-          // List stories under each epic with their tasks
-          const stories = this.stories.filter(s => s.epicId === epic.id);
-          stories.forEach(story => {
-            const isStoryCompleted = story.status === 'done';
-            hierarchySection += '  ' + formatStory(story, isStoryCompleted).replace(/\n/g, '\n  ') + '\n\n';
-            
-            // List tasks under each story
-            const tasks = this.tasks.filter(t => t.storyId === story.id);
-            tasks.forEach(task => {
-              const isTaskCompleted = task.status === 'completed';
-              hierarchySection += '    ' + formatTask(task, 0, isTaskCompleted).replace(/\n/g, '\n    ') + '\n\n';
+            stories.forEach(story => {
+              hierarchyReference += `  - **${story.title}** (${story.status})\n`;
+              
+              // List tasks under this story
+              const tasks = this.tasks.filter(t => t.storyId === story.id);
+              if (tasks.length > 0) {
+                tasks.forEach(task => {
+                  const status = task.status === 'completed' ? '✓' :
+                               task.status === 'in_progress' ? '→' : '○';
+                  hierarchyReference += `    ${status} ${task.content}\n`;
+                });
+              }
             });
-          });
+            hierarchyReference += '\n';
+          }
         }
         
-        // Unassigned stories
+        // List unassigned stories (only once, not duplicated)
         const unassignedStories = this.stories.filter(s => !s.epicId);
         if (unassignedStories.length > 0) {
-          hierarchySection += `### 📑 Unassigned Stories\n\n`;
+          hierarchyReference += '### Unassigned Stories\n\n';
           unassignedStories.forEach(story => {
-            const isStoryCompleted = story.status === 'done';
-            hierarchySection += formatStory(story, isStoryCompleted) + '\n\n';
+            hierarchyReference += `  - **${story.title}** (${story.status})\n`;
             
-            // List tasks under each unassigned story
+            // List tasks under this story
             const tasks = this.tasks.filter(t => t.storyId === story.id);
-            tasks.forEach(task => {
-              const isTaskCompleted = task.status === 'completed';
-              hierarchySection += '  ' + formatTask(task, 0, isTaskCompleted).replace(/\n/g, '\n  ') + '\n\n';
-            });
+            if (tasks.length > 0) {
+              tasks.forEach(task => {
+                const status = task.status === 'completed' ? '✓' :
+                             task.status === 'in_progress' ? '→' : '○';
+                hierarchyReference += `    ${status} ${task.content}\n`;
+              });
+            }
           });
+          hierarchyReference += '\n';
         }
         
-        hierarchySection += `---\n\n`;
+        hierarchyReference += '---\n\n';
       }
       
-      // Orphaned tasks (not assigned to any story)
-      const orphanedTasks = this.tasks.filter(t => !t.storyId && !t.epicId);
-      let statusSection = '';
-      if (orphanedTasks.length > 0) {
-        statusSection = `## 🔄 Task Status View\n\n*Tasks organized by current status (including orphaned tasks)*\n\n`;
-      } else {
-        statusSection = `## 🔄 Task Status View\n\n*All tasks are organized within the Epic/Story hierarchy above*\n\n`;
-      }
-      
-      const markdown = `# 📊 Project Tasks & Hierarchy\n\n*This file is synced with Clode Studio and supports Epic/Story/Task hierarchy.*  \n*Last updated: ${new Date().toISOString()}*\n\n${hierarchySection}${statusSection}### Backlog (${this.backlogTasks.filter(t => !t.storyId).length})\n\n${this.backlogTasks.filter(t => !t.storyId).map(task => formatTask(task, 0, false)).join('\n\n')}\n\n### To Do (${this.todoTasks.filter(t => !t.storyId).length})\n\n${this.todoTasks.filter(t => !t.storyId).map(task => formatTask(task, 0, false)).join('\n\n')}\n\n### In Progress (${this.inProgressTasks.filter(t => !t.storyId).length})\n\n${this.inProgressTasks.filter(t => !t.storyId).map(task => formatTask(task, 0, false)).join('\n\n')}\n\n### Completed (${this.completedTasks.filter(t => !t.storyId).length})\n\n${this.completedTasks.filter(t => !t.storyId).map(task => formatTask(task, 0, true)).join('\n\n')}\n\n---\n\n## 🎯 Quick Stats\n\n- **Epics**: ${this.epics.length} (${this.epics.filter(e => e.status === 'done').length} completed)\n- **Stories**: ${this.stories.length} (${this.stories.filter(s => s.status === 'done').length} completed)\n- **Tasks**: ${this.tasks.length} (${this.completedTasks.length} completed)\n- **Orphaned Tasks**: ${orphanedTasks.length}\n\n*To update tasks, use the Kanban board in Clode Studio, ask Claude to modify this file, or use Claude's native TodoWrite system.*\n`;
-      
-      // Skip if not in desktop mode (remote mode saves through service layer)
-      if (!window.electronAPI?.fs) {
+      // If existing file, preserve its structure and update only the hierarchy reference
+      if (existingContent) {
+        // Find where to insert the hierarchy reference
+        let updatedContent = existingContent;
+        
+        // Check if hierarchy reference already exists
+        // Updated regex to properly capture the entire hierarchy section including ALL content until next section
+        const hierarchyRefRegex = /## Epic\/Story\/Task Hierarchy Reference[\s\S]*?(?=\n## |$)/;
+        
+        if (hierarchyRefRegex.test(updatedContent)) {
+          // Replace existing hierarchy reference completely
+          console.log('[TasksStore] Replacing existing hierarchy reference');
+          updatedContent = updatedContent.replace(hierarchyRefRegex, hierarchyReference.trim() + '\n\n');
+        } else if (hierarchyReference) {
+          // Add hierarchy reference after header and metadata, before first section
+          const lines = updatedContent.split('\n');
+          let insertIndex = -1;
+          
+          // Find the insertion point - after title and metadata, before first ## section
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            // Skip title (# Project Tasks)
+            if (i === 0 && line.startsWith('# ')) continue;
+            // Skip metadata lines (starting with *)
+            if (line.startsWith('*')) continue;
+            // Skip empty lines after metadata
+            if (line.trim() === '') continue;
+            // Found first content section (## Backlog, ## To Do, etc.)
+            if (line.startsWith('## ')) {
+              insertIndex = i;
+              break;
+            }
+          }
+          
+          // Insert hierarchy reference before the first section
+          if (insertIndex > 0) {
+            lines.splice(insertIndex, 0, hierarchyReference);
+            updatedContent = lines.join('\n');
+          }
+        }
+        
+        // Write the updated content
+        try {
+          await window.electronAPI.fs.writeFile(this.tasksMarkdownPath, updatedContent);
+        } catch (error) {
+          console.error('Failed to update TASKS.md:', error);
+        }
         return;
       }
       
+      // Create new file in simple format (no existing file)
+      const backlogTasks = this.tasks.filter(t => t.status === 'backlog');
+      const todoTasks = this.tasks.filter(t => t.status === 'pending' || t.status === 'todo');
+      const inProgressTasks = this.tasks.filter(t => t.status === 'in_progress');
+      const completedTasks = this.tasks.filter(t => t.status === 'completed');
+      
+      let markdown = '# Project Tasks\n\n';
+      
+      // Add hierarchy reference if we have epics/stories
+      if (hierarchyReference) {
+        markdown += hierarchyReference;
+      }
+      
+      // Add task sections in simple format
+      if (backlogTasks.length > 0) {
+        markdown += '## Backlog\n\n';
+        backlogTasks.forEach(task => {
+          markdown += formatSimpleTask(task) + '\n';
+        });
+        markdown += '\n';
+      }
+      
+      if (todoTasks.length > 0) {
+        markdown += '## To Do\n\n';
+        todoTasks.forEach(task => {
+          markdown += formatSimpleTask(task) + '\n';
+        });
+        markdown += '\n';
+      }
+      
+      if (inProgressTasks.length > 0) {
+        markdown += '## In Progress\n\n';
+        inProgressTasks.forEach(task => {
+          markdown += formatSimpleTask(task) + '\n';
+        });
+        markdown += '\n';
+      }
+      
+      if (completedTasks.length > 0) {
+        markdown += '## Completed\n\n';
+        completedTasks.forEach(task => {
+          markdown += formatSimpleTask(task) + '\n';
+        });
+        markdown += '\n';
+      }
+      
+      // Add footer
+      markdown += '---\n\n';
+      markdown += `*Last updated: ${new Date().toISOString()}*\n`;
+      
+      // Write the new file
       try {
         await window.electronAPI.fs.writeFile(this.tasksMarkdownPath, markdown);
       } catch (error) {
@@ -614,45 +669,80 @@ export const useTasksStore = defineStore('tasks', {
       }
     },
 
-    // Import tasks from TASKS.md or Claude output
+    // Legacy import function - kept for compatibility
     importTasksFromText(text: string): number {
+      // Just use the new unified parser
+      const result = this.parseTasksMarkdown(text);
+      this.tasks = result.tasks;
+      return result.tasks.length;
+    },
+    
+    // Legacy import function kept for compatibility
+    importTasksFromTextOld(text: string): number {
       const lines = text.split('\n');
       const newTasks: Partial<SimpleTask>[] = [];
       
       let currentSection: 'backlog' | 'pending' | 'in_progress' | 'completed' | null = null;
       let currentTask: Partial<SimpleTask> | null = null;
+      let skipHierarchySection = false;
       
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         
+        // Skip hierarchy reference section
+        if (line.includes('## Epic/Story/Task Hierarchy Reference')) {
+          skipHierarchySection = true;
+          continue;
+        }
+        
         // Detect sections
         if (line.includes('## Backlog')) {
           currentSection = 'backlog';
+          skipHierarchySection = false;
         } else if (line.includes('## To Do')) {
           currentSection = 'pending';
+          skipHierarchySection = false;
         } else if (line.includes('## In Progress')) {
           currentSection = 'in_progress';
+          skipHierarchySection = false;
         } else if (line.includes('## Completed') || line.includes('## Done')) {
           currentSection = 'completed';
+          skipHierarchySection = false;
         }
+        
+        // Skip lines in hierarchy section
+        if (skipHierarchySection && !line.startsWith('## ')) {
+          continue;
+        }
+        
         // Parse task header
-        else if (currentSection && line.match(/^[\s-]*\[[ x]\]/)) {
+        if (currentSection && line.match(/^[\s-]*\[[ x]\]/)) {
           // Save previous task if exists
           if (currentTask && currentTask.content) {
             newTasks.push(currentTask);
           }
           
-          // Start new task
+          // Start new task - handle bold text properly
           let taskLine = line.replace(/^[\s-]*\[[ x]\]\s*/, '');
-          const content = taskLine.replace(/\*\*/g, '').replace(/~~/g, '').replace(/⏳/g, '').trim();
+          // Extract content from bold markdown if present
+          const boldMatch = taskLine.match(/\*\*(.+?)\*\*/);
+          const content = boldMatch ? boldMatch[1].replace(/~~/g, '').trim() : taskLine.replace(/\*\*/g, '').replace(/~~/g, '').replace(/⏳/g, '').trim();
+          
+          // Check if completed
+          const isCompleted = line.includes('[x]');
           
           currentTask = {
             content,
-            status: currentSection,
+            status: isCompleted ? 'completed' : currentSection,
             priority: 'medium',
             assignee: 'claude',
             type: 'feature'
           };
+          
+          // Check for in-progress indicator
+          if (line.includes('⏳')) {
+            currentTask.status = 'in_progress';
+          }
         }
         // Parse task metadata
         else if (currentTask && line.match(/^\s*-\s*/)) {
@@ -832,7 +922,76 @@ export const useTasksStore = defineStore('tasks', {
       }
     },
 
+    addEpic(epicData: Partial<Epic>) {
+      console.log('[TasksStore] addEpic called with:', epicData);
+      
+      const newEpic: Epic = {
+        id: epicData.id || `epic-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+        title: epicData.title || 'Untitled Epic',
+        description: epicData.description || '',
+        businessValue: epicData.businessValue || '',
+        acceptanceCriteria: epicData.acceptanceCriteria || [],
+        status: epicData.status || 'backlog',
+        priority: epicData.priority || 'normal',
+        storyIds: epicData.storyIds || [],
+        tags: epicData.tags || [],
+        resources: epicData.resources || [],
+        estimatedStoryPoints: epicData.estimatedStoryPoints,
+        targetTimeline: epicData.targetTimeline || '',
+        dependencies: epicData.dependencies || [],
+        createdAt: epicData.createdAt || new Date(),
+        updatedAt: epicData.updatedAt || new Date()
+      };
+      
+      console.log('[TasksStore] Created epic:', newEpic);
+      this.epics.push(newEpic);
+      
+      if (this.isAutoSaveEnabled) {
+        this.saveTasksToProject();
+      }
+      
+      return newEpic;
+    },
+
+    addStory(storyData: Partial<Story>) {
+      const newStory: Story = {
+        id: storyData.id || `story-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+        epicId: storyData.epicId || '',
+        title: storyData.title || 'Untitled Story',
+        description: storyData.description || '',
+        userStory: storyData.userStory || '',
+        acceptanceCriteria: storyData.acceptanceCriteria || [],
+        status: storyData.status || 'backlog',
+        priority: storyData.priority || 'normal',
+        taskIds: storyData.taskIds || [],
+        dependencies: storyData.dependencies || [],
+        tags: storyData.tags || [],
+        resources: storyData.resources || [],
+        storyPoints: storyData.storyPoints,
+        timeEstimate: storyData.timeEstimate || '',
+        createdAt: storyData.createdAt || new Date(),
+        updatedAt: storyData.updatedAt || new Date()
+      };
+      
+      this.stories.push(newStory);
+      
+      // If assigned to an epic, add story ID to epic's storyIds
+      if (newStory.epicId) {
+        const epic = this.epics.find(e => e.id === newStory.epicId);
+        if (epic && !epic.storyIds.includes(newStory.id)) {
+          epic.storyIds.push(newStory.id);
+        }
+      }
+      
+      if (this.isAutoSaveEnabled) {
+        this.saveTasksToProject();
+      }
+      
+      return newStory;
+    },
+
     updateEpic(id: string, updates: Partial<Epic>) {
+      console.log('[TasksStore] updateEpic called with id:', id, 'updates:', updates);
       const index = this.epics.findIndex(e => e.id === id);
       if (index !== -1) {
         this.epics[index] = {
@@ -840,10 +999,13 @@ export const useTasksStore = defineStore('tasks', {
           ...updates,
           updatedAt: new Date()
         };
+        console.log('[TasksStore] Updated epic:', this.epics[index]);
         
         if (this.isAutoSaveEnabled) {
           this.saveTasksToProject();
         }
+      } else {
+        console.error('[TasksStore] Epic not found with id:', id);
       }
     },
 
@@ -952,28 +1114,210 @@ export const useTasksStore = defineStore('tasks', {
 
     // Import tasks from TASKS.md file content and replace all existing tasks
     importTasksFromFile(fileContent: string): number {
+      console.log('[TasksStore] importTasksFromFile called');
       // Set flag to prevent infinite loop
       this.isImportingFromFile = true;
       
       try {
-        // Clear all existing data first
+        // IMPORTANT: Don't clear epics and stories - they are managed through the UI
+        // Only clear and reimport tasks from the file
         this.tasks = [];
-        this.epics = [];
-        this.stories = [];
         
-        // Import new data from file content (epics, stories, and tasks)
-        const imported = this.importFromHierarchicalText(fileContent);
+        // Parse the file but only use the tasks, not epics/stories from hierarchy
+        const { tasks } = this.parseTasksMarkdown(fileContent);
+        
+        // Set only the tasks - epics and stories remain unchanged
+        // The hierarchy reference is just for display, not the source of truth
+        this.tasks = tasks;
         
         // Save to project JSON only (not TASKS.md to avoid loop)
         if (this.isAutoSaveEnabled) {
           this.saveTasksToProjectJSON();
         }
         
-        return imported;
+        return tasks.length + epics.length + stories.length;
       } finally {
         // Always reset the flag
         this.isImportingFromFile = false;
       }
+    },
+
+    // Unified parser for TASKS.md format
+    parseTasksMarkdown(content: string): { epics: Epic[], stories: Story[], tasks: SimpleTask[] } {
+      const lines = content.split('\n');
+      const epics: Epic[] = [];
+      const stories: Story[] = [];
+      const tasks: SimpleTask[] = [];
+      
+      let currentSection: 'hierarchy' | 'backlog' | 'todo' | 'in_progress' | 'completed' | null = null;
+      let currentEpic: Epic | null = null;
+      let currentTask: Partial<SimpleTask> | null = null;
+      let inHierarchy = false;
+      
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const trimmed = line.trim();
+        
+        // Detect sections
+        if (trimmed.includes('## Epic/Story/Task Hierarchy Reference')) {
+          currentSection = 'hierarchy';
+          inHierarchy = true;
+          continue;
+        } else if (trimmed === '## Backlog' || trimmed.includes('## Backlog')) {
+          currentSection = 'backlog';
+          inHierarchy = false;
+          currentEpic = null;
+        } else if (trimmed === '## To Do' || trimmed.includes('## To Do')) {
+          currentSection = 'todo';
+          inHierarchy = false;
+          currentEpic = null;
+        } else if (trimmed === '## In Progress' || trimmed.includes('## In Progress')) {
+          currentSection = 'in_progress';
+          inHierarchy = false;
+          currentEpic = null;
+        } else if (trimmed === '## Completed' || trimmed.includes('## Completed')) {
+          currentSection = 'completed';
+          inHierarchy = false;
+          currentEpic = null;
+        } else if (trimmed.startsWith('## ') && !trimmed.includes('Epic/Story')) {
+          inHierarchy = false;
+          currentEpic = null;
+        }
+        
+        // Skip parsing hierarchy reference section for epics/stories
+        // This is just a reference, not the source of truth
+        if (inHierarchy && currentSection === 'hierarchy') {
+          // Skip the hierarchy section entirely - we don't create epics from here
+          continue;
+        }
+        
+        // Parse task sections (Backlog, To Do, In Progress, Completed)
+        if (!inHierarchy && currentSection && currentSection !== 'hierarchy') {
+          // Parse task header
+          if (line.match(/^-\s*\[[ x]\]/)) {
+            // Save previous task if exists
+            if (currentTask && currentTask.content) {
+              const status = currentSection === 'backlog' ? 'backlog' :
+                           currentSection === 'todo' ? 'pending' :
+                           currentSection === 'in_progress' ? 'in_progress' :
+                           currentSection === 'completed' ? 'completed' : 'pending';
+              
+              tasks.push({
+                id: `task-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+                content: currentTask.content,
+                status: currentTask.status || status,
+                priority: currentTask.priority || 'medium',
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                assignee: currentTask.assignee || 'claude',
+                type: currentTask.type || 'feature',
+                identifier: currentTask.identifier,
+                description: currentTask.description || '',
+                filesModified: currentTask.filesModified || [],
+                resources: currentTask.resources || [],
+                dependencies: currentTask.dependencies
+              } as SimpleTask);
+            }
+            
+            // Start new task
+            const isCompleted = line.includes('[x]');
+            const taskLine = line.replace(/^-\s*\[[ x]\]\s*/, '');
+            const boldMatch = taskLine.match(/\*\*(.+?)\*\*/);
+            const content = boldMatch ? boldMatch[1].replace(/~~/g, '').trim() : 
+                          taskLine.replace(/\*\*/g, '').replace(/~~/g, '').replace(/⏳/g, '').trim();
+            
+            currentTask = {
+              content,
+              status: isCompleted ? 'completed' : 
+                     line.includes('⏳') ? 'in_progress' : undefined
+            };
+          }
+          // Parse task metadata
+          else if (currentTask && line.match(/^\s+-\s+/)) {
+            const metaLine = line.replace(/^\s+-\s+/, '').replace(/~~/g, '').trim();
+            
+            if (metaLine.startsWith('ID:')) {
+              currentTask.identifier = metaLine.replace('ID:', '').trim();
+            } else if (metaLine.startsWith('Assignee:')) {
+              const assignee = metaLine.replace('Assignee:', '').trim().toLowerCase();
+              if (['user', 'claude', 'both'].includes(assignee)) {
+                currentTask.assignee = assignee as any;
+              }
+            } else if (metaLine.startsWith('Type:')) {
+              const type = metaLine.replace('Type:', '').trim().toLowerCase();
+              if (['feature', 'bugfix', 'refactor', 'documentation', 'research'].includes(type)) {
+                currentTask.type = type as any;
+              }
+            } else if (metaLine.startsWith('Priority:')) {
+              const priority = metaLine.replace('Priority:', '').trim().toLowerCase();
+              if (['high', 'medium', 'low'].includes(priority)) {
+                currentTask.priority = priority;
+              }
+            } else if (metaLine.startsWith('Description:')) {
+              currentTask.description = metaLine.replace('Description:', '').trim();
+            } else if (metaLine.startsWith('Resources:')) {
+              const resourcesStr = metaLine.replace('Resources:', '').trim();
+              currentTask.resources = [];
+              
+              const resourceParts = resourcesStr.split(',').map(r => r.trim()).filter(r => r);
+              for (const part of resourceParts) {
+                const colonIndex = part.indexOf(':');
+                if (colonIndex > -1) {
+                  const type = part.substring(0, colonIndex).trim().toLowerCase();
+                  const name = part.substring(colonIndex + 1).trim();
+                  
+                  const typeMap: Record<string, string> = {
+                    'file': 'file',
+                    'task': 'task',
+                    'knowledge': 'knowledge',
+                    'hook': 'hook',
+                    'mcp': 'mcp',
+                    'command': 'command'
+                  };
+                  
+                  if (typeMap[type]) {
+                    currentTask.resources.push({
+                      type: typeMap[type] as any,
+                      id: `${type}-${name}`,
+                      name: name,
+                      metadata: {}
+                    });
+                  }
+                }
+              }
+            } else if (metaLine.startsWith('Dependencies:')) {
+              const deps = metaLine.replace('Dependencies:', '').trim();
+              currentTask.dependencies = deps.split(',').map(d => d.trim()).filter(d => d);
+            }
+          }
+        }
+      }
+      
+      // Don't forget the last task
+      if (currentTask && currentTask.content && currentSection && currentSection !== 'hierarchy') {
+        const status = currentSection === 'backlog' ? 'backlog' :
+                     currentSection === 'todo' ? 'pending' :
+                     currentSection === 'in_progress' ? 'in_progress' :
+                     currentSection === 'completed' ? 'completed' : 'pending';
+        
+        tasks.push({
+          id: `task-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+          content: currentTask.content,
+          status: currentTask.status || status,
+          priority: currentTask.priority || 'medium',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          assignee: currentTask.assignee || 'claude',
+          type: currentTask.type || 'feature',
+          identifier: currentTask.identifier,
+          description: currentTask.description || '',
+          filesModified: currentTask.filesModified || [],
+          resources: currentTask.resources || [],
+          dependencies: currentTask.dependencies
+        } as SimpleTask);
+      }
+      
+      return { epics, stories, tasks };
     },
 
     // Enhanced import that handles epics, stories, and tasks from hierarchical markdown
@@ -981,36 +1325,34 @@ export const useTasksStore = defineStore('tasks', {
       const lines = text.split('\n');
       let importedCount = 0;
       
+      // Clear epics and stories only (tasks are handled by importTasksFromText)
+      this.epics = [];
+      this.stories = [];
+      
       let currentEpic: Epic | null = null;
       let currentStory: Story | null = null;
       let currentSection: 'hierarchy' | 'tasks' | null = null;
       let currentTaskSection: 'backlog' | 'pending' | 'in_progress' | 'completed' | null = null;
+      let inHierarchySection = false;
       
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         const trimmedLine = line.trim();
         
-        // Detect sections
-        if (trimmedLine.includes('## 📋 Epic/Story/Task Hierarchy')) {
+        // Detect hierarchy section (handle both emoji and non-emoji versions)
+        if (trimmedLine.includes('Epic/Story/Task Hierarchy')) {
           currentSection = 'hierarchy';
+          inHierarchySection = true;
           continue;
-        } else if (trimmedLine.includes('## 🔄 Task Status View')) {
+        } else if (trimmedLine.startsWith('## ') && !trimmedLine.includes('Epic/Story/Task Hierarchy')) {
+          // Exit hierarchy section when we hit another ## section
+          inHierarchySection = false;
           currentSection = 'tasks';
           continue;
-        } else if (currentSection === 'tasks') {
-          // Handle task status sections
-          if (trimmedLine.includes('### Backlog')) {
-            currentTaskSection = 'backlog';
-          } else if (trimmedLine.includes('### To Do')) {
-            currentTaskSection = 'pending';
-          } else if (trimmedLine.includes('### In Progress')) {
-            currentTaskSection = 'in_progress';
-          } else if (trimmedLine.includes('### Completed')) {
-            currentTaskSection = 'completed';
-          }
         }
         
-        if (currentSection === 'hierarchy') {
+        // Only process hierarchy section lines
+        if (inHierarchySection && currentSection === 'hierarchy') {
           // Parse epic headers (main level - no indent)
           if (line.match(/^- \[[ x]\].*\*\(Epic\)\*/)) {
             // Save previous epic if exists
@@ -1138,15 +1480,58 @@ export const useTasksStore = defineStore('tasks', {
 
     // Parse task from markdown line
     parseTaskFromLine(line: string, storyId?: string, epicId?: string, defaultStatus?: string): SimpleTask | null {
-      const match = line.match(/^(?:    )?- \[([x ])\] \*\*(.+?)\*\*/);
+      // Try to match checkbox format first
+      let match = line.match(/^(?:    )?- \[([x ])\] \*\*(.+?)\*\*/);
+      if (match) {
+        const isCompleted = match[1] === 'x';
+        const content = match[2].replace(/~~/g, '').trim();
+        
+        let status: SimpleTask['status'] = defaultStatus as any || 'pending';
+        if (isCompleted) status = 'completed';
+        else if (line.includes('⏳') || line.includes('→')) status = 'in_progress';
+        
+        const task: SimpleTask = {
+          id: `task-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+          content,
+          status,
+          priority: 'medium',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          assignee: 'claude',
+          type: 'feature',
+          description: '',
+          filesModified: [],
+          resources: [],
+          storyId,
+          epicId
+        };
+        
+        return task;
+      }
+      
+      // Try to match simple format (○ Task, → Task, ✓ Task)
+      match = line.match(/^(?:    )?([○→✓]) (.+)/);
       if (!match) return null;
       
-      const isCompleted = match[1] === 'x';
-      const content = match[2].replace(/~~/g, '').trim();
+      const statusSymbol = match[1];
+      const contentWithRef = match[2].trim();
+      
+      // Extract content and references
+      let content = contentWithRef;
+      let extractedStoryId = storyId;
+      let extractedEpicId = epicId;
+      
+      // Check for [Epic: X, Story: Y] format
+      const refMatch = contentWithRef.match(/^(.+?)\s*\[([^\]]+)\]\s*$/);
+      if (refMatch) {
+        content = refMatch[1].trim();
+        // Parse references - we won't use them for now since we're tracking hierarchy differently
+      }
       
       let status: SimpleTask['status'] = defaultStatus as any || 'pending';
-      if (isCompleted) status = 'completed';
-      else if (line.includes('⏳')) status = 'in_progress';
+      if (statusSymbol === '✓') status = 'completed';
+      else if (statusSymbol === '→') status = 'in_progress';
+      else if (statusSymbol === '○') status = 'pending';
       
       const task: SimpleTask = {
         id: `task-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,

@@ -178,6 +178,44 @@
             </div>
           </div>
           
+          <!-- Resources -->
+          <div class="form-group">
+            <label>Resources</label>
+            <div class="resources-section">
+              <button 
+                type="button" 
+                @click="showResourceSelector = !showResourceSelector" 
+                class="add-resource-button"
+              >
+                <Icon name="mdi:plus" />
+                Add Resource
+              </button>
+              
+              <div v-if="showResourceSelector" class="resource-selector-container">
+                <ResourceSelector @add="addResource" />
+              </div>
+              
+              <div v-if="form.resources && form.resources.length > 0" class="resources-list">
+                <div 
+                  v-for="(resource, index) in form.resources" 
+                  :key="index"
+                  class="resource-item"
+                >
+                  <Icon :name="getResourceIcon(resource.type)" />
+                  <span class="resource-name">{{ resource.name }}</span>
+                  <span class="resource-type">{{ resource.type }}</span>
+                  <button 
+                    type="button" 
+                    @click="removeResource(index)" 
+                    class="remove-resource"
+                  >
+                    <Icon name="mdi:close" size="16" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          
           <!-- Form Actions -->
           <div class="form-actions">
             <button type="button" @click="closeModal" class="cancel-button">
@@ -199,6 +237,8 @@
 
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue';
+import ResourceSelector from '~/components/Prompts/ResourceSelector.vue';
+import type { ResourceReference } from '~/stores/prompt-engineering';
 
 interface Epic {
   id?: string;
@@ -212,6 +252,7 @@ interface Epic {
   estimatedStoryPoints?: number;
   targetTimeline?: string;
   dependencies: string[];
+  resources?: ResourceReference[];
 }
 
 const props = defineProps<{
@@ -236,12 +277,34 @@ const form = ref<Epic>({
   tags: [],
   estimatedStoryPoints: undefined,
   targetTimeline: '',
-  dependencies: []
+  dependencies: [],
+  resources: []
 });
 
 const acceptanceCriteriaText = ref('');
 const newTag = ref('');
 const showDependencySelector = ref(false);
+const showResourceSelector = ref(false);
+
+// Define resetForm before using it in watchers
+const resetForm = () => {
+  form.value = {
+    title: '',
+    description: '',
+    businessValue: '',
+    priority: 'normal',
+    status: 'backlog',
+    acceptanceCriteria: [],
+    tags: [],
+    estimatedStoryPoints: undefined,
+    targetTimeline: '',
+    dependencies: [],
+    resources: []
+  };
+  acceptanceCriteriaText.value = '';
+  newTag.value = '';
+  showResourceSelector.value = false;
+};
 
 // Watch for epic prop changes to populate form
 watch(() => props.epic, (epic) => {
@@ -249,7 +312,8 @@ watch(() => props.epic, (epic) => {
     form.value = {
       ...epic,
       tags: epic.tags || [],
-      dependencies: epic.dependencies || []
+      dependencies: epic.dependencies || [],
+      resources: epic.resources || []
     };
     acceptanceCriteriaText.value = epic.acceptanceCriteria.join('\n');
   } else {
@@ -264,29 +328,15 @@ watch(() => props.isOpen, (isOpen) => {
   }
 });
 
-const resetForm = () => {
-  form.value = {
-    title: '',
-    description: '',
-    businessValue: '',
-    priority: 'normal',
-    status: 'backlog',
-    acceptanceCriteria: [],
-    tags: [],
-    estimatedStoryPoints: undefined,
-    targetTimeline: '',
-    dependencies: []
-  };
-  acceptanceCriteriaText.value = '';
-  newTag.value = '';
-};
-
 const closeModal = () => {
   emit('close');
 };
 
 const saveEpic = () => {
   if (!form.value.title || !form.value.businessValue) return;
+  
+  console.log('[EpicModal] Saving epic, form.value:', form.value);
+  console.log('[EpicModal] props.epic:', props.epic);
   
   // Parse acceptance criteria from text
   const criteria = acceptanceCriteriaText.value
@@ -297,9 +347,12 @@ const saveEpic = () => {
   
   const epic: Epic = {
     ...form.value,
-    acceptanceCriteria: criteria
+    acceptanceCriteria: criteria,
+    // Preserve the ID if editing
+    id: props.epic?.id || form.value.id
   };
   
+  console.log('[EpicModal] Final epic to save:', epic);
   emit('save', epic);
   closeModal();
 };
@@ -318,6 +371,36 @@ const removeTag = (index: number) => {
 
 const removeDependency = (index: number) => {
   form.value.dependencies.splice(index, 1);
+};
+
+const addResource = (resource: ResourceReference) => {
+  if (!form.value.resources) {
+    form.value.resources = [];
+  }
+  // Check if resource already exists
+  const exists = form.value.resources.some(r => 
+    r.type === resource.type && r.id === resource.id
+  );
+  if (!exists) {
+    form.value.resources.push(resource);
+  }
+  showResourceSelector.value = false;
+};
+
+const removeResource = (index: number) => {
+  form.value.resources?.splice(index, 1);
+};
+
+const getResourceIcon = (type: string) => {
+  switch (type) {
+    case 'file': return 'mdi:file-document';
+    case 'knowledge': return 'mdi:book-open-variant';
+    case 'hook': return 'mdi:hook';
+    case 'mcp': return 'mdi:server-network';
+    case 'command': return 'mdi:console';
+    case 'task': return 'mdi:checkbox-marked-circle';
+    default: return 'mdi:help-circle';
+  }
 };
 </script>
 
@@ -565,6 +648,87 @@ const removeDependency = (index: number) => {
 }
 
 .remove-dependency:hover {
+  background: #f14c4c33;
+  color: #f14c4c;
+}
+
+.resources-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.add-resource-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: #3e3e42;
+  border: 1px dashed #6c6c6c;
+  border-radius: 4px;
+  color: #cccccc;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s;
+  align-self: flex-start;
+}
+
+.add-resource-button:hover {
+  background: #4e4e52;
+  border-style: solid;
+}
+
+.resource-selector-container {
+  background: #252526;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  padding: 12px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.resources-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.resource-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #252526;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.resource-name {
+  flex: 1;
+  color: #d4d4d4;
+}
+
+.resource-type {
+  color: #858585;
+  font-size: 11px;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  background: #3e3e42;
+  border-radius: 3px;
+}
+
+.remove-resource {
+  background: none;
+  border: none;
+  color: #858585;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 3px;
+  transition: all 0.2s;
+}
+
+.remove-resource:hover {
   background: #f14c4c33;
   color: #f14c4c;
 }

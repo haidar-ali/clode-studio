@@ -312,10 +312,10 @@ const showTabMenu = (event: MouseEvent, moduleId: ModuleId) => {
   padding: 0;
 }
 
-/* Panel headers inside dock content */
-.dock-content :deep(.panel-header) {
-  display: none; /* Hide redundant headers when in tabbed mode */
-}
+/* Panel headers inside dock content - only hide when we have tabs
+.dock-header + .dock-content :deep(.panel-header) {
+  display: none; 
+}*/
 
 /* Drag and drop styles */
 .left-dock.drop-target {
