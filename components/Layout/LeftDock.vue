@@ -29,6 +29,15 @@
           <span>{{ getModuleLabel(moduleId) }}</span>
         </button>
       </div>
+      <div class="dock-actions" v-if="isFloatingSupported && canFloatCurrentModule">
+        <button
+          class="action-btn"
+          @click="floatCurrentModule"
+          title="Float in separate window"
+        >
+          <Icon name="mdi:window-restore" size="16" />
+        </button>
+      </div>
     </div>
     
     <div class="dock-content">
@@ -46,11 +55,13 @@ import { ref, computed, defineAsyncComponent, watch, onMounted } from 'vue';
 import { useLayoutStore, type ModuleId } from '~/stores/layout';
 import { useTasksStore } from '~/stores/tasks';
 import { useModuleDragDrop } from '~/composables/useModuleDragDrop';
+import { useFloatingWindow } from '~/composables/useFloatingWindow';
 import Icon from '~/components/Icon.vue';
 
 const layoutStore = useLayoutStore();
 const tasksStore = useTasksStore();
 const { dragDropState, canDropInDock, handleDrop: handleDropModule, setDropTarget, startDrag, endDrag } = useModuleDragDrop();
+const { isFloatingSupported, floatModule } = useFloatingWindow();
 
 const projectPath = computed(() => tasksStore.projectPath);
 
@@ -72,7 +83,8 @@ const moduleConfig: Record<ModuleId, { label: string; icon: string }> = {
   monitoring: { label: 'Agent Monitoring', icon: 'mdi:monitor-dashboard' },
   'knowledge-validation': { label: 'Knowledge Validation', icon: 'mdi:brain' },
   'knowledge-graph': { label: 'Knowledge Graph', icon: 'mdi:graph' },
-  'context-budgeter': { label: 'Context Budgeter', icon: 'mdi:credit-card-outline' }
+  'context-budgeter': { label: 'Context Budgeter', icon: 'mdi:credit-card-outline' },
+  codex: { label: 'Codex', icon: 'mdi:robot' }
 };
 
 // Module components mapping
@@ -88,12 +100,13 @@ const moduleComponents = {
   knowledge: defineAsyncComponent(() => import('~/components/Knowledge/KnowledgePanel.vue')),
   prompts: defineAsyncComponent(() => import('~/components/Prompts/PromptStudio.vue')),
   claude: defineAsyncComponent(() => import('~/components/Terminal/ClaudeTerminalTabs.vue')),
-  agents: defineAsyncComponent(() => import('~/components/Agents/AgentOrchestrationPanel.vue')),
+  agents: defineAsyncComponent(() => import('~/components/Agents/AgentOrchestrationPanelEnhanced.vue')),
   epics: defineAsyncComponent(() => import('~/components/Agents/EpicManagementPanel.vue')),
   monitoring: defineAsyncComponent(() => import('~/components/Agents/MonitoringDashboard.vue')),
   'knowledge-validation': defineAsyncComponent(() => import('~/components/Knowledge/KnowledgeValidationPanel.vue')),
   'knowledge-graph': defineAsyncComponent(() => import('~/components/Knowledge/KnowledgeGraphViewer.vue')),
-  'context-budgeter': defineAsyncComponent(() => import('~/components/Agents/ContextBudgeterPanel.vue'))
+  'context-budgeter': defineAsyncComponent(() => import('~/components/Agents/ContextBudgeterPanel.vue')),
+  codex: defineAsyncComponent(() => import('~/components/Terminal/CodexTerminalTabs.vue'))
 };
 
 // Get modules in left dock
@@ -119,6 +132,8 @@ const getModuleColor = (moduleId: ModuleId): string => {
       return '#ff8c42'; // Orange for Anthropic/Claude
     case 'context':
       return '#ff69b4'; // Pink for brain/context
+    case 'codex':
+      return '#4fc3f7'; // Light blue for Codex
     case 'explorer':
     case 'explorer-editor':
       return '#42a5f5'; // Blue for file explorer
@@ -155,6 +170,26 @@ const getModuleColor = (moduleId: ModuleId): string => {
 
 const setActiveLeftModule = (moduleId: ModuleId) => {
   layoutStore.setActiveLeftModule(moduleId);
+};
+
+// Check if current module can be floated
+const canFloatCurrentModule = computed(() => {
+  // Don't allow floating explorer-editor as it's essential
+  return activeLeftModule.value !== 'explorer-editor';
+});
+
+// Float the current active module
+const floatCurrentModule = async () => {
+  if (activeLeftModule.value && canFloatCurrentModule.value) {
+    const success = await floatModule(activeLeftModule.value);
+    if (success) {
+      // Switch to another module in the dock
+      const otherModule = leftDockModules.value.find(m => m !== activeLeftModule.value);
+      if (otherModule) {
+        layoutStore.setActiveLeftModule(otherModule);
+      }
+    }
+  }
 };
 
 const handleDragOver = (event: DragEvent) => {
@@ -349,5 +384,31 @@ const showTabMenu = (event: MouseEvent, moduleId: ModuleId) => {
 
 .dock-tab.dragging {
   opacity: 0.5;
+}
+
+.dock-actions {
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  gap: 4px;
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: none;
+  border: none;
+  border-radius: 3px;
+  color: #cccccc;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.action-btn:hover {
+  background: #3e3e42;
+  color: #ffffff;
 }
 </style>

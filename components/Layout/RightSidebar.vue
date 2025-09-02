@@ -26,13 +26,23 @@
             'dragging': dragDropState.isDragging && dragDropState.draggedModule === moduleId
           }]"
           @click="setActiveRightModule(moduleId)"
-          :draggable="moduleId !== 'claude'"
-          @dragstart="moduleId !== 'claude' && handleTabDragStart($event, moduleId)"
+          :draggable="moduleId !== 'claude' && moduleId !== 'codex'"
+          @dragstart="moduleId !== 'claude' && moduleId !== 'codex' && handleTabDragStart($event, moduleId)"
           @dragend="handleTabDragEnd"
           @contextmenu.prevent="showTabMenu($event, moduleId)"
         >
           <Icon :name="getModuleIcon(moduleId)" size="16" :style="{ color: getModuleColor(moduleId) }" />
           <span>{{ getModuleLabel(moduleId) }}</span>
+        </button>
+      </div>
+      <div class="dock-actions">
+        <button
+          class="action-btn"
+          @click="floatCurrentModule"
+          title="Float in separate window"
+          v-if="isFloatingSupported && canFloatCurrentModule"
+        >
+          <Icon name="mdi:window-restore" size="16" />
         </button>
       </div>
     </div>
@@ -110,6 +120,17 @@
                     :instance-group="'primary'"
                   />
                 </template>
+                <!-- Special handling for Codex module - one per worktree -->
+                <template v-else-if="moduleId === 'codex'">
+                  <component
+                    v-for="[worktreePath, worktree] in activeWorktrees"
+                    :key="`split-primary-codex-${worktreePath.replace(/[^a-zA-Z0-9]/g, '_')}`"
+                    :is="getModuleComponent('codex')"
+                    v-show="moduleId === activeRightModule && worktreePath === activeWorktreePath"
+                    :worktree-path="worktreePath"
+                    :instance-group="'primary'"
+                  />
+                </template>
                 <!-- Special handling for Terminal module - one per worktree -->
                 <template v-else-if="moduleId === 'terminal'">
                   <component
@@ -152,6 +173,17 @@
                     :instance-group="'secondary'"
                   />
                 </template>
+                <!-- Special handling for Codex module - one per worktree -->
+                <template v-else-if="secondaryModule === 'codex'">
+                  <component
+                    v-for="[worktreePath, worktree] in activeWorktrees"
+                    :key="`split-secondary-codex-${worktreePath.replace(/[^a-zA-Z0-9]/g, '_')}`"
+                    :is="getModuleComponent('codex')"
+                    v-show="worktreePath === activeWorktreePath"
+                    :worktree-path="worktreePath"
+                    :instance-group="'secondary'"
+                  />
+                </template>
                 <!-- Special handling for Terminal module - one per worktree -->
                 <template v-else-if="secondaryModule === 'terminal'">
                   <component
@@ -183,11 +215,13 @@ import { Splitpanes, Pane } from 'splitpanes';
 import { useLayoutStore, type ModuleId } from '~/stores/layout';
 import { useModuleDragDrop } from '~/composables/useModuleDragDrop';
 import { useWorkspaceManager } from '~/composables/useWorkspaceManager';
+import { useFloatingWindow } from '~/composables/useFloatingWindow';
 import Icon from '~/components/Icon.vue';
 
 const layoutStore = useLayoutStore();
 const { dragDropState, canDropInDock, handleDrop: handleDropModule, setDropTarget, startDrag, endDrag } = useModuleDragDrop();
 const workspaceManager = useWorkspaceManager();
+const { isFloatingSupported, floatModule, floatingWindows } = useFloatingWindow();
 
 // Split panel drag and drop state
 const splitDropTarget = ref<'top' | 'bottom' | null>(null);
@@ -207,6 +241,7 @@ const activeWorktreePath = computed(() => {
 // Module components mapping
 const moduleComponents = {
   claude: defineAsyncComponent(() => import('~/components/Terminal/ClaudeTerminalTabs.vue')),
+  codex: defineAsyncComponent(() => import('~/components/Terminal/CodexTerminalTabs.vue')),
   tasks: defineAsyncComponent(() => import('~/components/Kanban/KanbanBoard.vue')),
   knowledge: defineAsyncComponent(() => import('~/components/Knowledge/KnowledgePanel.vue')),
   context: defineAsyncComponent(() => import('~/components/Context/ContextPanel.vue')),
@@ -217,7 +252,7 @@ const moduleComponents = {
   terminal: defineAsyncComponent(() => import('~/components/Terminal/TerminalWithSidebar.vue')),
   explorer: defineAsyncComponent(() => import('~/components/FileExplorer/FileTree.vue')),
   'explorer-editor': defineAsyncComponent(() => import('~/components/Modules/ExplorerEditor.vue')),
-  agents: defineAsyncComponent(() => import('~/components/Agents/AgentOrchestrationPanel.vue')),
+  agents: defineAsyncComponent(() => import('~/components/Agents/AgentOrchestrationPanelEnhanced.vue')),
   epics: defineAsyncComponent(() => import('~/components/Agents/EpicManagementPanel.vue')),
   monitoring: defineAsyncComponent(() => import('~/components/Agents/MonitoringDashboard.vue')),
   'knowledge-validation': defineAsyncComponent(() => import('~/components/Knowledge/KnowledgeValidationPanel.vue')),
@@ -238,6 +273,7 @@ const moduleConfig: Record<ModuleId, { label: string; icon: string }> = {
   knowledge: { label: 'Knowledge', icon: 'mdi:book-open-page-variant' },
   prompts: { label: 'Prompts', icon: 'mdi:lightning-bolt' },
   claude: { label: 'Claude AI', icon: 'simple-icons:anthropic' },
+  codex: { label: 'Codex', icon: 'mdi:robot' },
   agents: { label: 'Agent Orchestration', icon: 'mdi:robot' },
   epics: { label: 'Epic Management', icon: 'mdi:chart-gantt' },
   monitoring: { label: 'Agent Monitoring', icon: 'mdi:monitor-dashboard' },
@@ -270,7 +306,7 @@ const secondaryModule = computed(() => {
 
 // Can split if we have Claude or multiple modules
 const canSplit = computed(() => {
-  return activeRightModule.value === 'claude' || rightDockModules.value.length > 1;
+  return ['claude', 'codex'].includes(activeRightModule.value) || rightDockModules.value.length > 1;
 });
 
 // Module helpers
@@ -292,6 +328,8 @@ const getModuleColor = (moduleId: ModuleId): string => {
   switch (moduleId) {
     case 'claude':
       return '#ff8c42'; // Orange for Anthropic/Claude
+    case 'codex':
+      return '#4fc3f7'; // Light blue for Codex
     case 'context':
       return '#ff69b4'; // Pink for brain/context
     case 'explorer':
@@ -344,6 +382,26 @@ const toggleSidebar = () => {
   layoutStore.toggleRightSidebar();
 };
 
+// Check if current module can be floated
+const canFloatCurrentModule = computed(() => {
+  // Don't allow floating claude/codex for now as they need special handling
+  return activeRightModule.value !== 'claude' && activeRightModule.value !== 'codex';
+});
+
+// Float the current active module
+const floatCurrentModule = async () => {
+  if (activeRightModule.value && canFloatCurrentModule.value) {
+    const success = await floatModule(activeRightModule.value);
+    if (success) {
+      // Switch to another module in the dock
+      const otherModule = rightDockModules.value.find(m => m !== activeRightModule.value);
+      if (otherModule) {
+        layoutStore.setActiveRightModule(otherModule);
+      }
+    }
+  }
+};
+
 const setActiveRightModule = (moduleId: ModuleId) => {
   layoutStore.setActiveRightModule(moduleId);
 };
@@ -362,8 +420,8 @@ const handleTabDragEnd = () => {
 };
 
 const showTabMenu = (event: MouseEvent, moduleId: ModuleId) => {
-  // Don't show menu for claude
-  if (moduleId === 'claude') return;
+  // Don't show menu for claude/codex
+  if (moduleId === 'claude' || moduleId === 'codex') return;
   
   // Create context menu
   const menu = document.createElement('div');
@@ -599,6 +657,32 @@ const handleSplitDrop = (event: DragEvent, target: 'top' | 'bottom') => {
   opacity: 0.5;
 }
 
+.dock-actions {
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  gap: 4px;
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: none;
+  border: none;
+  border-radius: 3px;
+  color: #cccccc;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.action-btn:hover {
+  background: #3e3e42;
+  color: #ffffff;
+}
+
 .sidebar-controls {
   display: flex;
   gap: 4px;
@@ -651,8 +735,11 @@ const handleSplitDrop = (event: DragEvent, target: 'top' | 'bottom') => {
   flex-direction: column;
 }
 
-/* Special handling for Claude terminals in split view */
+/* Special handling for Claude/Codex terminals in split view */
 .split-panel :deep(.claude-terminal-tabs) {
+  height: 100%;
+}
+.split-panel :deep(.codex-terminal-tabs) {
   height: 100%;
 }
 

@@ -202,6 +202,11 @@ export enum RemoteEvent {
   CLAUDE_EXIT = 'claude:exit',
   CLAUDE_INSTANCES_UPDATED = 'claude:instances:updated',
   CLAUDE_RESPONSE_COMPLETE = 'claude:response:complete',
+
+  // Codex events
+  CODEX_OUTPUT = 'codex:output',
+  CODEX_EXIT = 'codex:exit',
+  CODEX_INSTANCES_UPDATED = 'codex:instances:updated',
   
   // File events
   FILE_CHANGED = 'file:changed',

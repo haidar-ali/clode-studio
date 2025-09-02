@@ -8,7 +8,9 @@ const electronAPI = {
             'forward-terminal-data',
             'forward-claude-output',
             'forward-claude-response-complete',
+            'forward-codex-output',
             'claude-instances-updated',
+            'codex-instances-updated',
             'snapshots-list-response',
             'snapshots-capture-response',
             'snapshots-restore-response',
@@ -75,6 +77,38 @@ const electronAPI = {
     },
     contextBudgeter: {
         executeTask: (action, data) => electron_1.ipcRenderer.invoke('contextBudgeter:executeTask', action, data)
+    },
+    codex: {
+        start: (instanceId, workingDirectory, instanceName) => electron_1.ipcRenderer.invoke('codex:start', instanceId, workingDirectory, instanceName),
+        send: (instanceId, data) => electron_1.ipcRenderer.invoke('codex:send', instanceId, data),
+        stop: (instanceId) => electron_1.ipcRenderer.invoke('codex:stop', instanceId),
+        resize: (instanceId, cols, rows) => electron_1.ipcRenderer.invoke('codex:resize', instanceId, cols, rows),
+        getPendingOutput: (instanceId) => electron_1.ipcRenderer.invoke('codex:getPendingOutput', instanceId),
+        onOutput: (instanceId, callback) => {
+            const channel = `codex:output:${instanceId}`;
+            const handler = (_, data) => callback(data);
+            electron_1.ipcRenderer.on(channel, handler);
+            return () => electron_1.ipcRenderer.removeListener(channel, handler);
+        },
+        onError: (instanceId, callback) => {
+            const channel = `codex:error:${instanceId}`;
+            const handler = (_, data) => callback(data);
+            electron_1.ipcRenderer.on(channel, handler);
+            return () => electron_1.ipcRenderer.removeListener(channel, handler);
+        },
+        onExit: (instanceId, callback) => {
+            const channel = `codex:exit:${instanceId}`;
+            const handler = (_, code) => callback(code);
+            electron_1.ipcRenderer.on(channel, handler);
+            return () => electron_1.ipcRenderer.removeListener(channel, handler);
+        },
+        removeAllListeners: (instanceId) => {
+            electron_1.ipcRenderer.removeAllListeners(`codex:output:${instanceId}`);
+            electron_1.ipcRenderer.removeAllListeners(`codex:error:${instanceId}`);
+            electron_1.ipcRenderer.removeAllListeners(`codex:exit:${instanceId}`);
+        },
+        getBuffer: (instanceId) => electron_1.ipcRenderer.invoke('codex:getBuffer', instanceId),
+        configureTerminal: (instanceId, cols, rows) => electron_1.ipcRenderer.invoke('codex:configureTerminal', instanceId, cols, rows)
     },
     claude: {
         start: (instanceId, workingDirectory, instanceName, runConfig) => electron_1.ipcRenderer.invoke('claude:start', instanceId, workingDirectory, instanceName, runConfig),
@@ -389,6 +423,33 @@ const electronAPI = {
     // Code Generation
     codeGeneration: {
         generate: (params) => electron_1.ipcRenderer.invoke('codeGeneration:generate', params)
+    },
+    // Floating window API
+    floatingWindow: {
+        create: (config) => electron_1.ipcRenderer.invoke('floating-window:create', config),
+        close: (moduleId) => electron_1.ipcRenderer.invoke('floating-window:close', moduleId),
+        update: (moduleId, data) => electron_1.ipcRenderer.invoke('floating-window:update', moduleId, data),
+        list: () => electron_1.ipcRenderer.invoke('floating-window:list'),
+        toggleAlwaysOnTop: (moduleId) => electron_1.ipcRenderer.invoke('floating-window:toggle-always-on-top', moduleId),
+        focus: (moduleId) => electron_1.ipcRenderer.invoke('floating-window:focus', moduleId),
+        isFloating: (moduleId) => electron_1.ipcRenderer.invoke('floating-window:is-floating', moduleId),
+        sendToMain: (data) => electron_1.ipcRenderer.invoke('floating-window:send-to-main', data),
+        broadcast: (eventName, data) => electron_1.ipcRenderer.invoke('floating-window:broadcast', eventName, data),
+        onOpened: (callback) => {
+            electron_1.ipcRenderer.on('floating-window:opened', (event, moduleId) => callback(moduleId));
+        },
+        onClosed: (callback) => {
+            electron_1.ipcRenderer.on('floating-window:closed', (event, moduleId) => callback(moduleId));
+        },
+        onFocused: (callback) => {
+            electron_1.ipcRenderer.on('floating-window:focused', (event, moduleId) => callback(moduleId));
+        },
+        onDataUpdate: (callback) => {
+            electron_1.ipcRenderer.on('floating-window:data-update', (event, data) => callback(data));
+        },
+        onDataFromFloating: (callback) => {
+            electron_1.ipcRenderer.on('floating-window:data-from-floating', (event, data) => callback(data));
+        }
     }
 };
 electron_1.contextBridge.exposeInMainWorld('electronAPI', electronAPI);

@@ -35,6 +35,7 @@ import { CloudflareTunnel } from './services/cloudflare-tunnel.js';
 import { RelayClient } from './services/relay-client.js';
 import { claudeInstanceManager } from './services/claude-instance-manager.js';
 import { lspManager } from './lsp-manager.js';
+import { FloatingWindowManager } from './services/floating-window-manager.js';
 
 // Load environment variables from .env file
 import { config } from 'dotenv';
@@ -43,6 +44,8 @@ config();
 // Extend global for pending output storage
 declare global {
   var pendingClaudeOutput: Map<string, string> | undefined;
+  var pendingCodexOutput: Map<string, string> | undefined;
+  var codexBuffers: Map<string, string> | undefined;
 }
 
 const __filename = fileURLToPath(import.meta.url);
@@ -54,6 +57,8 @@ const fileWatchers: Map<string, any> = new Map();
 
 // Multi-instance Claude support
 const claudeInstances: Map<string, pty.IPty> = new Map(); // Keep for backward compatibility, will migrate gradually
+// Multi-instance Codex support
+const codexInstances: Map<string, pty.IPty> = new Map();
 
 // Mode manager and remote server
 const modeManager = getModeManager();
@@ -229,6 +234,11 @@ function createWindow() {
       remoteServer.updateMainWindow(mainWindow);
     }
     
+    // Set up FloatingWindowManager with main window reference
+    if (mainWindow) {
+      FloatingWindowManager.getInstance().setMainWindow(mainWindow);
+    }
+    
     // Flush any pending Claude output
     if (global.pendingClaudeOutput && global.pendingClaudeOutput.size > 0) {
       console.log('Flushing pending Claude output to new window');
@@ -251,6 +261,8 @@ function createWindow() {
       pty.kill();
     });
     claudeInstances.clear();
+    // Close all floating windows
+    FloatingWindowManager.getInstance().closeAllFloatingWindows();
   });
 }
 
@@ -283,6 +295,7 @@ app.whenReady().then(async () => {
   GitServiceManager.getInstance();
   WorktreeManagerGlobal.getInstance();
   GitHooksManagerGlobal.getInstance();
+  FloatingWindowManager.getInstance();
   
 
   let workspacePath = (store as any).get('workspacePath');
@@ -409,6 +422,15 @@ app.whenReady().then(async () => {
           remoteServer.forwardClaudeOutput(data.socketId, data.instanceId, data.data);
         }
       });
+      // Set up IPC handler for Codex output forwarding
+      ipcMain.on('forward-codex-output', (event, data) => {
+        console.log('[Main] Received forward-codex-output:', { socketId: data.socketId, instanceId: data.instanceId, dataLength: data.data?.length });
+        if (remoteServer && data.socketId && data.instanceId) {
+          remoteServer.forwardCodexOutput(data.socketId, data.instanceId, data.data);
+        } else {
+          console.log('[Main] Cannot forward - missing remoteServer or data:', { hasRemoteServer: !!remoteServer, socketId: data.socketId, instanceId: data.instanceId });
+        }
+      });
       
       // Set up IPC handler for Claude response complete forwarding
       ipcMain.on('forward-claude-response-complete', (event, data) => {
@@ -433,6 +455,13 @@ app.whenReady().then(async () => {
         }
         // Also notify the desktop UI
         mainWindow?.webContents.send('claude:instances:updated');
+      });
+
+      ipcMain.on('codex-instances-updated', () => {
+        if (remoteServer) {
+          remoteServer.broadcastCodexInstancesUpdate();
+        }
+        mainWindow?.webContents.send('codex:instances:updated');
       });
 
       // Initialize tunnel/relay based on RELAY_TYPE environment variable
@@ -1043,6 +1072,141 @@ ipcMain.handle('claude:resize', async (event, instanceId: string, cols: number, 
     }
   }
   return { success: false, error: `No Claude PTY running for instance ${instanceId}` };
+});
+
+// Codex Process Management using PTY (generic command 'codex' from PATH)
+ipcMain.handle('codex:start', async (event, instanceId: string, workingDirectory: string, instanceName?: string) => {
+  // If already running and alive, return
+  const existing = codexInstances.get(instanceId);
+  if (existing?.pid && isProcessRunning(existing.pid)) {
+    return { success: true, pid: existing.pid };
+  }
+
+  try {
+    const shell = process.platform === 'win32' ? 'powershell.exe' : process.env.SHELL || 'bash';
+    const useShell = process.platform !== 'win32';
+    // Try to run 'codex' directly; using PTY with shell ensures PATH resolution
+    const cmd = useShell ? shell : 'codex';
+    const args = useShell ? ['-lc', 'codex'] : [];
+
+    const env = { ...process.env };
+
+    const p = pty.spawn(cmd, args, {
+      name: 'xterm-256color',
+      cols: 120,
+      rows: 30,
+      cwd: workingDirectory || process.cwd(),
+      env
+    });
+
+    codexInstances.set(instanceId, p);
+
+    // Initialize pending buffer for this instance
+    if (!global.pendingCodexOutput) global.pendingCodexOutput = new Map();
+
+    p.onData((data) => {
+      // Broadcast to renderer
+      console.log(`[Codex] Sending output for ${instanceId}, length: ${data.length}`);
+      mainWindow?.webContents.send(`codex:output:${instanceId}`, data);
+      
+      // Also forward to remote if connected
+      if (remoteServer) {
+        remoteServer.broadcastCodexOutput(instanceId, data);
+      }
+      // Also buffer output in case renderer reconnects
+      const prev = global.pendingCodexOutput?.get(instanceId) || '';
+      const next = (prev + data).slice(-20000); // cap buffer
+      global.pendingCodexOutput?.set(instanceId, next);
+      
+      // Store buffer for codex:getBuffer handler
+      if (!global.codexBuffers) {
+        global.codexBuffers = new Map<string, string>();
+      }
+      const currentBuffer = global.codexBuffers.get(instanceId) || '';
+      global.codexBuffers.set(instanceId, (currentBuffer + data).slice(-50000)); // Keep last 50k chars
+    });
+
+    p.onExit(({ exitCode }) => {
+      mainWindow?.webContents.send(`codex:exit:${instanceId}`, exitCode);
+      codexInstances.delete(instanceId);
+      // Clean pending buffer on exit
+      if (global.pendingCodexOutput?.has(instanceId)) global.pendingCodexOutput.delete(instanceId);
+    });
+
+    return { success: true, pid: p.pid };
+  } catch (error) {
+    console.error(`Failed to start Codex for ${instanceId}:`, error);
+    return { success: false, error: (error as Error).message };
+  }
+});
+
+ipcMain.handle('codex:send', async (event, instanceId: string, data: string) => {
+  const p = codexInstances.get(instanceId);
+  if (!p) return { success: false, error: `Codex instance is not running. Start it first.` };
+  try { p.write(data); return { success: true }; } catch (e) { return { success: false, error: (e as Error).message }; }
+});
+
+ipcMain.handle('codex:getPendingOutput', async (event, instanceId: string) => {
+  if (global.pendingCodexOutput?.has(instanceId)) {
+    const out = global.pendingCodexOutput.get(instanceId) || '';
+    global.pendingCodexOutput.delete(instanceId);
+    return out;
+  }
+  return '';
+});
+
+ipcMain.handle('codex:stop', async (event, instanceId: string) => {
+  const p = codexInstances.get(instanceId);
+  if (p) {
+    try { p.kill(); } catch {}
+    codexInstances.delete(instanceId);
+    if (global.pendingCodexOutput?.has(instanceId)) global.pendingCodexOutput.delete(instanceId);
+    return { success: true };
+  }
+  return { success: false, error: `No Codex PTY running for instance ${instanceId}` };
+});
+
+ipcMain.handle('codex:resize', async (event, instanceId: string, cols: number, rows: number) => {
+  const p = codexInstances.get(instanceId);
+  if (p) {
+    try { p.resize(cols, rows); return { success: true }; } catch (e) { return { success: false, error: (e as Error).message }; }
+  }
+  return { success: false, error: `No Codex PTY running for instance ${instanceId}` };
+});
+
+// Codex buffer management - get terminal buffer for an instance
+ipcMain.handle('codex:getBuffer', async (event, instanceId: string) => {
+  try {
+    // For now, we'll store buffers in memory similar to Claude
+    // In a real implementation, this would be more sophisticated
+    if (!global.codexBuffers) {
+      global.codexBuffers = new Map<string, string>();
+    }
+    
+    const buffer = global.codexBuffers.get(instanceId) || '';
+    console.log(`[Codex] Getting buffer for ${instanceId}, size: ${buffer.length}`);
+    return { success: true, buffer };
+  } catch (error) {
+    console.error(`[Codex] Error getting buffer for ${instanceId}:`, error);
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Failed to get buffer' 
+    };
+  }
+});
+
+// Codex terminal configuration
+ipcMain.handle('codex:configureTerminal', async (event, instanceId: string, cols: number, rows: number) => {
+  const p = codexInstances.get(instanceId);
+  if (p) {
+    try { 
+      p.resize(cols, rows); 
+      return { success: true }; 
+    } catch (e) { 
+      return { success: false, error: (e as Error).message }; 
+    }
+  }
+  return { success: false, error: `No Codex PTY running for instance ${instanceId}` };
 });
 
 // Get home directory

@@ -48,7 +48,7 @@
         <div class="budget-card">
           <div class="budget-header">
             <span class="budget-label">Daily Budget</span>
-            <span class="budget-amount">${{ budgetStatus.dailyCost.toFixed(2) }}</span>
+            <span class="budget-amount">${{ formatCurrency(budgetStatus.dailyCost, 2) }}</span>
           </div>
           <div class="budget-progress">
             <div 
@@ -58,8 +58,8 @@
             ></div>
           </div>
           <div class="budget-details">
-            <span>Max: ${{ budgetConstraints.maxDailyCost.toFixed(2) }}</span>
-            <span>Remaining: ${{ (budgetConstraints.maxDailyCost - budgetStatus.dailyCost).toFixed(2) }}</span>
+            <span>Max: ${{ formatCurrency(budgetConstraints.maxDailyCost, 2) }}</span>
+            <span>Remaining: ${{ formatCurrency((budgetConstraints.maxDailyCost || 0) - (budgetStatus.dailyCost || 0), 2) }}</span>
           </div>
         </div>
       </div>
@@ -627,12 +627,72 @@ async function refreshData() {
         window.electronAPI.contextBudgeter.executeTask('getBudgetStatus', {}),
         window.electronAPI.contextBudgeter.executeTask('getContextWindows', {})
       ]);
-      
+
+      // Merge/massage incoming data to preserve expected shape
       if (statusResult.success) {
-        budgetStatus.value = statusResult.data;
-        agentAllocations.value = statusResult.data.agents;
+        const data = statusResult.data || {};
+        const prev = budgetStatus.value;
+
+        const totalAllocated = typeof data.totalAllocated === 'number' ? data.totalAllocated : prev.totalAllocated;
+        const totalUsed = typeof data.totalUsed === 'number' ? data.totalUsed : prev.totalUsed;
+        const totalRemaining = typeof data.totalRemaining === 'number'
+          ? data.totalRemaining
+          : (typeof totalAllocated === 'number' && typeof totalUsed === 'number'
+              ? Math.max(0, totalAllocated - totalUsed)
+              : prev.totalRemaining);
+        const utilizationPercent = typeof data.utilizationPercent === 'number'
+          ? data.utilizationPercent
+          : (totalAllocated ? Math.min(100, (totalUsed / totalAllocated) * 100) : prev.utilizationPercent);
+        const dailyCost = typeof data.dailyCost === 'number' ? data.dailyCost : prev.dailyCost;
+        const maxDailyCost = budgetConstraints.value.maxDailyCost || 0;
+        const dailyCostPercent = maxDailyCost ? Math.min(100, (dailyCost / maxDailyCost) * 100) : prev.dailyCostPercent;
+
+        budgetStatus.value = {
+          totalAllocated,
+          totalUsed,
+          totalRemaining,
+          utilizationPercent,
+          dailyCost,
+          dailyCostPercent,
+        } as any;
+
+        if (Array.isArray(data.agents)) {
+          agentAllocations.value = data.agents.map((a: any) => {
+            const allocated = typeof a.allocated === 'number' ? a.allocated : 0;
+            const used = typeof a.used === 'number' ? a.used : 0;
+            const remaining = typeof a.remaining === 'number' ? a.remaining : (allocated - used);
+            const percentage = typeof a.percentage === 'number'
+              ? a.percentage
+              : (allocated ? (used / allocated) * 100 : 0);
+            return {
+              agentId: a.agentId || a.id || 'unknown',
+              allocated,
+              used,
+              remaining,
+              percentage,
+              isOverBudget: typeof a.isOverBudget === 'boolean' ? a.isOverBudget : used > allocated,
+            } as any;
+          });
+        }
       }
-      if (windowsResult.success) contextWindows.value = windowsResult.data;
+
+      if (windowsResult.success) {
+        const raw = Array.isArray(windowsResult.data) ? windowsResult.data : [];
+        contextWindows.value = raw.map((w: any) => {
+          const messageCount = typeof w.messageCount === 'number' ? w.messageCount : 0;
+          return {
+            id: w.id,
+            title: w.title,
+            messages: new Array(messageCount).fill(null),
+            totalTokens: w.totalTokens,
+            maxTokens: w.maxTokens,
+            utilizationPercent: w.utilizationPercent,
+            compressible: Boolean(w.canCompress),
+            agentId: w.agentId,
+            createdAt: w.lastActivity || new Date().toISOString(),
+          } as any;
+        });
+      }
     }
   } catch (error) {
     console.error('Failed to refresh context budget data:', error);
@@ -788,6 +848,11 @@ function formatTokens(tokens: number | undefined | null): string {
     return (tokens / 1000).toFixed(1) + 'K';
   }
   return tokens.toString();
+}
+
+function formatCurrency(value: number | undefined | null, digits = 2): string {
+  const n = Number(value);
+  return Number.isFinite(n) ? n.toFixed(digits) : (0).toFixed(digits);
 }
 
 function formatRelativeTime(dateString: string): string {

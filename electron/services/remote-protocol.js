@@ -14,6 +14,10 @@ export var RemoteEvent;
     RemoteEvent["CLAUDE_EXIT"] = "claude:exit";
     RemoteEvent["CLAUDE_INSTANCES_UPDATED"] = "claude:instances:updated";
     RemoteEvent["CLAUDE_RESPONSE_COMPLETE"] = "claude:response:complete";
+    // Codex events
+    RemoteEvent["CODEX_OUTPUT"] = "codex:output";
+    RemoteEvent["CODEX_EXIT"] = "codex:exit";
+    RemoteEvent["CODEX_INSTANCES_UPDATED"] = "codex:instances:updated";
     // File events
     RemoteEvent["FILE_CHANGED"] = "file:changed";
     RemoteEvent["FILE_DELETED"] = "file:deleted";

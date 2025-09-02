@@ -62,6 +62,7 @@ const mainNavItems = [
 ];
 
 const moreNavItems = [
+  { id: 'codex', label: 'Codex', icon: 'mdi:code-tags' },
   { id: 'source-control', label: 'Git', icon: 'mdi:git' },
   { id: 'knowledge', label: 'Knowledge', icon: 'mdi:book-open-page-variant' },
   { id: 'context', label: 'Context', icon: 'mdi:brain' },
@@ -97,6 +98,8 @@ const getIconColor = (itemId: string, isActive: boolean): string => {
       return '#78909c'; // Blue-grey for terminal
     case 'claude':
       return '#ff8c42'; // Orange for Claude/Anthropic
+    case 'codex':
+      return '#00bcd4'; // Cyan for Codex
     case 'tasks':
       return '#66bb6a'; // Green for tasks
     case 'source-control':

@@ -10,6 +10,7 @@ import { RemoteSessionManager } from './remote-session-manager.js';
 import { RemoteFileHandler } from './remote-handlers/RemoteFileHandler.js';
 import { RemoteTerminalHandler } from './remote-handlers/RemoteTerminalHandler.js';
 import { RemoteClaudeHandler } from './remote-handlers/RemoteClaudeHandler.js';
+import { RemoteCodexHandler } from './remote-handlers/RemoteCodexHandler.js';
 import { RemoteSyncHandler } from './remote-handlers/RemoteSyncHandler.js';
 import { RemoteWorkspaceHandler } from './remote-handlers/RemoteWorkspaceHandler.js';
 import { RemoteDesktopFeaturesHandler } from './remote-handlers/RemoteDesktopFeaturesHandler.js';
@@ -32,6 +33,7 @@ export class RemoteServer {
   private fileHandler: RemoteFileHandler;
   private terminalHandler: RemoteTerminalHandler;
   private claudeHandler: RemoteClaudeHandler;
+  private codexHandler: RemoteCodexHandler;
   private syncHandler: RemoteSyncHandler;
   private workspaceHandler: RemoteWorkspaceHandler;
   private desktopFeaturesHandler: RemoteDesktopFeaturesHandler;
@@ -62,6 +64,7 @@ export class RemoteServer {
       this.mainWindow,
       this.sessionManager
     );
+    this.codexHandler = new RemoteCodexHandler(this.mainWindow);
     
     this.syncHandler = new RemoteSyncHandler(
       this.mainWindow,
@@ -101,6 +104,7 @@ export class RemoteServer {
       this.mainWindow,
       this.sessionManager
     );
+    this.codexHandler = new RemoteCodexHandler(this.mainWindow);
     
     this.syncHandler = new RemoteSyncHandler(
       this.mainWindow,
@@ -127,6 +131,7 @@ export class RemoteServer {
         this.fileHandler.registerHandlers(socket);
         this.terminalHandler.registerHandlers(socket);
         this.claudeHandler.registerHandlers(socket);
+        this.codexHandler.registerHandlers(socket);
         this.syncHandler.registerHandlers(socket);
         this.workspaceHandler.registerHandlers(socket);
         this.desktopFeaturesHandler.registerHandlers(socket);
@@ -142,6 +147,7 @@ export class RemoteServer {
         socket.on('disconnect', () => {
           this.terminalHandler.cleanupSocketTerminals(socket.id);
           this.claudeHandler.cleanupSocketInstances(socket.id);
+          this.codexHandler.cleanupSocketInstances(socket.id);
           this.sessionManager.removeSession(socket.id);
         });
         
@@ -249,6 +255,7 @@ export class RemoteServer {
       this.fileHandler.registerHandlers(socket);
       this.terminalHandler.registerHandlers(socket);
       this.claudeHandler.registerHandlers(socket);
+      this.codexHandler.registerHandlers(socket);
       this.syncHandler.registerHandlers(socket);
       this.workspaceHandler.registerHandlers(socket);
       this.desktopFeaturesHandler.registerHandlers(socket);
@@ -272,12 +279,10 @@ export class RemoteServer {
       
       // Handle disconnection
       socket.on('disconnect', () => {
-       
-        
-        // Clean up terminals and Claude instances for this socket
+        // Clean up terminals and instances for this socket
         this.terminalHandler.cleanupSocketTerminals(socket.id);
         this.claudeHandler.cleanupSocketInstances(socket.id);
-        
+        this.codexHandler.cleanupSocketInstances(socket.id);
         // Remove session
         this.sessionManager.removeSession(socket.id);
       });
@@ -451,12 +456,40 @@ export class RemoteServer {
       });
     }
   }
+
+  forwardCodexOutput(socketId: string, instanceId: string, data: string): void {
+    console.log(`[RemoteServer] forwardCodexOutput called for ${instanceId} on socket ${socketId}, data length: ${data?.length}`);
+    if (!this.io) {
+      console.log('[RemoteServer] No io instance');
+      return;
+    }
+    const socket = this.io.sockets.sockets.get(socketId);
+    if (socket && socket.connected) {
+      console.log(`[RemoteServer] Emitting CODEX_OUTPUT to socket ${socketId}`);
+      socket.emit(RemoteEvent.CODEX_OUTPUT, { instanceId, data });
+    } else {
+      console.log(`[RemoteServer] Socket ${socketId} not found or not connected`);
+    }
+  }
+  
+  broadcastCodexOutput(instanceId: string, data: string): void {
+    if (!this.io) return;
+    
+    // Broadcast to all connected sockets - let them filter by instanceId
+    console.log(`[RemoteServer] Broadcasting Codex output for ${instanceId}, data length: ${data?.length}`);
+    this.io.emit(RemoteEvent.CODEX_OUTPUT, { instanceId, data });
+  }
   
   broadcastClaudeInstancesUpdate(): void {
     if (!this.io) return;
     
     // Broadcast to all connected clients that Claude instances have been updated
     this.io.emit(RemoteEvent.CLAUDE_INSTANCES_UPDATED);
+  }
+
+  broadcastCodexInstancesUpdate(): void {
+    if (!this.io) return;
+    this.io.emit(RemoteEvent.CODEX_INSTANCES_UPDATED);
   }
   
   broadcastClaudeStatusUpdate(instanceId: string, status: 'connected' | 'disconnected' | 'connecting', pid?: number): void {

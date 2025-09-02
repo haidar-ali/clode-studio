@@ -106,6 +106,11 @@ const activityItems = computed<ActivityItem[]>(() => {
       icon: 'simple-icons:anthropic'
     },
     {
+      id: 'codex',
+      label: 'Codex',
+      icon: 'mdi:robot'
+    },
+    {
       id: 'explorer',
       label: 'Explorer',
       icon: 'mdi:folder-outline'
@@ -163,11 +168,6 @@ const activityItems = computed<ActivityItem[]>(() => {
       badge: tasksStore.activeEpics.length
     },
     {
-      id: 'monitoring',
-      label: 'Agent Monitoring',
-      icon: 'mdi:monitor-dashboard'
-    },
-    {
       id: 'knowledge-validation',
       label: 'Knowledge Validation',
       icon: 'mdi:brain'
@@ -176,11 +176,6 @@ const activityItems = computed<ActivityItem[]>(() => {
       id: 'knowledge-graph',
       label: 'Knowledge Graph',
       icon: 'mdi:graph'
-    },
-    {
-      id: 'context-budgeter',
-      label: 'Context Budgeter',
-      icon: 'mdi:credit-card-outline'
     }
   ];
   
@@ -201,8 +196,8 @@ const setActiveModule = (moduleId: string) => {
   
   if (!inLeftDock && !inRightDock && !inBottomDock) {
     // Module not in any dock, add to default dock
-    const defaultDock = 
-      moduleId === 'claude' ? 'rightDock' : 
+  const defaultDock = 
+      (moduleId === 'claude' || moduleId === 'codex') ? 'rightDock' : 
       moduleId === 'explorer' || moduleId === 'terminal' ? 'bottomDock' : 
       'leftDock';
     layoutStore.moveModuleToDock(moduleId, defaultDock);
@@ -243,6 +238,8 @@ const getIconColor = (moduleId: string): string => {
   switch (moduleId) {
     case 'claude':
       return '#ff8c42'; // Orange for Anthropic/Claude
+    case 'codex':
+      return '#4fc3f7'; // Light blue for Codex
     case 'context':
       return '#ff69b4'; // Pink for brain/context
     case 'explorer':

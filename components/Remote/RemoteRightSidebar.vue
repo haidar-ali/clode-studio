@@ -23,8 +23,8 @@
             'dragging': dragDropState.isDragging && dragDropState.draggedModule === moduleId
           }]"
           @click="setActiveRightModule(moduleId)"
-          :draggable="moduleId !== 'claude'"
-          @dragstart="moduleId !== 'claude' && handleTabDragStart($event, moduleId)"
+          :draggable="moduleId !== 'claude' && moduleId !== 'codex'"
+          @dragstart="moduleId !== 'claude' && moduleId !== 'codex' && handleTabDragStart($event, moduleId)"
           @dragend="handleTabDragEnd"
           @contextmenu.prevent="showTabMenu($event, moduleId)"
         >
@@ -58,6 +58,7 @@ const { dragDropState, canDropInDock, handleDrop: handleDropModule, setDropTarge
 // Module components mapping - Using remote-compatible components
 const moduleComponents = {
   claude: defineAsyncComponent(() => import('~/components/Remote/MobileClaudeXterm.vue')),
+  codex: defineAsyncComponent(() => import('~/components/Remote/MobileCodexXterm.vue')),
   tasks: defineAsyncComponent(() => import('~/components/Kanban/KanbanBoard.vue')),
   knowledge: defineAsyncComponent(() => import('~/components/Knowledge/KnowledgePanel.vue')),
   context: defineAsyncComponent(() => import('~/components/Context/ContextPanel.vue')),
@@ -82,7 +83,8 @@ const moduleConfig: Record<ModuleId, { label: string; icon: string }> = {
   context: { label: 'Context', icon: 'mdi:brain' },
   knowledge: { label: 'Knowledge', icon: 'mdi:book-open-page-variant' },
   prompts: { label: 'Prompts', icon: 'mdi:lightning-bolt' },
-  claude: { label: 'Claude AI', icon: 'simple-icons:anthropic' }
+  claude: { label: 'Claude AI', icon: 'simple-icons:anthropic' },
+  codex: { label: 'Codex', icon: 'mdi:robot' }
 };
 
 // Get modules in right dock
@@ -109,6 +111,8 @@ const getModuleColor = (moduleId: ModuleId): string => {
   switch (moduleId) {
     case 'claude':
       return '#ff8c42'; // Orange for Anthropic/Claude
+    case 'codex':
+      return '#4fc3f7'; // Light blue for Codex
     case 'context':
       return '#ff69b4'; // Pink for brain/context
     case 'explorer':
@@ -172,8 +176,8 @@ const handleTabDragEnd = () => {
 };
 
 const showTabMenu = (event: MouseEvent, moduleId: ModuleId) => {
-  // Don't show menu for claude
-  if (moduleId === 'claude') return;
+  // Don't show menu for claude/codex
+  if (moduleId === 'claude' || moduleId === 'codex') return;
  
 };
 

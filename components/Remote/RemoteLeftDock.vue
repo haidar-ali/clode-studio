@@ -70,7 +70,8 @@ const moduleConfig: Record<ModuleId, { label: string; icon: string }> = {
   context: { label: 'Context', icon: 'mdi:brain' },
   knowledge: { label: 'Knowledge', icon: 'mdi:book-open-page-variant' },
   prompts: { label: 'Prompts', icon: 'mdi:lightning-bolt' },
-  claude: { label: 'Claude AI', icon: 'simple-icons:anthropic' }
+  claude: { label: 'Claude AI', icon: 'simple-icons:anthropic' },
+  codex: { label: 'Codex', icon: 'mdi:code-tags' }
 };
 
 // Module components mapping - Using remote-compatible components
@@ -85,7 +86,8 @@ const moduleComponents = {
   context: defineAsyncComponent(() => import('~/components/Context/ContextPanel.vue')),
   knowledge: defineAsyncComponent(() => import('~/components/Knowledge/KnowledgePanel.vue')),
   prompts: defineAsyncComponent(() => import('~/components/Prompts/PromptStudio.vue')),
-  claude: defineAsyncComponent(() => import('~/components/Remote/MobileClaudeXterm.vue'))
+  claude: defineAsyncComponent(() => import('~/components/Remote/MobileClaudeXterm.vue')),
+  codex: defineAsyncComponent(() => import('~/components/Remote/MobileCodexXterm.vue'))
 };
 
 // Get modules in left dock
@@ -121,6 +123,8 @@ const getModuleColor = (moduleId: ModuleId): string => {
   switch (moduleId) {
     case 'claude':
       return '#ff8c42'; // Orange for Anthropic/Claude
+    case 'codex':
+      return '#00bcd4'; // Cyan for Codex
     case 'context':
       return '#ff69b4'; // Pink for brain/context
     case 'explorer':

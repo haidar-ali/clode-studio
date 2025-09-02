@@ -2,7 +2,7 @@ import { defineStore } from 'pinia';
 
 // Layout mode removed - always using full IDE mode with modular docks
 
-export type ModuleId = 'explorer' | 'explorer-editor' | 'claude' | 'tasks' | 'knowledge' | 'context' | 
+export type ModuleId = 'explorer' | 'explorer-editor' | 'claude' | 'codex' | 'tasks' | 'knowledge' | 'context' | 
   'source-control' | 'worktrees' | 'prompts' | 'terminal' | 'snapshots' | 'agents' | 'epics' | 'monitoring' | 'knowledge-validation' | 'knowledge-graph' | 'context-budgeter';
 
 export interface DockConfiguration {
@@ -118,9 +118,9 @@ export const useLayoutStore = defineStore('layout', {
         return;
       }
       
-      // Don't allow moving claude from right dock
-      if (moduleId === 'claude' && targetDock !== 'rightDock') {
-        console.warn('Cannot move Claude AI from right dock');
+      // Don't allow moving claude/codex from right dock
+      if ((moduleId === 'claude' || moduleId === 'codex') && targetDock !== 'rightDock') {
+        console.warn('Cannot move AI module from right dock');
         return;
       }
       
@@ -168,9 +168,9 @@ export const useLayoutStore = defineStore('layout', {
         return;
       }
       
-      // Don't allow removing claude
-      if (moduleId === 'claude') {
-        console.warn('Cannot remove Claude AI module');
+      // Don't allow removing claude/codex
+      if (moduleId === 'claude' || moduleId === 'codex') {
+        console.warn('Cannot remove AI module');
         return;
       }
       
@@ -262,6 +262,7 @@ export const useLayoutStore = defineStore('layout', {
           if (!this.dockConfig.rightDock.includes('claude')) {
             this.dockConfig.rightDock.unshift('claude');
           }
+          // Codex is optional; if already present keep, otherwise user can add via Activity Bar
           
           // Ensure terminal is always in bottom dock
           if (!this.dockConfig.bottomDock.includes('terminal')) {

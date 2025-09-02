@@ -35,6 +35,14 @@
       
       <div class="dock-controls">
         <button
+          v-if="isFloatingSupported && canFloatCurrentModule && !layoutStore.bottomPanelMinimized"
+          @click="floatCurrentModule"
+          class="control-btn"
+          title="Float in separate window"
+        >
+          <Icon name="mdi:window-restore" size="16" />
+        </button>
+        <button
           @click.stop="toggleMinimize"
           class="control-btn"
           :title="layoutStore.bottomPanelMinimized ? 'Maximize' : 'Minimize'"
@@ -63,12 +71,14 @@ import { useLayoutStore, type ModuleId } from '~/stores/layout';
 import { useTasksStore } from '~/stores/tasks';
 import { useSourceControlStore } from '~/stores/source-control';
 import { useModuleDragDrop } from '~/composables/useModuleDragDrop';
+import { useFloatingWindow } from '~/composables/useFloatingWindow';
 import Icon from '~/components/Icon.vue';
 
 const layoutStore = useLayoutStore();
 const tasksStore = useTasksStore();
 const sourceControlStore = useSourceControlStore();
 const { dragDropState, canDropInDock, handleDrop: handleDropModule, setDropTarget, startDrag, endDrag } = useModuleDragDrop();
+const { isFloatingSupported, floatModule } = useFloatingWindow();
 
 const projectPath = computed(() => tasksStore.projectPath);
 
@@ -90,7 +100,8 @@ const moduleConfig: Record<ModuleId, { label: string; icon: string }> = {
   monitoring: { label: 'Agent Monitoring', icon: 'mdi:monitor-dashboard' },
   'knowledge-validation': { label: 'Knowledge Validation', icon: 'mdi:brain' },
   'knowledge-graph': { label: 'Knowledge Graph', icon: 'mdi:graph' },
-  'context-budgeter': { label: 'Context Budgeter', icon: 'mdi:credit-card-outline' }
+  'context-budgeter': { label: 'Context Budgeter', icon: 'mdi:credit-card-outline' },
+  codex: { label: 'Codex', icon: 'mdi:robot' }
 };
 
 // Module components mapping
@@ -106,12 +117,13 @@ const moduleComponents = {
   claude: defineAsyncComponent(() => import('~/components/Terminal/ClaudeTerminalTabs.vue')),
   explorer: defineAsyncComponent(() => import('~/components/FileExplorer/FileTree.vue')),
   'explorer-editor': defineAsyncComponent(() => import('~/components/Modules/ExplorerEditor.vue')),
-  agents: defineAsyncComponent(() => import('~/components/Agents/AgentOrchestrationPanel.vue')),
+  agents: defineAsyncComponent(() => import('~/components/Agents/AgentOrchestrationPanelEnhanced.vue')),
   epics: defineAsyncComponent(() => import('~/components/Agents/EpicManagementPanel.vue')),
   monitoring: defineAsyncComponent(() => import('~/components/Agents/MonitoringDashboard.vue')),
   'knowledge-validation': defineAsyncComponent(() => import('~/components/Knowledge/KnowledgeValidationPanel.vue')),
   'knowledge-graph': defineAsyncComponent(() => import('~/components/Knowledge/KnowledgeGraphViewer.vue')),
-  'context-budgeter': defineAsyncComponent(() => import('~/components/Agents/ContextBudgeterPanel.vue'))
+  'context-budgeter': defineAsyncComponent(() => import('~/components/Agents/ContextBudgeterPanel.vue')),
+  codex: defineAsyncComponent(() => import('~/components/Terminal/CodexTerminalTabs.vue'))
 };
 
 // Get modules in bottom dock
@@ -137,6 +149,8 @@ const getModuleColor = (moduleId: ModuleId): string => {
       return '#ff8c42'; // Orange for Anthropic/Claude
     case 'context':
       return '#ff69b4'; // Pink for brain/context
+    case 'codex':
+      return '#4fc3f7'; // Light blue for Codex
     case 'explorer':
     case 'explorer-editor':
       return '#42a5f5'; // Blue for file explorer
@@ -189,6 +203,26 @@ const setActiveBottomModule = (moduleId: ModuleId) => {
 
 const toggleMinimize = () => {
   layoutStore.toggleBottomPanel();
+};
+
+// Check if current module can be floated
+const canFloatCurrentModule = computed(() => {
+  // Don't allow floating terminal as it's essential
+  return activeBottomModule.value !== 'terminal';
+});
+
+// Float the current active module
+const floatCurrentModule = async () => {
+  if (activeBottomModule.value && canFloatCurrentModule.value) {
+    const success = await floatModule(activeBottomModule.value);
+    if (success) {
+      // Switch to another module in the dock
+      const otherModule = bottomDockModules.value.find(m => m !== activeBottomModule.value);
+      if (otherModule) {
+        layoutStore.setActiveBottomModule(otherModule);
+      }
+    }
+  }
 };
 
 const handleDragOver = (event: DragEvent) => {

@@ -162,7 +162,7 @@ const showShortcuts = ref(false);
 
 // Can split if we have Claude in right dock or multiple modules
 const canSplit = computed(() => {
-  return layoutStore.activeRightModule === 'claude' || layoutStore.dockConfig.rightDock.length > 1;
+  return ['claude', 'codex'].includes(layoutStore.activeRightModule) || layoutStore.dockConfig.rightDock.length > 1;
 });
 
 const toggleSplitView = () => {

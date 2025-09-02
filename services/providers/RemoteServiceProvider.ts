@@ -21,6 +21,7 @@ import { RemoteFileService } from './remote/RemoteFileService.js';
 import { RemoteClaudeService } from './remote/RemoteClaudeService.js';
 import { RemoteGitService } from './remote/RemoteGitService.js';
 import { RemoteTerminalService } from './remote/RemoteTerminalService.js';
+import { RemoteCodexService } from './remote/RemoteCodexService.js';
 import { RemoteKnowledgeService } from './remote/RemoteKnowledgeService.js';
 import { RemoteMCPService } from './remote/RemoteMCPService.js';
 import { RemoteStorageService } from './remote/RemoteStorageService.js';
@@ -54,6 +55,7 @@ export class RemoteServiceProvider implements IServiceProvider {
   public readonly claude: IClaudeService;
   public readonly git: IGitService;
   public readonly terminal: ITerminalService;
+  public readonly codex: any;
   public readonly knowledge: IKnowledgeService;
   public readonly mcp: IMCPService;
   public readonly storage: IStorageService;
@@ -77,6 +79,7 @@ export class RemoteServiceProvider implements IServiceProvider {
     this.claude = new RemoteClaudeService(() => this.socket);
     this.git = new RemoteGitService(() => this.socket);
     this.terminal = new RemoteTerminalService(() => this.socket);
+    this.codex = new RemoteCodexService(() => this.socket);
     this.knowledge = new RemoteKnowledgeService(() => this.socket);
     this.mcp = new RemoteMCPService(() => this.socket);
     this.storage = new RemoteStorageService(() => this.socket);
