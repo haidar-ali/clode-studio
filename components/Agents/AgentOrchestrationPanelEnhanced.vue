@@ -29,13 +29,19 @@
       </div>
       
       <div class="control-right">
-        <div class="budget-indicator">
-          <Icon name="mdi:currency-usd" />
-          <div class="budget-bar">
-            <div class="budget-fill" :style="{ width: budgetPercentage + '%' }"></div>
-          </div>
-          <span>${{ totalDailyCost.toFixed(2) }}</span>
-        </div>
+        <button 
+          @click="toggleGroupCreation" 
+          class="btn-icon" 
+          :class="{ active: isCreatingGroup }"
+          title="Create Group">
+          <Icon name="mdi:group" />
+        </button>
+        <button @click="savePipeline" class="btn-icon" title="Save Pipeline">
+          <Icon name="mdi:content-save" />
+        </button>
+        <button @click="loadPipeline" class="btn-icon" title="Load Pipeline">
+          <Icon name="mdi:folder-open" />
+        </button>
         <button @click="showSettings = true" class="btn-icon">
           <Icon name="mdi:cog" />
         </button>
@@ -46,10 +52,18 @@
     <div class="content-area">
       <!-- Sidebar: Agent Library -->
       <div class="agent-library" :class="{ collapsed: libraryCollapsed }">
-        <div class="library-header">
+        <div class="library-header" v-if="!libraryCollapsed">
           <h3>Agent Library</h3>
           <button @click="libraryCollapsed = !libraryCollapsed" class="btn-collapse">
-            <Icon :name="libraryCollapsed ? 'mdi:chevron-right' : 'mdi:chevron-left'" />
+            <Icon name="mdi:chevron-left" />
+          </button>
+        </div>
+        
+        <!-- Collapsed state toggle -->
+        <div v-if="libraryCollapsed" class="library-collapsed-toggle">
+          <button @click="libraryCollapsed = false" class="btn-expand">
+            <Icon name="mdi:chevron-right" />
+            <span>Library</span>
           </button>
         </div>
         
@@ -121,38 +135,301 @@
       <div class="canvas-container" :class="{ 'library-collapsed': libraryCollapsed }">
         <!-- Canvas View -->
         <div v-if="currentView === 'canvas'" class="workflow-canvas" 
+             :class="{ 
+               connecting: isConnecting,
+               'agent-selection-mode': groupCreationMode 
+             }"
              @dragover="handleCanvasDragOver"
-             @drop="handleCanvasDrop">
+             @drop="handleCanvasDrop"
+             @mousemove="handleCanvasMouseMove"
+             @click="handleCanvasClick"
+             @wheel="handleCanvasWheel"
+             @keydown.esc="cancelConnection">
           
-          <!-- Grid Background -->
-          <svg class="canvas-grid" width="100%" height="100%">
+          <!-- Zoom Controls -->
+          <div class="zoom-controls">
+            <button @click="zoomIn" class="zoom-btn" title="Zoom In">
+              <Icon name="mdi:magnify-plus" />
+            </button>
+            <span class="zoom-level">{{ Math.round(canvasZoom * 100) }}%</span>
+            <button @click="zoomOut" class="zoom-btn" title="Zoom Out">
+              <Icon name="mdi:magnify-minus" />
+            </button>
+            <button @click="resetZoom" class="zoom-btn" title="Reset Zoom">
+              <Icon name="mdi:magnify-scan" />
+            </button>
+          </div>
+          
+          <!-- Zoomable Container -->
+          <div class="canvas-viewport" 
+               :style="{ 
+                 transform: `translate(${canvasTransform.x}px, ${canvasTransform.y}px) scale(${canvasZoom})`,
+                 transformOrigin: '0 0'
+               }">
+            <!-- Grid Background -->
+            <svg class="canvas-grid" width="200%" height="200%">
+              <defs>
+                <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                  <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#2a2a2a" stroke-width="1"/>
+                </pattern>
+              </defs>
+              <rect width="200%" height="200%" fill="url(#grid)" />
+            </svg>
+          
+            <!-- Connection Lines -->
+            <svg class="connections-layer" width="200%" height="200%">
             <defs>
-              <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#2a2a2a" stroke-width="1"/>
-              </pattern>
+              <marker id="arrowhead" markerWidth="10" markerHeight="7" 
+                refX="9" refY="3.5" orient="auto">
+                <polygon points="0 0, 10 3.5, 0 7" fill="#4a9eff" />
+              </marker>
             </defs>
-            <rect width="100%" height="100%" fill="url(#grid)" />
-          </svg>
-          
-          <!-- Connection Lines -->
-          <svg class="connections-layer" width="100%" height="100%">
+            <g v-for="conn in connections" :key="conn.id">
+              <line 
+                :x1="conn.x1" 
+                :y1="conn.y1" 
+                :x2="conn.x2" 
+                :y2="conn.y2"
+                stroke="#4a9eff"
+                stroke-width="2"
+                marker-end="url(#arrowhead)"
+                class="connection-line"
+              />
+              <circle 
+                :cx="conn.x1" 
+                :cy="conn.y1" 
+                r="4" 
+                fill="#4a9eff"
+              />
+            </g>
+            <!-- Temporary connection while dragging -->
             <line 
-              v-for="conn in connections" 
-              :key="conn.id"
-              :x1="conn.x1" 
-              :y1="conn.y1" 
-              :x2="conn.x2" 
-              :y2="conn.y2"
+              v-if="tempConnection"
+              :x1="tempConnection.x1" 
+              :y1="tempConnection.y1" 
+              :x2="tempConnection.x2" 
+              :y2="tempConnection.y2"
               stroke="#4a9eff"
               stroke-width="2"
               stroke-dasharray="5,5"
-              class="connection-line"
+              opacity="0.6"
             />
-          </svg>
-          
-          <!-- Deployed Agents -->
+            </svg>
+            
+            <!-- Agent Groups -->
+            <div 
+              v-for="group in agentGroups" 
+              :key="group.id"
+              class="agent-group"
+              :class="{ collapsed: group.collapsed, 'entry-point': group.inputs.length === 0 }"
+              :style="{ 
+                left: group.position.x + 'px', 
+                top: group.position.y + 'px',
+                width: group.size.width + 'px',
+                height: group.collapsed ? 'auto' : group.size.height + 'px',
+                '--group-color': group.color
+              }"
+              :draggable="!resizingGroup"
+              @dragstart="startDragGroup($event, group)"
+              @dragend="endDragGroup"
+              @dragover="handleGroupDragOver($event, group)"
+              @drop="handleGroupDrop($event, group)"
+              @click="selectGroup(group)"
+            >
+              <!-- Group Header -->
+              <div class="group-header">
+                <div class="group-status-indicator" :class="getGroupStatus(group)"></div>
+                <Icon name="mdi:group" />
+                <span class="group-name">{{ group.name }}</span>
+                <span class="group-status-text">({{ getGroupStatus(group) }})</span>
+                <button @click.stop="toggleGroupCollapse(group)" class="group-toggle">
+                  <Icon :name="group.collapsed ? 'mdi:chevron-down' : 'mdi:chevron-up'" />
+                </button>
+                <button @click.stop="deleteGroup(group)" class="group-delete">
+                  <Icon name="mdi:close" />
+                </button>
+              </div>
+              
+              <!-- Entry Point Badge for Groups -->
+              <div v-if="group.inputs.length === 0" class="entry-point-badge">
+                <Icon name="mdi:location-enter" />
+                <span>ENTRY</span>
+              </div>
+              
+              <!-- Group Canvas (when expanded) -->
+              <div v-if="!group.collapsed" class="group-canvas">
+                <!-- Internal Connections SVG -->
+                <svg class="group-connections-svg">
+                  <defs>
+                    <marker :id="`group-arrow-${group.id}`" markerWidth="10" markerHeight="7" 
+                      refX="9" refY="3.5" orient="auto">
+                      <polygon points="0 0, 10 3.5, 0 7" fill="#4a9eff" />
+                    </marker>
+                  </defs>
+                  <!-- Internal connections between agents in this group -->
+                  <g v-for="conn in getInternalConnections(group)" :key="conn.id">
+                    <line 
+                      :x1="getInternalConnX1(conn, group)" 
+                      :y1="getInternalConnY1(conn, group)" 
+                      :x2="getInternalConnX2(conn, group)" 
+                      :y2="getInternalConnY2(conn, group)"
+                      stroke="#4a9eff"
+                      stroke-width="2"
+                      :marker-end="`url(#group-arrow-${group.id})`"
+                      class="internal-connection-line"
+                    />
+                  </g>
+                  <!-- Group entry connections -->
+                  <g v-for="agentId in group.entryAgents || []" :key="`entry-${agentId}`">
+                    <line
+                      :x1="10"
+                      :y1="30"
+                      :x2="getGroupAgentRelativePos(agentId, group).x"
+                      :y2="getGroupAgentRelativePos(agentId, group).y + 25"
+                      stroke="#4ade80"
+                      stroke-width="2"
+                      stroke-dasharray="5,5"
+                      :marker-end="`url(#group-arrow-${group.id})`"
+                      class="entry-connection-line"
+                    />
+                  </g>
+                  <!-- Group exit connections -->
+                  <g v-for="agentId in group.exitAgents || []" :key="`exit-${agentId}`">
+                    <line
+                      :x1="getGroupAgentRelativePos(agentId, group).x + 100"
+                      :y1="getGroupAgentRelativePos(agentId, group).y + 25"
+                      :x2="group.size.width - 50"
+                      :y2="30"
+                      stroke="#ef4444"
+                      stroke-width="2"
+                      stroke-dasharray="5,5"
+                      :marker-end="`url(#group-arrow-${group.id})`"
+                      class="exit-connection-line"
+                    />
+                  </g>
+                </svg>
+                
+                <!-- Group Entry Point -->
+                <div class="group-entry-point" title="Group Entry - Connect to agents that should start first">
+                  <Icon name="mdi:location-enter" size="16" />
+                  <div 
+                    class="group-entry-connection-point"
+                    @click.stop="handleGroupEntryClick(group)"
+                    :class="{ 
+                      active: connectingGroupEntry === group.id,
+                      highlight: isConnecting && connectionStart?.itemType === 'group-entry'
+                    }"
+                  ></div>
+                </div>
+                
+                <!-- Group Exit Point -->
+                <div class="group-exit-point" title="Group Exit - Connect to agents that trigger next stage">
+                  <Icon name="mdi:location-exit" size="16" />
+                  <div 
+                    class="group-exit-connection-point"
+                    @click.stop="handleGroupExitClick(group)"
+                    :class="{ 
+                      active: connectingGroupExit === group.id,
+                      highlight: isConnecting && connectionStart?.itemType === 'group-exit'
+                    }"
+                  ></div>
+                </div>
+                
+                <!-- Agents in Group (full cards) -->
+                <div 
+                  v-for="agent in deployedAgents.filter(a => a.groupId === group.id)" 
+                  :key="agent.instanceId"
+                  class="group-agent"
+                  :style="{ 
+                    left: (agent.position.x - group.position.x) + 'px',
+                    top: (agent.position.y - group.position.y) + 'px',
+                    '--agent-color': agent.color
+                  }"
+                  :draggable="true"
+                  @dragstart="startDragDeployed($event, agent)"
+                  @dragend="endDragDeployed"
+                  @click="selectAgent(agent)"
+                  :class="{ 
+                    selected: selectedAgent?.instanceId === agent.instanceId,
+                    'entry-agent': group.entryAgents?.includes(agent.instanceId)
+                  }"
+                >
+                  <div class="agent-icon">
+                    <Icon :name="agent.icon" size="20" />
+                  </div>
+                  <div class="agent-label">{{ agent.name }}</div>
+                  
+                  <!-- Connection points for internal connections -->
+                  <div 
+                    class="connection-point input"
+                    @click.stop="handleConnectionClick(agent, 'input')"
+                    :class="{ 
+                      highlight: shouldHighlightInput(agent),
+                      active: isActiveInput(agent)
+                    }"
+                    title="Connect input"
+                  ></div>
+                  <div 
+                    class="connection-point output"
+                    @click.stop="handleConnectionClick(agent, 'output')"
+                    :class="{ 
+                      highlight: shouldHighlightOutput(agent),
+                      active: isActiveOutput(agent)
+                    }"
+                    title="Connect output"
+                  ></div>
+                </div>
+              </div>
+              
+              <!-- Resize Handles (only when not collapsed) -->
+              <div v-if="!group.collapsed" class="resize-handles">
+                <div 
+                  class="resize-handle top-left" 
+                  @mousedown="startResize($event, group, 'top-left')"
+                ></div>
+                <div 
+                  class="resize-handle top-right" 
+                  @mousedown="startResize($event, group, 'top-right')"
+                ></div>
+                <div 
+                  class="resize-handle bottom-left" 
+                  @mousedown="startResize($event, group, 'bottom-left')"
+                ></div>
+                <div 
+                  class="resize-handle bottom-right" 
+                  @mousedown="startResize($event, group, 'bottom-right')"
+                ></div>
+              </div>
+              
+              <!-- Connection Points for Groups -->
+              <div 
+                class="connection-point input"
+                @click.stop="handleGroupConnectionClick(group, 'input')"
+                :class="{ 
+                  highlight: isConnecting && connectionStart?.type === 'output' && connectionStart?.item.id !== group.id
+                }"
+              ></div>
+              <div 
+                class="connection-point output"
+                @click.stop="handleGroupConnectionClick(group, 'output')"
+                :class="{ 
+                  highlight: isConnecting && connectionStart?.type === 'input' && connectionStart?.item.id !== group.id
+                }"
+              ></div>
+            </div>
+            
+            <!-- Drop Zone Indicator -->
+            <div 
+              v-if="showDropZone" 
+              class="drop-zone"
+              :style="{ left: dropZone.x + 'px', top: dropZone.y + 'px' }"
+            >
+              <Icon name="mdi:plus-circle" size="48" />
+            </div>
+            
+            <!-- Deployed Agents (only standalone agents not in groups) -->
           <div 
-            v-for="agent in deployedAgents" 
+            v-for="agent in deployedAgents.filter(a => !a.groupId)" 
             :key="agent.instanceId"
             class="deployed-agent"
             :style="{ 
@@ -167,24 +444,46 @@
             :class="{ 
               selected: selectedAgent?.instanceId === agent.instanceId,
               active: agent.status === 'running',
-              error: agent.status === 'error'
+              error: agent.status === 'error',
+              'entry-point': agent.inputs.length === 0 && !agent.groupId,
+              'in-group': !!agent.groupId,
+              'selected-for-group': selectedForGroup.has(agent.instanceId)
             }"
           >
             <div class="agent-status-ring" :class="agent.status"></div>
+            
+            <!-- Entry Point Badge -->
+            <div v-if="agent.inputs.length === 0 && !agent.groupId" class="entry-point-badge">
+              <Icon name="mdi:location-enter" />
+              <span>ENTRY</span>
+            </div>
+            
             <div class="agent-icon">
               <Icon :name="agent.icon" />
             </div>
             <div class="agent-label">{{ agent.name }}</div>
             <div class="agent-instance">{{ agent.instanceId.slice(0, 8) }}</div>
             
-            <!-- Connection Points -->
+            <!-- Connection Points (only show for standalone agents) -->
             <div 
+              v-if="!agent.groupId"
               class="connection-point input"
-              @mousedown="startConnection(agent, 'input')"
+              @click.stop="handleConnectionClick(agent, 'input')"
+              :class="{ 
+                highlight: shouldHighlightInput(agent),
+                active: isActiveInput(agent)
+              }"
+              title="Click to connect input"
             ></div>
             <div 
+              v-if="!agent.groupId"
               class="connection-point output"
-              @mousedown="startConnection(agent, 'output')"
+              @click.stop="handleConnectionClick(agent, 'output')"
+              :class="{ 
+                highlight: shouldHighlightOutput(agent),
+                active: isActiveOutput(agent)
+              }"
+              title="Click to connect output"
             ></div>
             
             <!-- Quick Actions -->
@@ -197,14 +496,66 @@
               </button>
             </div>
           </div>
+        </div>
           
-          <!-- Drop Zone Indicator -->
-          <div 
-            v-if="showDropZone" 
-            class="drop-zone"
-            :style="{ left: dropZone.x + 'px', top: dropZone.y + 'px' }"
-          >
-            <Icon name="mdi:plus-circle" size="48" />
+          <!-- Connection Mode Indicator -->
+          <div v-if="isConnecting" class="connection-mode-indicator">
+            <Icon name="mdi:connection" />
+            <span>Connecting from {{ getConnectionStartName() }} ({{ connectionStart?.type }})</span>
+            <span class="connection-hint">Click on another {{ connectionStart?.type === 'output' ? 'input' : 'output' }} point or press ESC to cancel</span>
+          </div>
+          
+          <!-- Group Creation Mode Indicator -->
+          <div v-if="isCreatingGroup" class="group-creation-indicator">
+            <Icon name="mdi:group" />
+            <span v-if="selectedForGroup.size === 0">Click on agents to select them for grouping</span>
+            <span v-else>{{ selectedForGroup.size }} agents selected</span>
+            <button 
+              v-if="selectedForGroup.size > 0"
+              @click="createGroupFromSelected" 
+              :disabled="selectedForGroup.size < 2"
+              class="btn-create-group">
+              Create Group
+            </button>
+            <button @click="cancelGroupCreation" class="btn-cancel">
+              Cancel
+            </button>
+          </div>
+          
+          <!-- Entry Points Indicator -->
+          <div v-if="deployedAgents.length > 0 && entryPoints.length === 0" class="no-entry-warning">
+            <Icon name="mdi:alert" />
+            <span>No entry point! Connect an agent or leave one unconnected to create an entry.</span>
+          </div>
+          
+          <!-- Help Text for Empty Canvas -->
+          <div v-if="deployedAgents.length === 0" class="empty-canvas-help">
+            <Icon name="mdi:information-outline" size="48" />
+            <h3>Start Building Your Pipeline</h3>
+            <p>Drag agents from the library to the canvas or click the + button</p>
+            <p class="connection-help">
+              <strong>To connect agents:</strong><br/>
+              1. Click on an agent's output point (right side)<br/>
+              2. Click on another agent's input point (left side)<br/>
+              <br/>
+              <strong style="color: #4ade80;">📍 Entry Point:</strong><br/>
+              Agents without inputs become pipeline entry points (marked with green border and ENTRY badge).
+            </p>
+          </div>
+          
+          <!-- Group Creation Toolbar -->
+          <div v-if="groupCreationMode" class="group-creation-toolbar">
+            <span>{{ selectedForGroup.size }} agents selected</span>
+            <button 
+              @click="createGroupFromSelected" 
+              :disabled="selectedForGroup.size < 2"
+              class="btn-create"
+            >
+              <Icon name="mdi:group" /> Create Group
+            </button>
+            <button @click="cancelGroupCreation" class="btn-cancel">
+              <Icon name="mdi:close" /> Cancel
+            </button>
           </div>
         </div>
 
@@ -233,7 +584,7 @@
                 </div>
                 <div class="pipeline-metrics">
                   <span><Icon name="mdi:clock" /> {{ formatDuration(pipeline.duration) }}</span>
-                  <span><Icon name="mdi:currency-usd" /> {{ pipeline.cost.toFixed(2) }}</span>
+                  <span><Icon name="mdi:robot" /> {{ pipeline.stages.length }} agents</span>
                 </div>
               </div>
               
@@ -321,11 +672,11 @@
             
             <div class="metric-card">
               <div class="metric-icon info">
-                <Icon name="mdi:message-processing" />
+                <Icon name="mdi:pipe-connected" />
               </div>
               <div class="metric-data">
-                <h3>{{ totalTokensUsed }}</h3>
-                <p>Tokens Used</p>
+                <h3>{{ pipelineCount }}</h3>
+                <p>Active Pipelines</p>
               </div>
             </div>
           </div>
@@ -370,8 +721,16 @@
             </div>
             
             <div class="property-group">
-              <label>Type</label>
+              <label>Role</label>
               <div class="property-value">{{ selectedAgent.type }}</div>
+            </div>
+            
+            <div class="property-group">
+              <label>Instance Type</label>
+              <select v-model="selectedAgent.instanceType" class="property-select">
+                <option value="claude">Claude</option>
+                <option value="codex">Codex</option>
+              </select>
             </div>
             
             <div class="property-group">
@@ -405,8 +764,11 @@
               <button @click="saveAgentProperties" class="btn-primary">
                 Save Changes
               </button>
-              <button @click="spawnClaudeInstance" class="btn-secondary">
-                <Icon name="mdi:console" /> Spawn Claude
+              <button @click="spawnAgentInstance" class="btn-secondary">
+                <Icon name="mdi:console" /> Spawn {{ selectedAgent?.instanceType === 'codex' ? 'Codex' : 'Claude' }}
+              </button>
+              <button @click="startFromKanban" class="btn-secondary">
+                <Icon name="mdi:view-kanban" /> Start from Kanban
               </button>
             </div>
           </div>
@@ -420,6 +782,9 @@
 import { ref, computed, reactive, onMounted, onUnmounted } from 'vue';
 import { useAgentOrchestrationStore } from '~/stores/agent-orchestration-client';
 import { useClaudeInstancesStore } from '~/stores/claude-instances';
+import { useCodexInstancesStore } from '~/stores/codex-instances';
+import { usePipelineOrchestratorStore } from '~/stores/pipeline-orchestrator';
+import { useTasksStore } from '~/stores/tasks';
 import Icon from '~/components/Icon.vue';
 
 interface AgentType {
@@ -435,6 +800,7 @@ interface AgentType {
 interface DeployedAgent {
   instanceId: string;
   type: string;
+  instanceType: 'claude' | 'codex'; // Which instance to spawn
   name: string;
   icon: string;
   color: string;
@@ -442,7 +808,35 @@ interface DeployedAgent {
   status: 'idle' | 'running' | 'paused' | 'error';
   personalityId?: string;
   customInstructions?: string;
-  connections: { input?: string; output?: string };
+  inputs: string[]; // Array of agent/group IDs that connect TO this agent
+  outputs: string[]; // Array of agent/group IDs that this agent connects TO
+  groupId?: string; // If this agent belongs to a group
+}
+
+interface AgentGroup {
+  id: string;
+  name: string;
+  position: { x: number; y: number };
+  size: { width: number; height: number };
+  agents: string[]; // Agent IDs in this group
+  entryAgents?: string[]; // Agents that are connected from group entry point (start first)
+  exitAgents?: string[]; // Agents that trigger group completion and downstream execution
+  inputs: string[]; // Array of agent/group IDs that connect TO this group
+  outputs: string[]; // Array of agent/group IDs that this group connects TO
+  collapsed: boolean; // Whether the group is collapsed or expanded
+  color: string;
+}
+
+interface Connection {
+  id: string;
+  from: string; // Source agent/group ID
+  to: string; // Target agent/group ID
+  fromType: 'agent' | 'group';
+  toType: 'agent' | 'group';
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
 }
 
 interface Pipeline {
@@ -465,6 +859,9 @@ interface Pipeline {
 
 const orchestrationStore = useAgentOrchestrationStore();
 const claudeStore = useClaudeInstancesStore();
+const codexStore = useCodexInstancesStore();
+const pipelineStore = usePipelineOrchestratorStore();
+const tasksStore = useTasksStore();
 
 // View Management
 const currentView = ref<'canvas' | 'pipeline' | 'monitor'>('canvas');
@@ -552,7 +949,31 @@ const personalities = ref([
 
 // Deployed Agents on Canvas
 const deployedAgents = ref<DeployedAgent[]>([]);
-const connections = ref<Array<{ id: string; x1: number; y1: number; x2: number; y2: number }>>([]);
+const agentGroups = ref<AgentGroup[]>([]);
+const connections = ref<Connection[]>([]);
+
+// Connection state
+const isConnecting = ref(false);
+const connectionStart = ref<{ item: DeployedAgent | AgentGroup; type: 'input' | 'output'; itemType: 'agent' | 'group' } | null>(null);
+const tempConnection = ref<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
+
+// Canvas zoom and pan
+const canvasZoom = ref(1);
+const canvasTransform = ref({ x: 0, y: 0 });
+const isPanning = ref(false);
+const panStart = ref({ x: 0, y: 0 });
+const isDragging = ref(false);
+
+// Group creation mode
+const groupCreationMode = ref(false);
+const selectedForGroup = ref<Set<string>>(new Set());
+const connectingGroupEntry = ref<string | null>(null); // Group ID when connecting from entry point
+const connectingGroupExit = ref<string | null>(null); // Group ID when connecting from exit point
+const resizingGroup = ref<AgentGroup | null>(null);
+const resizeStart = ref<{ x: number; y: number; width: number; height: number; handle: string; originalX?: number; originalY?: number } | null>(null);
+
+// Group creation state
+const isCreatingGroup = ref(false);
 
 // Pipelines
 const activePipelines = ref<Pipeline[]>([]);
@@ -561,9 +982,11 @@ const activePipelines = ref<Pipeline[]>([]);
 const activeAgentsCount = computed(() => deployedAgents.value.filter(a => a.status === 'running').length);
 const successRate = ref(92);
 const avgResponseTime = ref(245);
-const totalTokensUsed = ref(152340);
-const totalDailyCost = computed(() => orchestrationStore.totalDailyCost);
-const budgetPercentage = computed(() => (totalDailyCost.value / orchestrationStore.dailyBudgetLimit) * 100);
+
+// Entry points - agents with no inputs
+const entryPoints = computed(() => {
+  return deployedAgents.value.filter(agent => agent.inputs.length === 0);
+});
 
 // Recent Activities
 const recentActivities = ref([
@@ -575,6 +998,7 @@ const recentActivities = ref([
 // Drag and Drop
 const draggedAgent = ref<AgentType | null>(null);
 const draggedDeployed = ref<DeployedAgent | null>(null);
+const draggedGroup = ref<AgentGroup | null>(null);
 
 // Custom Agent
 const customAgent = reactive({
@@ -615,23 +1039,205 @@ function endDragDeployed() {
   draggedDeployed.value = null;
 }
 
+function startDragGroup(event: DragEvent, group: AgentGroup) {
+  draggedGroup.value = group;
+  event.dataTransfer!.effectAllowed = 'move';
+  // Store the offset of where we clicked in the group
+  const rect = (event.target as HTMLElement).getBoundingClientRect();
+  const offset = {
+    x: event.clientX - rect.left,
+    y: event.clientY - rect.top
+  };
+  event.dataTransfer!.setData('offset', JSON.stringify(offset));
+}
+
+function endDragGroup() {
+  draggedGroup.value = null;
+}
+
+function handleGroupDragOver(event: DragEvent, group: AgentGroup) {
+  event.preventDefault();
+  event.stopPropagation();
+  
+  // Accept agents being dragged
+  if (draggedAgent.value || draggedDeployed.value) {
+    event.dataTransfer!.dropEffect = 'move';
+  }
+}
+
+function handleGroupDrop(event: DragEvent, group: AgentGroup) {
+  event.preventDefault();
+  event.stopPropagation();
+  
+  // Calculate position relative to group
+  const groupEl = event.currentTarget as HTMLElement;
+  const rect = groupEl.getBoundingClientRect();
+  const relativeX = event.clientX - rect.left - 50; // Center on cursor
+  const relativeY = event.clientY - rect.top - 40;
+  
+  if (draggedAgent.value) {
+    // Create new agent in this group
+    const agent = draggedAgent.value;
+    const instanceId = `${agent.id}-${Date.now().toString(36)}`;
+    
+    const newAgent: DeployedAgent = {
+      instanceId,
+      type: agent.id,
+      instanceType: 'claude',
+      name: agent.name,
+      icon: agent.icon,
+      color: agent.color,
+      position: {
+        x: group.position.x + relativeX,
+        y: group.position.y + relativeY
+      },
+      status: 'idle',
+      personalityId: selectedPersonality.value,
+      inputs: [],
+      outputs: [],
+      groupId: group.id
+    };
+    
+    deployedAgents.value.push(newAgent);
+    group.agents.push(instanceId);
+    
+    console.log(`✅ Added ${agent.name} to ${group.name}`);
+    draggedAgent.value = null;
+  } else if (draggedDeployed.value) {
+    // Move existing agent into this group
+    const agent = draggedDeployed.value;
+    
+    // Remove from old group if any
+    if (agent.groupId) {
+      const oldGroup = agentGroups.value.find(g => g.id === agent.groupId);
+      if (oldGroup) {
+        const idx = oldGroup.agents.indexOf(agent.instanceId);
+        if (idx !== -1) oldGroup.agents.splice(idx, 1);
+      }
+    }
+    
+    // Add to new group
+    agent.groupId = group.id;
+    agent.position = {
+      x: group.position.x + relativeX,
+      y: group.position.y + relativeY
+    };
+    
+    if (!group.agents.includes(agent.instanceId)) {
+      group.agents.push(agent.instanceId);
+    }
+    
+    console.log(`✅ Moved ${agent.name} to ${group.name}`);
+    draggedDeployed.value = null;
+  }
+}
+
+function startResize(event: MouseEvent, group: AgentGroup, handle: string) {
+  event.preventDefault();
+  event.stopPropagation();
+  
+  resizingGroup.value = group;
+  resizeStart.value = {
+    x: event.clientX,
+    y: event.clientY,
+    width: group.size.width,
+    height: group.size.height,
+    handle,
+    originalX: group.position.x,
+    originalY: group.position.y
+  };
+  
+  document.addEventListener('mousemove', handleResize);
+  document.addEventListener('mouseup', endResize);
+}
+
+function handleResize(event: MouseEvent) {
+  if (!resizingGroup.value || !resizeStart.value) return;
+  
+  const dx = (event.clientX - resizeStart.value.x) / canvasZoom.value;
+  const dy = (event.clientY - resizeStart.value.y) / canvasZoom.value;
+  const handle = resizeStart.value.handle;
+  
+  let newWidth = resizeStart.value.width;
+  let newHeight = resizeStart.value.height;
+  let newX = resizeStart.value.originalX || resizingGroup.value.position.x;
+  let newY = resizeStart.value.originalY || resizingGroup.value.position.y;
+  
+  if (handle.includes('right')) {
+    newWidth = Math.max(300, resizeStart.value.width + dx);
+  }
+  if (handle.includes('left')) {
+    newWidth = Math.max(300, resizeStart.value.width - dx);
+    // Move position when resizing from left
+    newX = resizeStart.value.originalX! + (resizeStart.value.width - newWidth);
+  }
+  if (handle.includes('bottom')) {
+    newHeight = Math.max(200, resizeStart.value.height + dy);
+  }
+  if (handle.includes('top')) {
+    newHeight = Math.max(200, resizeStart.value.height - dy);
+    // Move position when resizing from top
+    newY = resizeStart.value.originalY! + (resizeStart.value.height - newHeight);
+  }
+  
+  // Update the group size and position
+  resizingGroup.value.size = { width: newWidth, height: newHeight };
+  resizingGroup.value.position = { x: newX, y: newY };
+}
+
+function endResize() {
+  document.removeEventListener('mousemove', handleResize);
+  document.removeEventListener('mouseup', endResize);
+  resizingGroup.value = null;
+}
+
 function handleCanvasDragOver(event: DragEvent) {
   event.preventDefault();
   event.dataTransfer!.dropEffect = draggedAgent.value ? 'copy' : 'move';
   
-  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-  dropZone.x = event.clientX - rect.left - 50;
-  dropZone.y = event.clientY - rect.top - 50;
-  showDropZone.value = true;
+  // Get the canvas viewport element
+  const canvasEl = document.querySelector('.workflow-canvas');
+  const viewportEl = document.querySelector('.canvas-viewport');
+  
+  if (canvasEl && viewportEl) {
+    const canvasRect = canvasEl.getBoundingClientRect();
+    const viewportRect = viewportEl.getBoundingClientRect();
+    
+    // Calculate position relative to viewport, accounting for zoom and centering
+    const relativeX = (event.clientX - viewportRect.left) / canvasZoom.value;
+    const relativeY = (event.clientY - viewportRect.top) / canvasZoom.value;
+    
+    // Center the drop zone on cursor (50px is half the agent width)
+    dropZone.x = relativeX - 50;
+    dropZone.y = relativeY - 50;
+    showDropZone.value = true;
+  }
 }
 
 function handleCanvasDrop(event: DragEvent) {
   event.preventDefault();
   showDropZone.value = false;
   
-  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-  const x = event.clientX - rect.left - 50;
-  const y = event.clientY - rect.top - 50;
+  // Get the canvas viewport element
+  const canvasEl = document.querySelector('.workflow-canvas') as HTMLElement;
+  const viewportEl = document.querySelector('.canvas-viewport') as HTMLElement;
+  
+  if (!canvasEl || !viewportEl) return;
+  
+  const viewportRect = viewportEl.getBoundingClientRect();
+  
+  // Proper coordinate transformation accounting for zoom and pan
+  // Convert screen coordinates to canvas coordinates
+  const screenX = event.clientX - viewportRect.left;
+  const screenY = event.clientY - viewportRect.top;
+  
+  // Apply inverse zoom to get actual canvas position
+  const canvasX = screenX / canvasZoom.value - canvasTransform.value.x;
+  const canvasY = screenY / canvasZoom.value - canvasTransform.value.y;
+  
+  // Center the item on cursor position
+  const x = canvasX - 50;
+  const y = canvasY - 50;
   
   if (draggedAgent.value) {
     // Deploy new agent
@@ -641,20 +1247,55 @@ function handleCanvasDrop(event: DragEvent) {
     deployedAgents.value.push({
       instanceId,
       type: agent.id,
+      instanceType: 'claude', // Default to Claude
       name: agent.name,
       icon: agent.icon,
       color: agent.color,
       position: { x, y },
       status: 'idle',
       personalityId: selectedPersonality.value,
-      connections: {}
+      inputs: [],
+      outputs: []
     });
     
     draggedAgent.value = null;
   } else if (draggedDeployed.value) {
-    // Move existing agent
+    // Move existing agent  
     draggedDeployed.value.position = { x, y };
+    updateConnectionPositions(); // Update connection lines
     draggedDeployed.value = null;
+  } else if (draggedGroup.value) {
+    // Move existing group
+    const oldX = draggedGroup.value.position.x;
+    const oldY = draggedGroup.value.position.y;
+    const deltaX = x - oldX;
+    const deltaY = y - oldY;
+    
+    draggedGroup.value.position = { x, y };
+    
+    // Move all agents in the group
+    deployedAgents.value.forEach(agent => {
+      if (agent.groupId === draggedGroup.value!.id) {
+        agent.position.x += deltaX;
+        agent.position.y += deltaY;
+      }
+    });
+    
+    // Update connection lines for the group
+    connections.value = connections.value.map(conn => {
+      if (conn.from === draggedGroup.value!.id) {
+        conn.x1 = x + draggedGroup.value!.size.width; // Right side of group
+        conn.y1 = y + draggedGroup.value!.size.height / 2; // Center of group
+      }
+      if (conn.to === draggedGroup.value!.id) {
+        conn.x2 = x; // Left side of group  
+        conn.y2 = y + draggedGroup.value!.size.height / 2; // Center of group
+      }
+      return conn;
+    });
+    
+    updateConnectionPositions(); // Update all internal connections
+    draggedGroup.value = null;
   }
 }
 
@@ -669,18 +1310,243 @@ function quickSpawnAgent(agent: AgentType) {
   deployedAgents.value.push({
     instanceId,
     type: agent.id,
+    instanceType: 'claude', // Default to Claude
     name: agent.name,
     icon: agent.icon,
     color: agent.color,
     position: { x, y },
     status: 'idle',
     personalityId: selectedPersonality.value,
-    connections: {}
+    inputs: [],
+    outputs: []
   });
 }
 
 function selectAgent(agent: DeployedAgent) {
-  selectedAgent.value = agent;
+  // Handle group entry point connection
+  if (connectingGroupEntry.value && agent.groupId === connectingGroupEntry.value) {
+    const group = agentGroups.value.find(g => g.id === connectingGroupEntry.value);
+    if (group) {
+      if (!group.entryAgents) {
+        group.entryAgents = [];
+      }
+      if (!group.entryAgents.includes(agent.instanceId)) {
+        group.entryAgents.push(agent.instanceId);
+        console.log(`✅ Connected ${group.name} entry → ${agent.name}`);
+      } else {
+        // Remove if already connected
+        const idx = group.entryAgents.indexOf(agent.instanceId);
+        group.entryAgents.splice(idx, 1);
+        console.log(`❌ Disconnected ${group.name} entry → ${agent.name}`);
+      }
+    }
+    connectingGroupEntry.value = null;
+    return;
+  }
+  
+  // Handle group exit point connection
+  if (connectingGroupExit.value && agent.groupId === connectingGroupExit.value) {
+    const group = agentGroups.value.find(g => g.id === connectingGroupExit.value);
+    if (group) {
+      if (!group.exitAgents) {
+        group.exitAgents = [];
+      }
+      if (!group.exitAgents.includes(agent.instanceId)) {
+        group.exitAgents.push(agent.instanceId);
+        console.log(`✅ Connected ${agent.name} → ${group.name} exit`);
+      } else {
+        // Remove if already connected
+        const idx = group.exitAgents.indexOf(agent.instanceId);
+        group.exitAgents.splice(idx, 1);
+        console.log(`❌ Disconnected ${agent.name} → ${group.name} exit`);
+      }
+    }
+    connectingGroupExit.value = null;
+    return;
+  }
+  
+  if (isCreatingGroup.value && !agent.groupId) {
+    // Toggle selection for group creation
+    if (selectedForGroup.value.has(agent.instanceId)) {
+      selectedForGroup.value.delete(agent.instanceId);
+    } else {
+      selectedForGroup.value.add(agent.instanceId);
+    }
+  } else {
+    selectedAgent.value = agent;
+  }
+}
+
+function selectGroup(group: AgentGroup) {
+  console.log('Selected group:', group.name);
+}
+
+function toggleGroupCreation() {
+  // Create an empty group immediately
+  const groupId = `group-${Date.now()}`;
+  
+  // Find a good position for the new group
+  const existingGroups = agentGroups.value.length;
+  const x = 150 + (existingGroups % 2) * 450;
+  const y = 100 + Math.floor(existingGroups / 2) * 350;
+  
+  const newGroup: AgentGroup = {
+    id: groupId,
+    name: `Group ${agentGroups.value.length + 1}`,
+    position: { x, y },
+    size: { width: 400, height: 300 },
+    agents: [],
+    entryAgents: [],
+    exitAgents: [],
+    inputs: [],
+    outputs: [],
+    collapsed: false,
+    color: '#4a9eff'
+  };
+  
+  agentGroups.value.push(newGroup);
+  console.log(`✅ Created empty group: ${newGroup.name}`);
+}
+
+function createGroupFromSelected() {
+  if (selectedForGroup.value.size < 2) {
+    console.log('Need at least 2 agents to create a group');
+    return;
+  }
+  
+  const groupId = `group-${Date.now()}`;
+  const selectedAgents = deployedAgents.value.filter(a => selectedForGroup.value.has(a.instanceId));
+  
+  // Calculate group position (center of selected agents)
+  const avgX = selectedAgents.reduce((sum, a) => sum + a.position.x, 0) / selectedAgents.length;
+  const avgY = selectedAgents.reduce((sum, a) => sum + a.position.y, 0) / selectedAgents.length;
+  
+  // Create the group
+  const newGroup: AgentGroup = {
+    id: groupId,
+    name: `Group ${agentGroups.value.length + 1}`,
+    position: { x: avgX - 100, y: avgY - 50 },
+    agents: Array.from(selectedForGroup.value),
+    inputs: [],
+    outputs: [],
+    collapsed: false,
+    color: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+  };
+  
+  // Update agents to belong to this group
+  selectedAgents.forEach(agent => {
+    agent.groupId = groupId;
+    // Collect all external connections
+    agent.inputs.forEach(inputId => {
+      const inputAgent = deployedAgents.value.find(a => a.instanceId === inputId);
+      if (!inputAgent || !selectedForGroup.value.has(inputAgent.instanceId)) {
+        // External input
+        if (!newGroup.inputs.includes(inputId)) {
+          newGroup.inputs.push(inputId);
+        }
+      }
+    });
+    agent.outputs.forEach(outputId => {
+      const outputAgent = deployedAgents.value.find(a => a.instanceId === outputId);
+      if (!outputAgent || !selectedForGroup.value.has(outputAgent.instanceId)) {
+        // External output
+        if (!newGroup.outputs.includes(outputId)) {
+          newGroup.outputs.push(outputId);
+        }
+      }
+    });
+  });
+  
+  agentGroups.value.push(newGroup);
+  
+  // Update connections to point to group instead of individual agents
+  updateConnectionsForGroup(newGroup);
+  
+  // Clear selection
+  selectedForGroup.value.clear();
+  isCreatingGroup.value = false;
+  groupCreationMode.value = false;
+}
+
+function cancelGroupCreation() {
+  selectedForGroup.value.clear();
+  isCreatingGroup.value = false;
+  groupCreationMode.value = false;
+}
+
+function toggleGroupCollapse(group: AgentGroup) {
+  group.collapsed = !group.collapsed;
+}
+
+function deleteGroup(group: AgentGroup) {
+  // Remove group reference from agents
+  deployedAgents.value.forEach(agent => {
+    if (agent.groupId === group.id) {
+      delete agent.groupId;
+    }
+  });
+  
+  // Remove group
+  const index = agentGroups.value.findIndex(g => g.id === group.id);
+  if (index !== -1) {
+    agentGroups.value.splice(index, 1);
+  }
+  
+  // Update connections
+  updateConnectionPositions();
+}
+
+function getAgentById(agentId: string): DeployedAgent | undefined {
+  return deployedAgents.value.find(a => a.instanceId === agentId);
+}
+
+function handleGroupConnectionClick(group: AgentGroup, type: 'input' | 'output') {
+  if (!isConnecting.value) {
+    // Start a new connection from group
+    startGroupConnection(group, type);
+  } else {
+    // Try to complete the connection to group
+    completeGroupConnection(group, type);
+  }
+}
+
+function startGroupConnection(group: AgentGroup, type: 'input' | 'output') {
+  isConnecting.value = true;
+  connectionStart.value = { item: group, type, itemType: 'group' };
+  
+  // Calculate connection point position for the temporary line
+  const x = group.position.x + (type === 'output' ? 200 : 0) + 100;
+  const y = group.position.y + 50;
+  tempConnection.value = { x1: x, y1: y, x2: x, y2: y };
+  
+  console.log(`Starting connection from ${group.name} group (${type})`);
+}
+
+function completeGroupConnection(targetGroup: AgentGroup, targetType: 'input' | 'output') {
+  // Use the unified completeConnection function
+  completeConnection(targetGroup, targetType, 'group');
+}
+
+// Group connection functions removed - using the ones defined later in the file
+
+function updateConnectionsForGroup(group: AgentGroup) {
+  // Update existing connections to point to the group
+  connections.value = connections.value.map(conn => {
+    if (group.agents.includes(conn.from) || group.agents.includes(conn.to)) {
+      // This connection involves a grouped agent, update it
+      // For now, we'll keep internal connections but could hide them
+    }
+    return conn;
+  });
+}
+
+function getConnectionStartName(): string {
+  if (!connectionStart.value) return '';
+  if (connectionStart.value.itemType === 'agent') {
+    return (connectionStart.value.item as DeployedAgent).name;
+  } else {
+    return (connectionStart.value.item as AgentGroup).name + ' (group)';
+  }
 }
 
 function toggleAgentStatus(agent: DeployedAgent) {
@@ -692,6 +1558,18 @@ function toggleAgentStatus(agent: DeployedAgent) {
 }
 
 function removeAgent(agent: DeployedAgent) {
+  // Remove connections involving this agent
+  connections.value = connections.value.filter(
+    conn => conn.from !== agent.instanceId && conn.to !== agent.instanceId
+  );
+  
+  // Remove references from other agents
+  deployedAgents.value.forEach(otherAgent => {
+    otherAgent.inputs = otherAgent.inputs.filter(id => id !== agent.instanceId);
+    otherAgent.outputs = otherAgent.outputs.filter(id => id !== agent.instanceId);
+  });
+  
+  // Remove the agent
   const index = deployedAgents.value.findIndex(a => a.instanceId === agent.instanceId);
   if (index !== -1) {
     deployedAgents.value.splice(index, 1);
@@ -701,9 +1579,303 @@ function removeAgent(agent: DeployedAgent) {
   }
 }
 
+function handleConnectionClick(agent: DeployedAgent, type: 'input' | 'output') {
+  if (!isConnecting.value) {
+    // Start a new connection
+    startConnection(agent, type);
+  } else {
+    // Try to complete the connection
+    completeConnection(agent, type);
+  }
+}
+
 function startConnection(agent: DeployedAgent, type: 'input' | 'output') {
-  // Implementation for creating connections between agents
-  console.log('Starting connection from', agent.instanceId, type);
+  isConnecting.value = true;
+  connectionStart.value = { item: agent, type, itemType: 'agent' };
+  
+  // Calculate connection point position for the temporary line
+  const x = agent.position.x + (type === 'output' ? 100 : 0) + 50;
+  const y = agent.position.y + 50;
+  tempConnection.value = { x1: x, y1: y, x2: x, y2: y };
+  
+  console.log(`Starting connection from ${agent.name} (${type})`);
+}
+
+function completeConnection(targetItem: DeployedAgent | AgentGroup, targetType: 'input' | 'output', targetItemType: 'agent' | 'group' = 'agent') {
+  if (!connectionStart.value) {
+    cancelConnection();
+    return;
+  }
+  
+  const { item: sourceItem, type: sourceType, itemType: sourceItemType } = connectionStart.value;
+  
+  // Can't connect to self (for agents)
+  if (sourceItemType === 'agent' && targetItemType === 'agent') {
+    const sourceAgent = sourceItem as DeployedAgent;
+    const targetAgent = targetItem as DeployedAgent;
+    if (sourceAgent.instanceId === targetAgent.instanceId) {
+      console.log('Cannot connect agent to itself');
+      cancelConnection();
+      return;
+    }
+  }
+  
+  // Can't connect group to itself
+  if (sourceItemType === 'group' && targetItemType === 'group') {
+    const sourceGroup = sourceItem as AgentGroup;
+    const targetGroup = targetItem as AgentGroup;
+    if (sourceGroup.id === targetGroup.id) {
+      console.log('Cannot connect group to itself');
+      cancelConnection();
+      return;
+    }
+  }
+  
+  // Handle different connection types
+  if (sourceType === 'output' && targetType === 'input') {
+    // Output -> Input connection
+    if (sourceItemType === 'agent' && targetItemType === 'agent') {
+      createConnection(sourceItem as DeployedAgent, targetItem as DeployedAgent);
+    } else if (sourceItemType === 'agent' && targetItemType === 'group') {
+      createAgentToGroupConnection(sourceItem as DeployedAgent, targetItem as AgentGroup);
+    } else if (sourceItemType === 'group' && targetItemType === 'agent') {
+      createGroupToAgentConnection(sourceItem as AgentGroup, targetItem as DeployedAgent);
+    } else if (sourceItemType === 'group' && targetItemType === 'group') {
+      createGroupToGroupConnection(sourceItem as AgentGroup, targetItem as AgentGroup);
+    }
+    cancelConnection();
+  } 
+  else if (sourceType === 'input' && targetType === 'output') {
+    // Input <- Output connection (reverse direction)
+    if (sourceItemType === 'agent' && targetItemType === 'agent') {
+      createConnection(targetItem as DeployedAgent, sourceItem as DeployedAgent);
+    } else if (sourceItemType === 'agent' && targetItemType === 'group') {
+      createGroupToAgentConnection(targetItem as AgentGroup, sourceItem as DeployedAgent);
+    } else if (sourceItemType === 'group' && targetItemType === 'agent') {
+      createAgentToGroupConnection(targetItem as DeployedAgent, sourceItem as AgentGroup);
+    } else if (sourceItemType === 'group' && targetItemType === 'group') {
+      createGroupToGroupConnection(targetItem as AgentGroup, sourceItem as AgentGroup);
+    }
+    cancelConnection();
+  } 
+  else {
+    console.log(`Invalid connection: ${sourceType} to ${targetType}`);
+    cancelConnection();
+  }
+}
+
+function createConnection(fromAgent: DeployedAgent, toAgent: DeployedAgent) {
+  // Check group membership rules
+  if (fromAgent.groupId || toAgent.groupId) {
+    // Both agents are in groups
+    if (fromAgent.groupId && toAgent.groupId) {
+      // Only allow connection if they're in the same group
+      if (fromAgent.groupId !== toAgent.groupId) {
+        console.log('❌ Cannot connect agents from different groups. Use group-level connections instead.');
+        return;
+      }
+    } else {
+      // One agent is in a group, the other is standalone
+      console.log('❌ Cannot connect grouped agent to standalone agent. Use group-level connections.');
+      return;
+    }
+  }
+  
+  // Check if connection already exists
+  const existingConnection = connections.value.find(
+    conn => conn.from === fromAgent.instanceId && conn.to === toAgent.instanceId
+  );
+  
+  if (existingConnection) {
+    console.log('Connection already exists');
+    return;
+  }
+  
+  // Add connection to agents
+  if (!fromAgent.outputs.includes(toAgent.instanceId)) {
+    fromAgent.outputs.push(toAgent.instanceId);
+  }
+  if (!toAgent.inputs.includes(fromAgent.instanceId)) {
+    toAgent.inputs.push(fromAgent.instanceId);
+  }
+  
+  // Calculate connection line coordinates
+  const x1 = fromAgent.position.x + 100; // Right side of source
+  const y1 = fromAgent.position.y + 50; // Center vertically
+  const x2 = toAgent.position.x; // Left side of target
+  const y2 = toAgent.position.y + 50; // Center vertically
+  
+  // Add visual connection
+  connections.value.push({
+    id: `${fromAgent.instanceId}-${toAgent.instanceId}`,
+    from: fromAgent.instanceId,
+    to: toAgent.instanceId,
+    x1, y1, x2, y2
+  });
+  
+  console.log(`✅ Connected: ${fromAgent.name} → ${toAgent.name}`);
+}
+
+function createAgentToGroupConnection(fromAgent: DeployedAgent, toGroup: AgentGroup) {
+  // Add agent to group's inputs
+  if (!toGroup.inputs.includes(fromAgent.instanceId)) {
+    toGroup.inputs.push(fromAgent.instanceId);
+  }
+  
+  // Add group to agent's outputs
+  if (!fromAgent.outputs.includes(toGroup.id)) {
+    fromAgent.outputs.push(toGroup.id);
+  }
+  
+  // Calculate connection line coordinates
+  const x1 = fromAgent.position.x + 100; // Right side of agent
+  const y1 = fromAgent.position.y + 50; // Center vertically
+  const x2 = toGroup.position.x; // Left side of group
+  const y2 = toGroup.position.y + 60; // Center of group
+  
+  // Add visual connection
+  connections.value.push({
+    id: `${fromAgent.instanceId}-${toGroup.id}`,
+    from: fromAgent.instanceId,
+    to: toGroup.id,
+    x1, y1, x2, y2
+  });
+  
+  console.log(`✅ Connected: ${fromAgent.name} → Group ${toGroup.name}`);
+}
+
+function createGroupToAgentConnection(fromGroup: AgentGroup, toAgent: DeployedAgent) {
+  // Add group to agent's inputs
+  if (!toAgent.inputs.includes(fromGroup.id)) {
+    toAgent.inputs.push(fromGroup.id);
+  }
+  
+  // Add agent to group's outputs
+  if (!fromGroup.outputs.includes(toAgent.instanceId)) {
+    fromGroup.outputs.push(toAgent.instanceId);
+  }
+  
+  // Calculate connection line coordinates
+  const x1 = fromGroup.position.x + 200; // Right side of group
+  const y1 = fromGroup.position.y + 60; // Center of group
+  const x2 = toAgent.position.x; // Left side of agent
+  const y2 = toAgent.position.y + 50; // Center vertically
+  
+  // Add visual connection
+  connections.value.push({
+    id: `${fromGroup.id}-${toAgent.instanceId}`,
+    from: fromGroup.id,
+    to: toAgent.instanceId,
+    x1, y1, x2, y2
+  });
+  
+  console.log(`✅ Connected: Group ${fromGroup.name} → ${toAgent.name}`);
+}
+
+function createGroupToGroupConnection(fromGroup: AgentGroup, toGroup: AgentGroup) {
+  // Add group to group's inputs/outputs
+  if (!toGroup.inputs.includes(fromGroup.id)) {
+    toGroup.inputs.push(fromGroup.id);
+  }
+  if (!fromGroup.outputs.includes(toGroup.id)) {
+    fromGroup.outputs.push(toGroup.id);
+  }
+  
+  // Calculate connection line coordinates
+  const x1 = fromGroup.position.x + 200; // Right side of source group
+  const y1 = fromGroup.position.y + 60; // Center of source group
+  const x2 = toGroup.position.x; // Left side of target group
+  const y2 = toGroup.position.y + 60; // Center of target group
+  
+  // Add visual connection
+  connections.value.push({
+    id: `${fromGroup.id}-${toGroup.id}`,
+    from: fromGroup.id,
+    to: toGroup.id,
+    x1, y1, x2, y2
+  });
+  
+  console.log(`✅ Connected: Group ${fromGroup.name} → Group ${toGroup.name}`);
+}
+
+function cancelConnection() {
+  isConnecting.value = false;
+  connectionStart.value = null;
+  tempConnection.value = null;
+}
+
+function handleCanvasMouseMove(event: MouseEvent) {
+  if (!isConnecting.value || !tempConnection.value) return;
+  
+  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+  // Adjust for zoom level
+  const x = (event.clientX - rect.left) / canvasZoom.value;
+  const y = (event.clientY - rect.top) / canvasZoom.value;
+  
+  // Update temporary connection line to follow mouse
+  if (tempConnection.value) {
+    tempConnection.value.x2 = x;
+    tempConnection.value.y2 = y;
+  }
+}
+
+function handleCanvasClick(event: MouseEvent) {
+  // If clicking on empty canvas while connecting, cancel the connection
+  if (isConnecting.value) {
+    // Check if we clicked on empty space (not on an agent or connection point)
+    const target = event.target as HTMLElement;
+    if (target.classList.contains('workflow-canvas') || 
+        target.classList.contains('canvas-viewport') ||
+        target.classList.contains('canvas-grid') ||
+        target.tagName === 'svg' ||
+        target.tagName === 'rect') {
+      console.log('Connection cancelled');
+      cancelConnection();
+    }
+  }
+}
+
+function handleCanvasWheel(event: WheelEvent) {
+  event.preventDefault();
+  
+  // Zoom with Ctrl/Cmd + scroll
+  if (event.ctrlKey || event.metaKey) {
+    const delta = event.deltaY > 0 ? -0.1 : 0.1;
+    const newZoom = Math.max(0.25, Math.min(2, canvasZoom.value + delta));
+    canvasZoom.value = newZoom;
+  }
+}
+
+function zoomIn() {
+  canvasZoom.value = Math.min(2, canvasZoom.value + 0.1);
+}
+
+function zoomOut() {
+  canvasZoom.value = Math.max(0.25, canvasZoom.value - 0.1);
+}
+
+function resetZoom() {
+  canvasZoom.value = 1;
+  canvasTransform.value = { x: 0, y: 0 };
+}
+
+function updateConnectionPositions() {
+  // Update all connection positions when agents move
+  connections.value = connections.value.map(conn => {
+    const fromAgent = deployedAgents.value.find(a => a.instanceId === conn.from);
+    const toAgent = deployedAgents.value.find(a => a.instanceId === conn.to);
+    
+    if (fromAgent && toAgent) {
+      return {
+        ...conn,
+        x1: fromAgent.position.x + 100,
+        y1: fromAgent.position.y + 50,
+        x2: toAgent.position.x,
+        y2: toAgent.position.y + 50
+      };
+    }
+    return conn;
+  });
 }
 
 function createCustomAgent() {
@@ -731,23 +1903,40 @@ function saveAgentProperties() {
   console.log('Saving agent properties', selectedAgent.value);
 }
 
-async function spawnClaudeInstance() {
+async function spawnAgentInstance() {
   if (!selectedAgent.value) return;
   
-  // Create a Claude instance with the agent's personality
   const instanceId = selectedAgent.value.instanceId;
-  const personality = selectedAgent.value.personalityId || 'default';
-  const instructions = selectedAgent.value.customInstructions || '';
+  const workingDirectory = localStorage.getItem('workspacePath') || '.';
   
-  // Call Claude store to create instance
-  await claudeStore.createInstance(
-    instanceId,
-    `${selectedAgent.value.name} Agent`,
-    localStorage.getItem('workspacePath') || '.',
-    personality
-  );
+  if (selectedAgent.value.instanceType === 'codex') {
+    // Spawn Codex instance
+    await codexStore.createInstance(
+      `${selectedAgent.value.name} Agent`,
+      workingDirectory
+    );
+    
+    // Start the Codex instance if electronAPI is available
+    if (window.electronAPI?.codex?.start) {
+      await window.electronAPI.codex.start(instanceId, workingDirectory);
+    }
+  } else {
+    // Spawn Claude instance with personality
+    const personality = selectedAgent.value.personalityId || undefined;
+    await claudeStore.createInstance(
+      `${selectedAgent.value.name} Agent`,
+      personality,
+      workingDirectory
+    );
+    
+    // Start the Claude instance if electronAPI is available
+    if (window.electronAPI?.claude?.start) {
+      await window.electronAPI.claude.start(instanceId, workingDirectory);
+    }
+  }
   
-  console.log('Spawning Claude instance for', selectedAgent.value.name);
+  selectedAgent.value.status = 'running';
+  console.log(`Spawning ${selectedAgent.value.instanceType} instance for`, selectedAgent.value.name);
 }
 
 function createNewPipeline() {
@@ -813,13 +2002,294 @@ function formatRelativeTime(date: Date): string {
   return date.toLocaleTimeString();
 }
 
+// Pipeline count for metrics
+const pipelineCount = computed(() => activePipelines.value.length);
+
+// Save current pipeline configuration
+async function savePipeline() {
+  if (deployedAgents.value.length === 0) {
+    console.log('No agents to save');
+    return;
+  }
+  
+  // Create pipeline from deployed agents
+  const pipeline = pipelineStore.createPipeline({
+    name: `Pipeline ${Date.now()}`,
+    description: 'Visual pipeline created from canvas',
+    executionMode: 'smart'
+  });
+  
+  // Add agents to pipeline
+  const agentMap = new Map<string, string>(); // Old ID to new ID mapping
+  
+  deployedAgents.value.forEach(agent => {
+    const newAgent = pipelineStore.addAgent(pipeline.id, {
+      type: agent.instanceType,
+      name: agent.name,
+      role: agent.type as any,
+      position: agent.position,
+      config: {
+        personalityId: agent.personalityId,
+        prompt: agent.customInstructions
+      }
+    });
+    if (newAgent) {
+      agentMap.set(agent.instanceId, newAgent.id);
+    }
+  });
+  
+  // Add connections to pipeline
+  connections.value.forEach(conn => {
+    const fromId = agentMap.get(conn.from);
+    const toId = agentMap.get(conn.to);
+    if (fromId && toId) {
+      pipelineStore.connectAgents(pipeline.id, fromId, toId);
+    }
+  });
+  
+  // Save pipeline to storage
+  await pipelineStore.savePipeline(pipeline.id);
+  console.log('Pipeline saved:', pipeline.id);
+}
+
+// Load saved pipeline
+async function loadPipeline() {
+  await pipelineStore.loadSavedPipelines();
+  const pipelines = pipelineStore.pipelinesList;
+  
+  if (pipelines.length > 0) {
+    // Load the first pipeline for now (could show a selector)
+    const pipeline = pipelines[0];
+    
+    // Clear current agents
+    deployedAgents.value = [];
+    
+    // Load agents from pipeline
+    const agents = pipelineStore.getPipelineAgents(pipeline.id);
+    agents.forEach(agent => {
+      const agentType = availableAgentTypes.value.find(t => t.id === agent.role) || availableAgentTypes.value[0];
+      deployedAgents.value.push({
+        instanceId: agent.id,
+        type: agent.role,
+        instanceType: agent.type,
+        name: agent.name,
+        icon: agentType.icon,
+        color: agentType.color,
+        position: agent.position,
+        status: 'idle',
+        personalityId: agent.config.personalityId,
+        customInstructions: agent.config.prompt,
+        inputs: [],
+        outputs: []
+      });
+    });
+    
+    console.log('Pipeline loaded:', pipeline.id);
+  }
+}
+
+// Group entry/exit point handling
+function handleGroupEntryClick(group: AgentGroup) {
+  if (connectingGroupEntry.value === group.id) {
+    // Cancel if clicking the same entry point
+    connectingGroupEntry.value = null;
+  } else {
+    // Start connecting from group entry
+    connectingGroupEntry.value = group.id;
+    connectingGroupExit.value = null; // Cancel any exit connection
+    console.log(`🔗 Connect from ${group.name} entry point to agents...`);
+  }
+}
+
+function handleGroupExitClick(group: AgentGroup) {
+  if (connectingGroupExit.value === group.id) {
+    // Cancel if clicking the same exit point
+    connectingGroupExit.value = null;
+  } else {
+    // Start connecting from group exit
+    connectingGroupExit.value = group.id;
+    connectingGroupEntry.value = null; // Cancel any entry connection
+    console.log(`🔗 Connect agents to ${group.name} exit point...`);
+  }
+}
+
+function getInternalConnections(group: AgentGroup): Connection[] {
+  const groupAgentIds = new Set(group.agents);
+  return connections.value.filter(conn => 
+    groupAgentIds.has(conn.from) && groupAgentIds.has(conn.to)
+  );
+}
+
+function getInternalConnX1(conn: Connection, group: AgentGroup): number {
+  const agent = deployedAgents.value.find(a => a.instanceId === conn.from);
+  if (!agent) return 0;
+  return (agent.position.x - group.position.x) + 100; // Right side of agent
+}
+
+function getInternalConnY1(conn: Connection, group: AgentGroup): number {
+  const agent = deployedAgents.value.find(a => a.instanceId === conn.from);
+  if (!agent) return 0;
+  return (agent.position.y - group.position.y) + 25; // Center of agent
+}
+
+function getInternalConnX2(conn: Connection, group: AgentGroup): number {
+  const agent = deployedAgents.value.find(a => a.instanceId === conn.to);
+  if (!agent) return 0;
+  return (agent.position.x - group.position.x); // Left side of agent
+}
+
+function getInternalConnY2(conn: Connection, group: AgentGroup): number {
+  const agent = deployedAgents.value.find(a => a.instanceId === conn.to);
+  if (!agent) return 0;
+  return (agent.position.y - group.position.y) + 25; // Center of agent
+}
+
+function getGroupAgentRelativePos(agentId: string, group: AgentGroup): { x: number; y: number } {
+  const agent = deployedAgents.value.find(a => a.instanceId === agentId);
+  if (!agent) return { x: 0, y: 0 };
+  return {
+    x: agent.position.x - group.position.x,
+    y: agent.position.y - group.position.y
+  };
+}
+
+// Group completion detection
+function isGroupCompleted(group: AgentGroup): boolean {
+  const groupAgents = deployedAgents.value.filter(a => a.groupId === group.id);
+  if (groupAgents.length === 0) return false;
+  return groupAgents.every(agent => agent.status === 'completed' || agent.status === 'idle');
+}
+
+function getGroupStatus(group: AgentGroup): string {
+  const groupAgents = deployedAgents.value.filter(a => a.groupId === group.id);
+  if (groupAgents.length === 0) return 'idle';
+  
+  if (groupAgents.some(agent => agent.status === 'error')) return 'error';
+  if (groupAgents.some(agent => agent.status === 'running')) return 'running';
+  if (groupAgents.every(agent => agent.status === 'completed')) return 'completed';
+  if (groupAgents.every(agent => agent.status === 'idle')) return 'idle';
+  
+  return 'mixed';
+}
+
+function executeNextInPipeline(itemId: string) {
+  // Find all connections from this item
+  const outgoingConnections = connections.value.filter(conn => conn.from === itemId);
+  
+  outgoingConnections.forEach(conn => {
+    const targetAgent = deployedAgents.value.find(a => a.instanceId === conn.to);
+    const targetGroup = agentGroups.value.find(g => g.id === conn.to);
+    
+    if (targetAgent) {
+      // Start the target agent
+      targetAgent.status = 'running';
+      console.log(`▶️ Starting agent: ${targetAgent.name}`);
+      // Here you would trigger the actual agent execution
+    } else if (targetGroup) {
+      // Start all agents in the target group
+      const groupAgents = deployedAgents.value.filter(a => a.groupId === targetGroup.id);
+      groupAgents.forEach(agent => {
+        agent.status = 'running';
+        console.log(`▶️ Starting agent in group: ${agent.name}`);
+      });
+    }
+  });
+}
+
+// Helper functions for connection point highlighting
+function shouldHighlightInput(agent: DeployedAgent): boolean {
+  if (!isConnecting.value || !connectionStart.value) return false;
+  if (connectionStart.value.type !== 'output') return false;
+  
+  // Don't highlight if it's the same agent
+  if (connectionStart.value.itemType === 'agent') {
+    const sourceAgent = connectionStart.value.item as DeployedAgent;
+    return sourceAgent.instanceId !== agent.instanceId;
+  }
+  
+  return true; // Highlight for group connections
+}
+
+function shouldHighlightOutput(agent: DeployedAgent): boolean {
+  if (!isConnecting.value || !connectionStart.value) return false;
+  if (connectionStart.value.type !== 'input') return false;
+  
+  // Don't highlight if it's the same agent
+  if (connectionStart.value.itemType === 'agent') {
+    const sourceAgent = connectionStart.value.item as DeployedAgent;
+    return sourceAgent.instanceId !== agent.instanceId;
+  }
+  
+  return true; // Highlight for group connections
+}
+
+function isActiveInput(agent: DeployedAgent): boolean {
+  if (!isConnecting.value || !connectionStart.value) return false;
+  if (connectionStart.value.type !== 'input') return false;
+  if (connectionStart.value.itemType !== 'agent') return false;
+  
+  const sourceAgent = connectionStart.value.item as DeployedAgent;
+  return sourceAgent.instanceId === agent.instanceId;
+}
+
+function isActiveOutput(agent: DeployedAgent): boolean {
+  if (!isConnecting.value || !connectionStart.value) return false;
+  if (connectionStart.value.type !== 'output') return false;
+  if (connectionStart.value.itemType !== 'agent') return false;
+  
+  const sourceAgent = connectionStart.value.item as DeployedAgent;
+  return sourceAgent.instanceId === agent.instanceId;
+}
+
+// Start pipeline from Kanban item
+async function startFromKanban() {
+  // Show a modal to select Epic/Story/Task
+  const epics = tasksStore.epics;
+  const stories = tasksStore.stories;
+  const tasks = tasksStore.tasks;
+  
+  // For now, create from the first epic if available
+  if (epics.length > 0) {
+    const pipeline = await pipelineStore.startPipelineFromEpic(epics[0].id);
+    if (pipeline) {
+      console.log('Pipeline created from epic:', pipeline.id);
+      // Could refresh the view or switch to pipeline view
+    }
+  }
+}
+
+// Keyboard event handler
+function handleKeyDown(event: KeyboardEvent) {
+  if (event.key === 'Escape' && isConnecting.value) {
+    cancelConnection();
+  }
+}
+
 // Initialize
-onMounted(() => {
+onMounted(async () => {
   // Initialize orchestration store if needed
   const workspacePath = localStorage.getItem('workspacePath');
   if (workspacePath && !orchestrationStore.isInitialized) {
     orchestrationStore.initialize(workspacePath);
   }
+  
+  // Initialize stores
+  await claudeStore.init();
+  await codexStore.init();
+  await pipelineStore.loadSavedPipelines();
+  
+  // Initialize tasks if needed
+  if (workspacePath && !tasksStore.isInitialized) {
+    tasksStore.initialize(workspacePath);
+  }
+  
+  // Add keyboard event listener
+  document.addEventListener('keydown', handleKeyDown);
+});
+
+onUnmounted(() => {
+  // Clean up keyboard event listener
+  document.removeEventListener('keydown', handleKeyDown);
 });
 </script>
 
@@ -942,29 +2412,6 @@ onMounted(() => {
   gap: 16px;
 }
 
-.budget-indicator {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background: #2a2a2a;
-  border-radius: 8px;
-}
-
-.budget-bar {
-  width: 100px;
-  height: 6px;
-  background: #333;
-  border-radius: 3px;
-  overflow: hidden;
-}
-
-.budget-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #4ade80, #fbbf24);
-  transition: width 0.3s;
-}
-
 .btn-icon {
   display: flex;
   align-items: center;
@@ -1003,6 +2450,42 @@ onMounted(() => {
 
 .agent-library.collapsed {
   width: 50px;
+}
+
+.library-collapsed-toggle {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 8px;
+}
+
+.btn-expand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 4px;
+  background: #2a2a2a;
+  border: 1px solid #333;
+  border-radius: 6px;
+  color: #999;
+  cursor: pointer;
+  transition: all 0.2s;
+  writing-mode: vertical-lr;
+  transform: rotate(180deg);
+}
+
+.btn-expand:hover {
+  background: #333;
+  color: #fff;
+  border-color: #4a9eff;
+}
+
+.btn-expand span {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
 }
 
 .library-header {
@@ -1217,6 +2700,59 @@ onMounted(() => {
   overflow: auto;
 }
 
+.workflow-canvas.connecting {
+  cursor: crosshair;
+}
+
+.canvas-viewport {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.2s ease-out;
+  transform-origin: 0 0;
+}
+
+.zoom-controls {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #2a2a2a;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid #333;
+  z-index: 100;
+}
+
+.zoom-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #333;
+  border: none;
+  border-radius: 6px;
+  color: #999;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.zoom-btn:hover {
+  background: #444;
+  color: #fff;
+}
+
+.zoom-level {
+  min-width: 50px;
+  text-align: center;
+  font-size: 12px;
+  color: #999;
+  font-weight: 500;
+}
+
 .canvas-grid {
   position: absolute;
   top: 0;
@@ -1245,6 +2781,7 @@ onMounted(() => {
 .deployed-agent {
   position: absolute;
   width: 100px;
+  height: 100px;
   padding: 12px;
   background: var(--agent-color, #2a2a2a);
   border: 2px solid #333;
@@ -1254,6 +2791,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 4px;
 }
 
@@ -1273,6 +2811,49 @@ onMounted(() => {
 
 .deployed-agent.error {
   border-color: #ef4444;
+}
+
+.deployed-agent.entry-point {
+  border-color: #4ade80;
+  border-width: 3px;
+  box-shadow: 0 0 20px rgba(74, 222, 128, 0.3);
+}
+
+.deployed-agent.entry-point:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 30px rgba(74, 222, 128, 0.4);
+}
+
+.entry-point-badge {
+  position: absolute;
+  top: -12px;
+  right: -12px;
+  background: linear-gradient(135deg, #4ade80, #22c55e);
+  color: #fff;
+  padding: 4px 8px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  z-index: 15;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  animation: pulse-entry 2s infinite;
+}
+
+.entry-point-badge svg {
+  width: 12px;
+  height: 12px;
+}
+
+@keyframes pulse-entry {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
 }
 
 .agent-status-ring {
@@ -1327,28 +2908,59 @@ onMounted(() => {
 
 .connection-point {
   position: absolute;
-  width: 12px;
-  height: 12px;
+  width: 16px;
+  height: 16px;
   background: #4a9eff;
   border: 2px solid #1a1a1a;
   border-radius: 50%;
-  cursor: crosshair;
+  cursor: pointer;
   opacity: 0;
-  transition: opacity 0.2s;
+  transition: all 0.2s;
+  z-index: 20;
 }
 
 .deployed-agent:hover .connection-point {
   opacity: 1;
 }
 
+.connection-point:hover {
+  transform: scale(1.2);
+  background: #5aafff;
+}
+
+.connection-point.highlight {
+  opacity: 1 !important;
+  animation: pulse-highlight 1s infinite;
+  background: #4ade80;
+  transform: scale(1.3);
+}
+
+.connection-point.active {
+  opacity: 1 !important;
+  background: #fbbf24;
+  transform: scale(1.2);
+  box-shadow: 0 0 8px rgba(251, 191, 36, 0.6);
+}
+
+@keyframes pulse-highlight {
+  0%, 100% { 
+    transform: scale(1.3);
+    box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.7);
+  }
+  50% { 
+    transform: scale(1.5);
+    box-shadow: 0 0 0 6px rgba(74, 222, 128, 0);
+  }
+}
+
 .connection-point.input {
-  left: -6px;
+  left: -8px;
   top: 50%;
   transform: translateY(-50%);
 }
 
 .connection-point.output {
-  right: -6px;
+  right: -8px;
   top: 50%;
   transform: translateY(-50%);
 }
@@ -1404,6 +3016,105 @@ onMounted(() => {
   border-radius: 12px;
   color: #4a9eff;
   pointer-events: none;
+  z-index: 5;
+}
+
+.connection-mode-indicator {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #2a2a2a;
+  border: 1px solid #4a9eff;
+  border-radius: 8px;
+  padding: 12px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.connection-mode-indicator span {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.connection-hint {
+  font-size: 12px !important;
+  color: #999 !important;
+  font-weight: 400 !important;
+}
+
+.no-entry-warning {
+  position: absolute;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid #ef4444;
+  border-radius: 8px;
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 1000;
+  color: #ef4444;
+  font-size: 13px;
+  font-weight: 500;
+  animation: pulse-warning 2s infinite;
+}
+
+@keyframes pulse-warning {
+  0%, 100% {
+    opacity: 0.9;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.empty-canvas-help {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  color: #666;
+  max-width: 400px;
+  padding: 40px;
+  background: rgba(26, 26, 26, 0.8);
+  border-radius: 12px;
+  border: 1px solid #333;
+}
+
+.empty-canvas-help h3 {
+  margin: 16px 0 8px 0;
+  color: #999;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.empty-canvas-help p {
+  margin: 8px 0;
+  color: #666;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.connection-help {
+  margin-top: 24px !important;
+  padding-top: 24px;
+  border-top: 1px solid #333;
+  text-align: left;
+}
+
+.connection-help strong {
+  color: #999;
+  display: block;
+  margin-bottom: 8px;
 }
 
 /* Pipeline View */
@@ -1954,5 +3665,554 @@ onMounted(() => {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #444;
+}
+
+/* Agent Groups */
+.agent-group {
+  position: absolute;
+  background: linear-gradient(135deg, #2d2d3d 0%, #252535 100%);
+  border: 2px solid var(--group-color, #4a9eff);
+  border-radius: 12px;
+  padding: 12px;
+  min-width: 200px;
+  max-width: 350px;
+  transition: all 0.3s ease;
+  cursor: move;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.agent-group.collapsed {
+  min-width: 150px;
+  max-width: 200px;
+}
+
+.agent-group:not(.collapsed) {
+  min-height: 250px;
+  min-width: 400px;
+  max-width: 600px;
+}
+
+.agent-group.entry-point {
+  border-color: #4ade80;
+  box-shadow: 0 0 20px rgba(74, 222, 128, 0.3);
+}
+
+.group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.group-name {
+  flex: 1;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.group-status-text {
+  font-size: 11px;
+  color: #888;
+  margin-left: 4px;
+}
+
+.group-status-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #666;
+  margin-right: 6px;
+  transition: all 0.3s;
+}
+
+.group-status-indicator.idle {
+  background: #666;
+}
+
+.group-status-indicator.running {
+  background: #4a9eff;
+  animation: pulse-status 1.5s infinite;
+}
+
+.group-status-indicator.completed {
+  background: #4ade80;
+}
+
+.group-status-indicator.error {
+  background: #ef4444;
+}
+
+.group-status-indicator.mixed {
+  background: linear-gradient(90deg, #4a9eff 50%, #fbbf24 50%);
+}
+
+@keyframes pulse-status {
+  0% { box-shadow: 0 0 0 0 rgba(74, 158, 255, 0.7); }
+  70% { box-shadow: 0 0 0 8px rgba(74, 158, 255, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(74, 158, 255, 0); }
+}
+
+.group-toggle,
+.group-delete {
+  background: none;
+  border: none;
+  color: #888;
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s;
+}
+
+.group-toggle:hover,
+.group-delete:hover {
+  color: #fff;
+}
+
+.group-canvas {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 200px;
+  margin-top: 10px;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.group-connections-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.internal-connection-line {
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.entry-connection-line {
+  opacity: 0.8;
+  animation: pulse-entry-line 2s infinite;
+}
+
+@keyframes pulse-entry-line {
+  0%, 100% { opacity: 0.8; }
+  50% { opacity: 0.4; }
+}
+
+.exit-connection-line {
+  opacity: 0.8;
+  animation: pulse-exit-line 2s infinite;
+}
+
+@keyframes pulse-exit-line {
+  0%, 100% { opacity: 0.8; }
+  50% { opacity: 0.4; }
+}
+
+.group-entry-point {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  width: 40px;
+  height: 40px;
+  background: linear-gradient(135deg, #4ade80, #22c55e);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  z-index: 10;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(74, 222, 128, 0.4);
+  transition: all 0.2s;
+}
+
+.group-entry-point:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(74, 222, 128, 0.6);
+}
+
+.group-entry-connection-point {
+  position: absolute;
+  right: -5px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 12px;
+  height: 12px;
+  background: #fff;
+  border: 2px solid #4ade80;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.group-entry-connection-point:hover,
+.group-entry-connection-point.active,
+.group-entry-connection-point.highlight {
+  width: 16px;
+  height: 16px;
+  box-shadow: 0 0 10px rgba(74, 222, 128, 0.8);
+}
+
+.group-exit-point {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 40px;
+  height: 40px;
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  z-index: 10;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);
+  transition: all 0.2s;
+}
+
+.group-exit-point:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.6);
+}
+
+.group-exit-connection-point {
+  position: absolute;
+  left: -5px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 12px;
+  height: 12px;
+  background: #fff;
+  border: 2px solid #ef4444;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.group-exit-connection-point:hover,
+.group-exit-connection-point.active,
+.group-exit-connection-point.highlight {
+  width: 16px;
+  height: 16px;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.8);
+}
+
+/* Resize Handles */
+.resize-handles {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.resize-handle {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: #4a9eff;
+  border: 2px solid #1a1a1a;
+  border-radius: 50%;
+  cursor: nwse-resize;
+  pointer-events: all;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.agent-group:hover .resize-handle {
+  opacity: 0.8;
+}
+
+.resize-handle:hover {
+  opacity: 1 !important;
+  transform: scale(1.2);
+}
+
+.resize-handle.top-left {
+  top: -5px;
+  left: -5px;
+  cursor: nw-resize;
+}
+
+.resize-handle.top-right {
+  top: -5px;
+  right: -5px;
+  cursor: ne-resize;
+}
+
+.resize-handle.bottom-left {
+  bottom: -5px;
+  left: -5px;
+  cursor: sw-resize;
+}
+
+.resize-handle.bottom-right {
+  bottom: -5px;
+  right: -5px;
+  cursor: se-resize;
+}
+
+.group-agent {
+  position: absolute;
+  width: 100px;
+  height: 80px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.05) 100%);
+  border: 2px solid var(--agent-color, #4a9eff);
+  border-radius: 8px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: move;
+  transition: all 0.2s;
+  z-index: 5;
+}
+
+.group-agent:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.group-agent.selected {
+  border-color: #fbbf24;
+  box-shadow: 0 0 15px rgba(251, 191, 36, 0.4);
+}
+
+.group-agent.entry-agent {
+  background: linear-gradient(135deg, rgba(74,222,128,0.1) 0%, rgba(74,222,128,0.05) 100%);
+}
+
+.group-agent .agent-icon {
+  width: 32px;
+  height: 32px;
+  background: var(--agent-color, #4a9eff);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  margin-bottom: 4px;
+}
+
+.group-agent .agent-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: #e0e0e0;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 90%;
+}
+
+.group-agent .connection-point {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #4a9eff;
+  border: 2px solid #1a1a1a;
+  cursor: pointer;
+  transition: all 0.2s;
+  z-index: 10;
+}
+
+.group-agent .connection-point.input {
+  left: -6px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.group-agent .connection-point.output {
+  right: -6px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.group-agent-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%);
+  border: 1px solid var(--agent-color, #4a9eff);
+  border-radius: 6px;
+  font-size: 12px;
+  position: relative;
+  min-height: 32px;
+  transition: all 0.2s;
+}
+
+.group-agent-card:hover {
+  background: linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.04) 100%);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.agent-mini-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: var(--agent-color, #4a9eff);
+  border-radius: 4px;
+  color: #fff;
+}
+
+.agent-mini-name {
+  flex: 1;
+  font-weight: 500;
+  color: #e0e0e0;
+}
+
+.mini-connection-point {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #4a9eff;
+  border: 2px solid #1a1a1a;
+  cursor: pointer;
+  transition: all 0.2s;
+  z-index: 5;
+}
+
+.mini-connection-point.input {
+  left: -6px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.mini-connection-point.output {
+  right: -6px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.mini-connection-point:hover,
+.mini-connection-point.highlight {
+  width: 14px;
+  height: 14px;
+  box-shadow: 0 0 8px rgba(74, 158, 255, 0.6);
+}
+
+.mini-connection-point.active {
+  background: #fbbf24;
+  box-shadow: 0 0 10px rgba(251, 191, 36, 0.8);
+}
+
+.agent-group .connection-point {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #4a9eff;
+  border: 2px solid #1a1a1a;
+  cursor: pointer;
+  transition: all 0.2s;
+  z-index: 10;
+}
+
+.agent-group .connection-point.input {
+  left: -8px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.agent-group .connection-point.output {
+  right: -8px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.agent-group .connection-point:hover,
+.agent-group .connection-point.highlight {
+  width: 20px;
+  height: 20px;
+  box-shadow: 0 0 10px rgba(74, 158, 255, 0.6);
+}
+
+.agent-group .entry-point-badge {
+  position: absolute;
+  top: -10px;
+  right: 10px;
+  background: linear-gradient(135deg, #4ade80, #22c55e);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: bold;
+  color: #000;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  box-shadow: 0 2px 8px rgba(74, 222, 128, 0.4);
+  animation: pulse-entry 2s infinite;
+}
+
+/* Group Creation Mode */
+.agent-selection-mode .deployed-agent {
+  cursor: pointer;
+}
+
+.agent-selection-mode .deployed-agent:hover {
+  border-color: #fbbf24;
+  box-shadow: 0 0 12px rgba(251, 191, 36, 0.4);
+}
+
+.agent-selection-mode .deployed-agent.selected-for-group {
+  border-color: #fbbf24;
+  background: linear-gradient(135deg, #3d3d4d 0%, #353545 100%);
+  box-shadow: 0 0 20px rgba(251, 191, 36, 0.6);
+}
+
+.group-creation-toolbar {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, #2d2d3d 0%, #252535 100%);
+  border: 2px solid #fbbf24;
+  border-radius: 12px;
+  padding: 12px 20px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  z-index: 100;
+}
+
+.group-creation-toolbar span {
+  font-weight: 600;
+  color: #fbbf24;
+}
+
+.group-creation-toolbar button {
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.group-creation-toolbar .btn-create {
+  background: linear-gradient(135deg, #fbbf24, #f59e0b);
+  color: #000;
+}
+
+.group-creation-toolbar .btn-cancel {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
 }
 </style>
