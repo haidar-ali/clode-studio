@@ -38,6 +38,20 @@
         <button @click="clearCanvas" class="btn-icon" title="Clear Canvas">
           <Icon name="mdi:delete-sweep" />
         </button>
+        <button 
+          @click="addStartNode"
+          class="btn-icon"
+          :title="hasStartNode ? 'Start node already exists' : 'Add Start Node'"
+          :disabled="hasStartNode"
+        >
+          <Icon name="mdi:flag-checkered" />
+        </button>
+        <button @click="autoLayout" class="btn-icon" title="Auto Layout">
+          <Icon name="mdi:auto-fix" />
+        </button>
+        <button @click="validateGraph" class="btn-icon" title="Validate Graph">
+          <Icon name="mdi:alert-circle-outline" />
+        </button>
         <button @click="showSettings = true" class="btn-icon">
           <Icon name="mdi:cog" />
         </button>
@@ -84,11 +98,33 @@
               <option value="custom">+ Custom Personality</option>
             </select>
           </div>
-          
+
+          <!-- Structure Cards -->
+          <div class="section-title">Structure</div>
+          <div class="agent-cards">
+            <div
+              v-for="item in structureTypes"
+              :key="item.id"
+              class="agent-card structure"
+              :draggable="true"
+              @dragstart="onDragStartGeneric($event, item, 'structure')"
+              @dragend="isDragging = false"
+            >
+              <div class="agent-avatar" :style="{ background: item.color }">
+                <Icon :name="item.icon" size="20" />
+              </div>
+              <div class="agent-info">
+                <h4>{{ item.name }}</h4>
+                <p>{{ item.description }}</p>
+              </div>
+            </div>
+          </div>
+
           <!-- Available Agents -->
+          <div class="section-title">Agents</div>
           <div class="info-banner">
             <Icon name="mdi:information" size="14" />
-            <span>Drag agents to canvas, then click to configure AI model & prompts</span>
+            <span>Drag to canvas, then click to configure AI model & prompts</span>
           </div>
           <div class="agent-cards">
             <div 
@@ -96,7 +132,7 @@
               :key="agent.id"
               class="agent-card"
               :draggable="true"
-              @dragstart="onDragStart($event, agent)"
+              @dragstart="onDragStartGeneric($event, agent, 'agent')"
               @dragend="isDragging = false"
               :class="{ dragging: isDragging && draggedItem?.id === agent.id }"
             >
@@ -109,7 +145,7 @@
               </div>
             </div>
           </div>
-          
+
           <!-- Custom Agent Creator -->
           <div v-if="selectedPersonality === 'custom'" class="custom-creator">
             <input 
@@ -142,6 +178,8 @@
           <!-- Vue Flow container -->
           <div v-show="isFlowReady" class="vue-flow-wrapper">
             <VueFlow
+            :key="`main-flow-${mainFlowKey}`"
+            id="main-flow"
             v-model:nodes="nodes"
             v-model:edges="edges"
             @node-click="onNodeClick"
@@ -260,70 +298,32 @@
           </div>
           
           <div class="modal-body">
-            <!-- Group Properties -->
-            <div class="group-properties">
-              <label>Group Name</label>
-              <input 
-                v-model="editingGroup.data.name" 
-                class="property-input"
-                placeholder="Enter group name"
-              />
-              
-              <label>Entry Agent</label>
-              <select v-model="groupEntryAgent" class="property-select">
-                <option value="">None (Use first agent)</option>
-                <option 
-                  v-for="agent in groupAgents" 
-                  :key="agent.id" 
-                  :value="agent.id"
-                >
-                  {{ agent.data.name }}
-                </option>
-              </select>
-            </div>
             
-            <!-- Internal Flow Canvas -->
-            <div class="group-flow-container">
-              <div class="group-flow-header">
-                <h4>Internal Agent Flow</h4>
-                <span class="help-text">Drag agents from below to add them to this group</span>
-              </div>
-              <div class="group-flow-canvas">
-                <VueFlow
-                  v-if="editingGroup"
-                  :key="`group-flow-${editingGroup.id}`"
-                  v-model:nodes="groupNodes"
-                  v-model:edges="groupEdges"
-                  @connect="onGroupConnect"
-                  @node-click="onGroupNodeClick"
-                  @dragover="onGroupDragOver"
-                  @drop="onGroupDrop"
-                  :node-types="nodeTypes"
-                  :default-edge-options="defaultEdgeOptions"
-                  :connection-line-style="connectionLineStyle"
-                  :delete-key-code="['Delete', 'Backspace']"
-                  :zoom-on-scroll="true"
-                  :pan-on-drag="true"
-                  :nodes-draggable="true"
-                  :nodes-connectable="true"
-                  :elements-selectable="true"
-                  :default-zoom="0.8"
-                  :min-zoom="0.3"
-                  :max-zoom="1.5"
-                  class="vue-flow-inner"
-                >
-                  <template #node-agent="nodeProps">
-                    <AgentNode v-bind="nodeProps" />
-                  </template>
-                  <Background pattern-color="#0a0a0a" :gap="15" />
-                  <Controls position="top-right" />
-                </VueFlow>
-              </div>
-              
-              <!-- Available Agents for Group -->
-              <div class="group-bottom-section">
-                <div class="group-agent-library">
-                  <h4>Available Agents - Drag to add to group</h4>
+            <!-- Internal Flow & Side Panels -->
+            <div class="group-editor-layout">
+              <aside class="gel-left">
+                <div class="group-properties sticky">
+                  <label>Group Name</label>
+                  <input 
+                    v-model="editingGroup.data.name" 
+                    class="property-input"
+                    placeholder="Enter group name"
+                  />
+                  
+                  <label>Entry Agent</label>
+                  <select v-model="groupEntryAgent" class="property-select">
+                    <option value="">None (Use first agent)</option>
+                    <option 
+                      v-for="agent in groupAgents" 
+                      :key="agent.id" 
+                      :value="agent.id"
+                    >
+                      {{ agent.data.name }}
+                    </option>
+                  </select>
+                </div>
+                <div class="group-agent-library left-panel">
+                  <h4>Available Agents</h4>
                   <div class="mini-agent-cards">
                     <div 
                       v-for="agent in availableAgentTypes" 
@@ -331,7 +331,7 @@
                       class="mini-agent-card"
                       :draggable="true"
                       @dragstart="onGroupAgentDragStart($event, agent)"
-                      title="Drag into the canvas above"
+                      title="Drag into the canvas"
                     >
                       <div class="mini-avatar" :style="{ background: agent.color }">
                         <Icon :name="agent.icon" size="16" />
@@ -340,9 +340,7 @@
                     </div>
                   </div>
                 </div>
-                
-                <!-- Group Agents List -->
-                <div class="group-agents-list">
+                <div class="group-agents-list left-panel">
                   <h4>Agents in Group ({{ groupAgents.length }})</h4>
                   <div class="agent-list-items">
                     <div v-for="agent in groupAgents" :key="agent.id" class="agent-list-item">
@@ -355,11 +353,91 @@
                       </button>
                     </div>
                     <div v-if="groupAgents.length === 0" class="empty-message">
-                      No agents in group yet. Drag agents from the left to add them.
+                      No agents in group yet.
                     </div>
                   </div>
                 </div>
-              </div>
+              </aside>
+
+              <section class="gel-center">
+                <div class="group-flow-header">
+                  <h4>Internal Agent Flow</h4>
+                  <span class="help-text">Drag agents from the left into the canvas</span>
+                </div>
+                <div class="group-flow-canvas">
+                <VueFlow
+                  id="group-flow"
+                  v-if="editingGroup"
+                  :key="`group-flow-${editingGroup.id}`"
+                  v-model:nodes="groupNodes"
+                  v-model:edges="groupEdges"
+                    @connect="onGroupConnect"
+                    @node-click="onGroupNodeClick"
+                    @dragover="onGroupDragOver"
+                    @drop="onGroupDrop"
+                    :node-types="nodeTypes"
+                    :default-edge-options="defaultEdgeOptions"
+                    :connection-line-style="connectionLineStyle"
+                    :delete-key-code="['Delete', 'Backspace']"
+                    :zoom-on-scroll="true"
+                    :pan-on-drag="true"
+                    :nodes-draggable="true"
+                    :nodes-connectable="true"
+                    :elements-selectable="true"
+                    :default-zoom="0.8"
+                    :min-zoom="0.3"
+                    :max-zoom="1.5"
+                    class="vue-flow-inner"
+                  >
+                    <template #node-agent="nodeProps">
+                      <AgentNode v-bind="nodeProps" />
+                    </template>
+                    <Background pattern-color="#0a0a0a" :gap="15" />
+                    <Controls position="top-right" />
+                  </VueFlow>
+                  <div v-if="selectedGroupNode && selectedGroupNode.data" class="group-agent-inspector-overlay">
+                    <div class="gap-header">
+                      <h4>
+                        <Icon name="mdi:account-cog" /> Agent: {{ (selectedGroupNode.data && selectedGroupNode.data.name) || selectedGroupNode.id }}
+                      </h4>
+                      <button class="btn-icon" @click="selectedGroupNode = null" title="Close">
+                        <Icon name="mdi:close" />
+                      </button>
+                    </div>
+                    <div class="gap-grid">
+                      <div class="prop-item">
+                        <label>Name</label>
+                        <input v-model="selectedGroupNode.data.name" class="property-input" placeholder="Agent name" />
+                      </div>
+                      <div class="prop-item">
+                        <label>Instance Type</label>
+                        <select v-model="selectedGroupNode.data.instanceType" class="property-select">
+                          <option value="claude">Claude</option>
+                          <option value="codex">Codex</option>
+                        </select>
+                      </div>
+                      <div class="prop-item">
+                        <label>Personality</label>
+                        <select v-model="selectedGroupNode.data.personalityId" class="property-select">
+                          <option value="">Default</option>
+                          <option v-for="p in personalities" :key="p.id" :value="p.id">{{ p.name }}</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div class="prop-item">
+                      <label>Custom Instructions</label>
+                      <textarea v-model="selectedGroupNode.data.customInstructions" class="property-textarea" rows="3" placeholder="Add custom instructions..." />
+                    </div>
+                    <div class="prop-actions">
+                      <button class="btn-primary" @click="setGroupEntry(selectedGroupNode.id)">
+                        <Icon name="mdi:location-enter" /> Set as Group Entry
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              
             </div>
           </div>
           
@@ -422,6 +500,8 @@
                 </div>
               </div>
               
+              
+              
               <div class="property-group">
                 <label>Custom Instructions</label>
                 <textarea 
@@ -454,6 +534,8 @@
                 <label>Exit Points</label>
                 <div class="property-value">{{ selectedNode.data.exitAgents?.length || 0 }}</div>
               </div>
+
+              
             </template>
             
             <div class="property-actions">
@@ -593,6 +675,8 @@ import {
   type NodeChange,
   type EdgeChange,
   MarkerType,
+  applyNodeChanges,
+  applyEdgeChanges,
   Position
 } from '@vue-flow/core';
 import { Background } from '@vue-flow/background';
@@ -606,6 +690,7 @@ import '@vue-flow/minimap/dist/style.css';
 
 import AgentNode from './nodes/AgentNode.vue';
 import GroupNode from './nodes/GroupNode.vue';
+import StartNode from './nodes/StartNode.vue';
 import Icon from '~/components/Icon.vue';
 
 import { useAgentOrchestrationStore } from '~/stores/agent-orchestration-client';
@@ -642,13 +727,15 @@ const pipelineForm = reactive({
 const taskFilter = ref('');
 const selectedTask = ref<any>(null);
 
-// Vue Flow instance
-const { addNodes, addEdges, removeNodes, removeEdges, toObject, fitView, zoomTo } = useVueFlow();
+// Vue Flow instance (main canvas) — scope by id to avoid interference with group editor VueFlow
+const mainFlow = useVueFlow('main-flow' as any);
+const { addNodes, addEdges, removeNodes, removeEdges, toObject, fitView, zoomTo, project } = mainFlow;
 
 // Node types
 const nodeTypes = {
   agent: markRaw(AgentNode),
-  group: markRaw(GroupNode)
+  group: markRaw(GroupNode),
+  start: markRaw(StartNode)
 };
 
 // View Management
@@ -668,6 +755,7 @@ const isDragging = ref(false);
 const isDraggingOver = ref(false);
 const draggedItem = ref<AgentType | null>(null);
 const isFlowReady = ref(false);
+const mainFlowKey = ref(0);
 
 // Group Editing State - completely separate from main canvas
 const editingGroup = ref<Node | null>(null);
@@ -675,6 +763,7 @@ const groupNodes = ref<Node[]>([]); // Internal nodes for group editor only
 const groupEdges = ref<Edge[]>([]); // Internal edges for group editor only
 const groupAgents = computed(() => groupNodes.value.filter(n => n.type === 'agent'));
 const groupEntryAgent = ref<string>('');
+const selectedGroupNode = ref<Node | null>(null);
 const groupDraggedItem = ref<AgentType | null>(null);
 
 // Backup of main canvas state while editing group
@@ -685,7 +774,26 @@ const nodes = ref<Node[]>([]);
 const edges = ref<Edge[]>([]);
 const savedPipelines = ref<any[]>([]);
 
+const hasStartNode = computed(() => nodes.value.some(n => n.type === 'start'));
+
 // Agent Types
+const structureTypes = ref([
+  {
+    id: 'start',
+    name: 'Start',
+    description: 'Pipeline entry node',
+    icon: 'mdi:flag-checkered',
+    color: '#22c55e'
+  },
+  {
+    id: 'group',
+    name: 'Group',
+    description: 'Container with internal flow',
+    icon: 'mdi:group',
+    color: '#9333ea'
+  }
+]);
+
 const availableAgentTypes = ref<AgentType[]>([
   {
     id: 'architect',
@@ -695,6 +803,24 @@ const availableAgentTypes = ref<AgentType[]>([
     color: '#667eea',
     tags: ['planner', 'designer'],
     capabilities: ['system-design', 'architecture', 'planning']
+  },
+  {
+    id: 'product_manager',
+    name: 'Product Manager',
+    description: 'Requirements, prioritization, and roadmap',
+    icon: 'mdi:clipboard-text-outline',
+    color: '#f59e0b',
+    tags: ['product', 'planning'],
+    capabilities: ['requirements', 'prioritization', 'roadmap']
+  },
+  {
+    id: 'security_engineer',
+    name: 'Security Engineer',
+    description: 'Threat modeling and security reviews',
+    icon: 'mdi:shield-account',
+    color: '#ef4444',
+    tags: ['security', 'review'],
+    capabilities: ['threat-model', 'audit', 'hardening']
   },
   {
     id: 'developer',
@@ -829,11 +955,11 @@ const connectionLineStyle = {
 };
 
 // Methods
-function onDragStart(event: DragEvent, agent: AgentType) {
+function onDragStartGeneric(event: DragEvent, item: any, kind: 'agent' | 'structure') {
   isDragging.value = true;
-  draggedItem.value = agent;
+  draggedItem.value = item;
   event.dataTransfer!.effectAllowed = 'copy';
-  event.dataTransfer!.setData('application/vueflow', JSON.stringify(agent));
+  event.dataTransfer!.setData('application/vueflow', JSON.stringify({ kind, item }));
 }
 
 function onDragOver(event: DragEvent) {
@@ -848,37 +974,67 @@ function onDrop(event: DragEvent) {
   
   const data = event.dataTransfer!.getData('application/vueflow');
   if (!data) return;
+  const payload = JSON.parse(data) as { kind: 'agent' | 'structure'; item: any };
   
-  const agent = JSON.parse(data) as AgentType;
+  // Use Vue Flow project() to convert screen coords to flow coords
+  const pf = project({ x: event.clientX, y: event.clientY });
+  const position = { x: pf.x - 90, y: pf.y - 40 };
   
-  // Get the canvas element to calculate position
-  const flowElement = document.querySelector('.vue-flow') as HTMLElement;
-  if (!flowElement) return;
-  
-  const rect = flowElement.getBoundingClientRect();
-  const position = {
-    x: event.clientX - rect.left - 90, // Center on cursor
-    y: event.clientY - rect.top - 40
-  };
-  
-  // Create new agent node
-  const newNode: Node = {
-    id: `${agent.id}-${Date.now()}`,
-    type: 'agent',
-    position,
-    data: {
-      name: agent.name,
-      type: agent.id,
-      icon: agent.icon,
-      color: agent.color,
-      status: 'idle',
-      instanceType: 'claude',
-      personalityId: selectedPersonality.value,
-      customInstructions: ''
+  if (payload.kind === 'structure') {
+    if (payload.item.id === 'start') {
+      if (hasStartNode.value) {
+        showMessage('Start node already exists', 'info');
+        return;
+      }
+      const newStart: Node = {
+        id: `start-${Date.now()}`,
+        type: 'start',
+        position: { x: pf.x - 100, y: pf.y - 40 },
+        data: { isEntry: true, order: 0 }
+      };
+      addNodes([newStart]);
+      recomputeLevels();
+      return;
     }
-  };
-  
-  addNodes([newNode]);
+    if (payload.item.id === 'group') {
+      const newGroup: Node = {
+        id: `group-${Date.now()}`,
+        type: 'group',
+        position,
+        data: {
+          name: `Group ${nodes.value.filter(n => n.type === 'group').length + 1}`,
+          status: 'idle',
+          agentCount: 0,
+          agents: [],
+          entryAgents: [],
+          exitAgents: [],
+          color: '#9333ea'
+        }
+      };
+      addNodes([newGroup]);
+      recomputeLevels();
+      return;
+    }
+  } else {
+    const agent = payload.item as AgentType;
+    const newNode: Node = {
+      id: `${agent.id}-${Date.now()}`,
+      type: 'agent',
+      position,
+      data: {
+        name: agent.name,
+        type: agent.id,
+        icon: agent.icon,
+        color: agent.color,
+        status: 'idle',
+        instanceType: 'claude',
+        personalityId: selectedPersonality.value,
+        customInstructions: ''
+      }
+    };
+    addNodes([newNode]);
+    recomputeLevels();
+  }
 }
 
 function onNodeClick({ event, node }: { event: MouseEvent; node: Node }) {
@@ -892,32 +1048,30 @@ function onEdgeClick(event: MouseEvent, edge: Edge) {
 
 function onConnect(connection: Connection) {
   // Validate connection
-  if (connection.source === connection.target) return;
-  
-  // Add edge
+  if (!connection?.source || !connection?.target || connection.source === connection.target) return;
+  // Add edge with unique id to avoid collisions
   const newEdge: Edge = {
-    id: `${connection.source}-${connection.target}`,
-    source: connection.source!,
-    target: connection.target!,
+    id: `e-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    source: connection.source,
+    target: connection.target,
     sourceHandle: connection.sourceHandle,
     targetHandle: connection.targetHandle,
     ...defaultEdgeOptions
   };
-  
   addEdges([newEdge]);
+  recomputeLevels();
 }
 
 function onNodesChange(changes: NodeChange[]) {
-  // Handle node changes (position, selection, etc.)
-  // Removed console log for cleaner output
+  nodes.value = applyNodeChanges(changes, nodes.value);
 }
 
 function onEdgesChange(changes: EdgeChange[]) {
-  // Handle edge changes
-  // Removed console log for cleaner output
+  edges.value = applyEdgeChanges(changes, edges.value);
+  recomputeLevels();
 }
 
-function onNodeDragStop(event: MouseEvent, node: Node) {
+function onNodeDragStop({ event, node }: { event: MouseEvent; node: Node }) {
   console.log('Node drag stopped:', node);
 }
 
@@ -1133,7 +1287,8 @@ function onEditGroup(groupId: string) {
   
   console.log('Opening group editor, backing up main canvas with', mainCanvasBackup.value.nodes.length, 'nodes');
   
-  editingGroup.value = { ...group };
+  // Work on a deep copy so edits don't mutate the live main canvas node until saved
+  editingGroup.value = JSON.parse(JSON.stringify(group));
   
   // Load existing agents in the group if any
   if (group.data.agents && Array.isArray(group.data.agents)) {
@@ -1159,25 +1314,30 @@ function onEditGroup(groupId: string) {
   }
   
   groupEntryAgent.value = group.data.entryAgents?.[0] || '';
+  // compute initial group levels
+  recomputeGroupLevels();
 }
 
 function closeGroupEditor() {
-  // Restore main canvas from backup if it got corrupted
-  if (mainCanvasBackup.value && mainCanvasBackup.value.nodes.length > nodes.value.length) {
-    console.log('Main canvas corrupted, restoring from backup');
+  // Always restore main canvas from backup on cancel/overlay close (discard changes)
+  if (mainCanvasBackup.value) {
+    console.log('Cancelling group edit, restoring main canvas from backup');
     nodes.value = JSON.parse(JSON.stringify(mainCanvasBackup.value.nodes));
     edges.value = JSON.parse(JSON.stringify(mainCanvasBackup.value.edges));
   }
-  
+
   // Reset the group editing state
   editingGroup.value = null;
   groupNodes.value = []; // Clear internal group nodes only
   groupEdges.value = []; // Clear internal group edges only
   groupEntryAgent.value = '';
   groupDraggedItem.value = null;
+  selectedGroupNode.value = null;
   mainCanvasBackup.value = null;
   
   console.log('After close, main canvas has', nodes.value.length, 'nodes');
+  // Force main flow remount to ensure handlers/store are fresh
+  mainFlowKey.value++;
 }
 
 function saveGroupChanges() {
@@ -1231,6 +1391,8 @@ function saveGroupChanges() {
   groupEdges.value = [];
   groupEntryAgent.value = '';
   groupDraggedItem.value = null;
+  // Force main flow remount to ensure handlers/store are fresh
+  mainFlowKey.value++;
 }
 
 function onGroupConnect(params: any) {
@@ -1242,11 +1404,13 @@ function onGroupConnect(params: any) {
     animated: true
   };
   groupEdges.value.push(newEdge);
+  recomputeGroupLevels();
 }
 
-function onGroupNodeClick(node: Node) {
+function onGroupNodeClick({ event, node }: { event: MouseEvent; node: Node }) {
   // Handle node selection within group editor if needed
   console.log('Group node clicked:', node);
+  selectedGroupNode.value = node;
 }
 
 function onGroupDragOver(event: DragEvent) {
@@ -1284,6 +1448,9 @@ function onGroupDrop(event: DragEvent) {
   
   groupNodes.value.push(newNode);
   groupDraggedItem.value = null;
+  // Auto select the newly added agent for quick editing
+  selectedGroupNode.value = newNode;
+  recomputeGroupLevels();
 }
 
 function onGroupAgentDragStart(event: DragEvent, agent: AgentType) {
@@ -1303,6 +1470,9 @@ function removeAgentFromGroup(agentId: string) {
   // Update entry agent if it was removed
   if (groupEntryAgent.value === agentId) {
     groupEntryAgent.value = '';
+  }
+  if (selectedGroupNode.value?.id === agentId) {
+    selectedGroupNode.value = null;
   }
 }
 
@@ -1362,6 +1532,7 @@ onMounted(() => {
   if (currentView.value === 'canvas') {
     initializeFlow();
   }
+  recomputeLevels();
 });
 
 // Reinitialize flow when switching to canvas view
@@ -1375,6 +1546,203 @@ watch(currentView, (newView, oldView) => {
 onBeforeUnmount(() => {
   // Cleanup if needed
 });
+
+// ---------- Pipeline Entry + Order (Level) helpers ----------
+function toggleEntry(node: Node) {
+  node.data.isEntry = !node.data.isEntry;
+  recomputeLevels();
+}
+
+function recomputeLevels() {
+  // Build indegree and adjacency
+  const idList = nodes.value.map(n => n.id);
+  const indeg = new Map<string, number>();
+  const adj = new Map<string, string[]>();
+  idList.forEach(id => { indeg.set(id, 0); adj.set(id, []); });
+  edges.value.forEach(e => {
+    if (!indeg.has(e.target)) indeg.set(e.target, 0);
+    indeg.set(e.target, (indeg.get(e.target) || 0) + 1);
+    if (!adj.has(e.source)) adj.set(e.source, []);
+    adj.get(e.source)!.push(e.target);
+  });
+
+  // Preferred entries: explicit Start node if present; else nodes flagged isEntry; else zero indegree
+  const startNode = nodes.value.find(n => n.type === 'start');
+  const markedEntries = nodes.value.filter(n => n.data?.isEntry && n.type !== 'start');
+  const startIds = startNode
+    ? [startNode.id]
+    : (markedEntries.length > 0 ? markedEntries.map(n => n.id) : idList.filter(id => (indeg.get(id) || 0) === 0));
+
+  const level = new Map<string, number>();
+  const q: string[] = [];
+  startIds.forEach(id => { level.set(id, 0); q.push(id); });
+
+  // BFS layered traversal
+  while (q.length) {
+    const u = q.shift()!;
+    const nexts = adj.get(u) || [];
+    for (const v of nexts) {
+      const newLevel = (level.get(u) || 0) + 1;
+      if (!level.has(v) || newLevel > (level.get(v) as number)) {
+        level.set(v, newLevel);
+      }
+      indeg.set(v, (indeg.get(v) || 1) - 1);
+      if ((indeg.get(v) || 0) === 0) {
+        q.push(v);
+      }
+    }
+  }
+
+  // Assign level to node.data.order in-place (keep node identity stable during drags)
+  for (const n of nodes.value) {
+    const ord = level.has(n.id) ? (level.get(n.id) as number) : -1;
+    const isEntry = startIds.includes(n.id);
+    const prev = (n.data || {}) as any;
+    n.data = { ...prev, order: ord, isEntry };
+  }
+
+  // Run validation pass silently
+  validateGraph(true);
+}
+
+function addStartNode() {
+  if (hasStartNode.value) {
+    showMessage('Start node already exists', 'info');
+    return;
+  }
+  const center = { x: 200, y: 100 };
+  const newStart: Node = {
+    id: `start-${Date.now()}`,
+    type: 'start',
+    position: center,
+    data: { isEntry: true, order: 0 }
+  };
+  addNodes([newStart]);
+  recomputeLevels();
+}
+
+function autoLayout() {
+  // Group by order
+  const groups = new Map<number, Node[]>();
+  for (const n of nodes.value) {
+    const ord = typeof (n.data as any)?.order === 'number' ? (n.data as any).order : -1;
+    const k = ord;
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k)!.push(n);
+  }
+  // Sort keys ascending, place -1 as last
+  const keys = Array.from(groups.keys()).sort((a, b) => (a === -1 ? 1 : b === -1 ? -1 : a - b));
+  const xGap = 280;
+  const yGap = 170;
+  keys.forEach((k, idx) => {
+    const col = groups.get(k)!;
+    col.forEach((n, i) => {
+      n.position = { x: idx * xGap, y: i * yGap };
+    });
+  });
+  // Adjust view
+  nextTick(() => {
+    try { fitView({ padding: 0.2, duration: 400 }); } catch {}
+  });
+}
+
+function validateGraph(silent = false) {
+  const ids = nodes.value.map(n => n.id);
+  const indeg = new Map<string, number>();
+  const adj = new Map<string, string[]>();
+  ids.forEach(id => { indeg.set(id, 0); adj.set(id, []); });
+  edges.value.forEach(e => {
+    indeg.set(e.target, (indeg.get(e.target) || 0) + 1);
+    adj.get(e.source)!.push(e.target);
+  });
+
+  // Reachability from start(s)
+  const start = nodes.value.find(n => n.type === 'start');
+  const entryIds = start ? [start.id] : ids.filter(id => (indeg.get(id) || 0) === 0);
+  const visited = new Set<string>();
+  const q: string[] = [...entryIds];
+  entryIds.forEach(id => visited.add(id));
+  while (q.length) {
+    const u = q.shift()!;
+    for (const v of adj.get(u) || []) {
+      if (!visited.has(v)) {
+        visited.add(v);
+        q.push(v);
+      }
+    }
+  }
+
+  // Cycle detection via Kahn's algorithm
+  const indeg2 = new Map(indeg);
+  const queue: string[] = ids.filter(id => (indeg2.get(id) || 0) === 0);
+  const processed = new Set<string>();
+  while (queue.length) {
+    const u = queue.shift()!;
+    processed.add(u);
+    for (const v of adj.get(u) || []) {
+      indeg2.set(v, (indeg2.get(v) || 0) - 1);
+      if ((indeg2.get(v) || 0) === 0) queue.push(v);
+    }
+  }
+  const inCycle = new Set<string>(ids.filter(id => !processed.has(id)));
+
+  // Annotate nodes
+  let unreachableCount = 0;
+  let cycleCount = 0;
+  for (const n of nodes.value) {
+    const unreachable = !visited.has(n.id);
+    const cycle = inCycle.has(n.id);
+    if (unreachable) unreachableCount++;
+    if (cycle) cycleCount++;
+    const prev = (n.data || {}) as any;
+    n.data = { ...prev, validation: { unreachable, inCycle: cycle } };
+  }
+
+  if (!silent) {
+    if (cycleCount > 0) {
+      showMessage(`Cycle detected: ${cycleCount} node(s) in cycle`, 'warning');
+    }
+    if (hasStartNode.value && unreachableCount > 0) {
+      showMessage(`${unreachableCount} node(s) unreachable from Start`, 'warning');
+    }
+  }
+}
+
+function setGroupEntry(agentId: string) {
+  groupEntryAgent.value = agentId;
+  recomputeGroupLevels();
+}
+
+function recomputeGroupLevels() {
+  const ids = groupNodes.value.map(n => n.id);
+  const indeg = new Map<string, number>();
+  const adj = new Map<string, string[]>();
+  ids.forEach(id => { indeg.set(id, 0); adj.set(id, []); });
+  groupEdges.value.forEach(e => {
+    indeg.set(e.target, (indeg.get(e.target) || 0) + 1);
+    adj.get(e.source)!.push(e.target);
+  });
+  const startIds = groupEntryAgent.value
+    ? [groupEntryAgent.value]
+    : ids.filter(id => (indeg.get(id) || 0) === 0);
+  const level = new Map<string, number>();
+  const q: string[] = [];
+  startIds.forEach(id => { level.set(id, 0); q.push(id); });
+  while (q.length) {
+    const u = q.shift()!;
+    for (const v of adj.get(u) || []) {
+      const newL = (level.get(u) || 0) + 1;
+      if (!level.has(v) || newL > (level.get(v) as number)) level.set(v, newL);
+      indeg.set(v, (indeg.get(v) || 1) - 1);
+      if ((indeg.get(v) || 0) === 0) q.push(v);
+    }
+  }
+  for (const n of groupNodes.value) {
+    const ord = level.has(n.id) ? (level.get(n.id) as number) : -1;
+    const prev = (n.data || {}) as any;
+    n.data = { ...prev, order: ord };
+  }
+}
 </script>
 
 <style scoped>
@@ -2046,6 +2414,14 @@ onBeforeUnmount(() => {
   padding: 1rem;
 }
 
+.toggle-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #cccccc;
+  font-size: 12px;
+}
+
 .property-group {
   margin-bottom: 1rem;
 }
@@ -2296,14 +2672,14 @@ onBeforeUnmount(() => {
   border: 1px solid #3e3e42;
   position: relative;
   width: 100%;
-  height: 450px;
-  min-height: 450px;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 
 .vue-flow-inner {
   width: 100%;
-  height: 450px !important;
+  height: 100% !important;
   position: relative;
   display: block;
 }
@@ -2338,12 +2714,149 @@ onBeforeUnmount(() => {
   display: block;
 }
 
-.group-bottom-section {
+.group-editor-layout {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 12px;
+  height: 100%;
+  min-height: 0;
+}
+
+.gel-left, .gel-right {
   display: flex;
+  flex-direction: column;
   gap: 10px;
+  overflow: auto;
+  min-height: 0;
+}
+
+.gel-center {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.group-agent-inspector-overlay {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  max-height: 45%;
+  overflow: auto;
+  background: #252526;
+  border: 1px solid #3e3e42;
+  border-radius: 6px;
+  padding: 12px;
+  z-index: 5;
+  box-shadow: 0 10px 24px rgba(0,0,0,0.4);
+}
+
+/* Inspector overlay layout refinements */
+.group-agent-inspector-overlay .gap-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.group-agent-inspector-overlay .gap-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 0.9fr 1fr; /* Name wider than selects */
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.group-agent-inspector-overlay .prop-item label {
+  display: block;
+  font-size: 12px;
+  color: #9ca3af;
+  margin-bottom: 4px;
+}
+
+.group-agent-inspector-overlay .prop-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.group-agent-properties {
   margin-top: 12px;
-  height: 140px;
-  flex-shrink: 0;
+  background: #2a2a2a;
+  border: 1px solid #3e3e42;
+  border-radius: 4px;
+  padding: 12px;
+}
+
+.group-agent-properties .gap-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.group-agent-properties .gap-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.group-agent-properties .prop-item label {
+  display: block;
+  font-size: 12px;
+  color: #9ca3af;
+  margin-bottom: 4px;
+}
+
+.group-agent-properties .prop-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.section-title {
+  margin-top: 8px;
+  margin-bottom: 6px;
+  color: #9ca3af;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.group-agent-library.left-panel {
+  height: 220px;
+}
+
+.left-panel.group-agents-list {
+  width: auto;
+}
+
+.group-editor-layout {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 12px;
+  height: 100%;
+  min-height: 0;
+}
+
+.gel-left, .gel-right {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: auto;
+  min-height: 0;
+}
+
+.gel-center {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.group-properties.sticky {
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 
 .group-agent-library {

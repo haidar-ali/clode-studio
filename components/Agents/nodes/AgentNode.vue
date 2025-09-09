@@ -1,9 +1,14 @@
 <template>
-  <div class="agent-node" :class="[data.status, { 'entry-point': isEntryPoint }]">
+  <div class="agent-node" :class="[data.status, { 'entry-point': isEntryPoint, 'unreachable': isUnreachable, 'in-cycle': inCycle }]">
     <!-- Entry Point Badge -->
     <div v-if="isEntryPoint" class="entry-badge">
       <Icon name="mdi:location-enter" size="12" />
       <span>ENTRY</span>
+    </div>
+    
+    <!-- Order/Level Badge -->
+    <div v-if="orderLabel !== ''" class="order-badge" :title="'Pipeline level: ' + orderLabel">
+      {{ orderLabel }}
     </div>
     
     <!-- Agent Avatar -->
@@ -41,6 +46,8 @@ interface AgentNodeData {
   instanceType: 'claude' | 'codex';
   personalityId?: string;
   customInstructions?: string;
+  isEntry?: boolean;
+  order?: number;
 }
 
 const props = defineProps<{
@@ -49,10 +56,18 @@ const props = defineProps<{
   sourceEdges?: any[];
 }>();
 
-// Node is entry point if it has no incoming edges
+// Node is entry point only if explicitly marked (set by flow)
 const isEntryPoint = computed(() => {
-  return props.sourceEdges?.length === 0;
+  return (props.data as any)?.isEntry === true;
 });
+
+const orderLabel = computed(() => {
+  const ord = (props.data as any)?.order;
+  return typeof ord === 'number' && ord >= 0 ? String(ord) : '';
+});
+
+const isUnreachable = computed(() => Boolean((props.data as any)?.validation?.unreachable));
+const inCycle = computed(() => Boolean((props.data as any)?.validation?.inCycle));
 </script>
 
 <style scoped>
@@ -88,6 +103,34 @@ const isEntryPoint = computed(() => {
 .agent-node.entry-point {
   border-color: #4ade80;
   box-shadow: 0 0 20px rgba(74, 222, 128, 0.3);
+}
+
+.agent-node.unreachable {
+  border-color: #f59e0b;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.25);
+}
+
+.agent-node.in-cycle {
+  border-color: #ef4444;
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.25);
+}
+
+.order-badge {
+  position: absolute;
+  top: -0.6rem;
+  right: -0.6rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 9999px;
+  background: #3b82f6;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  border: 2px solid #0b1220;
+  z-index: 12;
 }
 
 .entry-badge {

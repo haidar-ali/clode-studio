@@ -1,7 +1,7 @@
 <template>
   <div 
     class="group-node" 
-    :class="{ 'entry-point': isEntryPoint }"
+    :class="{ 'entry-point': isEntryPoint, 'unreachable': isUnreachable, 'in-cycle': inCycle }"
     @dblclick="onEdit"
   >
     <!-- Group Header -->
@@ -16,6 +16,11 @@
           <Icon name="mdi:pencil" size="14" />
         </button>
       </div>
+    </div>
+    
+    <!-- Order/Level Badge -->
+    <div v-if="orderLabel !== ''" class="order-badge" :title="'Pipeline level: ' + orderLabel">
+      {{ orderLabel }}
     </div>
     
     <!-- Entry Point Badge -->
@@ -80,6 +85,8 @@ interface GroupNodeData {
   entryAgents?: string[];
   exitAgents?: string[];
   color: string;
+  isEntry?: boolean;
+  order?: number;
 }
 
 const props = defineProps<{
@@ -92,9 +99,17 @@ const emit = defineEmits<{
   edit: [id: string];
 }>();
 
-// Node is entry point if it has no incoming edges
+// Entry point only when explicitly marked
 const isEntryPoint = computed(() => {
-  return props.sourceEdges?.length === 0;
+  return (props.data as any)?.isEntry === true;
+});
+
+const isUnreachable = computed(() => Boolean((props.data as any)?.validation?.unreachable));
+const inCycle = computed(() => Boolean((props.data as any)?.validation?.inCycle));
+
+const orderLabel = computed(() => {
+  const ord = (props.data as any)?.order;
+  return typeof ord === 'number' && ord >= 0 ? String(ord) : '';
 });
 
 function onEdit() {
@@ -121,6 +136,34 @@ function onEdit() {
 .group-node.entry-point {
   border-color: #4ade80;
   box-shadow: 0 0 20px rgba(74, 222, 128, 0.3);
+}
+
+.group-node.unreachable {
+  border-color: #f59e0b;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.25);
+}
+
+.group-node.in-cycle {
+  border-color: #ef4444;
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.25);
+}
+
+.order-badge {
+  position: absolute;
+  top: -0.6rem;
+  right: -0.6rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 9999px;
+  background: #3b82f6;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  border: 2px solid #0b1220;
+  z-index: 12;
 }
 
 .group-header {
